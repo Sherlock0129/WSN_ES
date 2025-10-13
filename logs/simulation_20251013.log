@@ -76,3 +76,39 @@
 2025-10-13 20:43:22 - WSN_Simulation - INFO - info:115 - 结果已保存到: data/simulation_results_20251013_204320.csv
 2025-10-13 20:43:22 - WSN_Simulation - INFO - info:115 - 仿真过程中未发生错误
 2025-10-13 20:43:22 - WSN_Simulation - INFO - info:115 - 程序执行完成
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - ==================================================
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 无线传感器网络能量传输仿真系统
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - ==================================================
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 开始加载配置...
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 使用默认配置
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 创建网络...
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 网络创建完成: 25 个节点
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 创建ADCR链路层...
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - ADCR链路层创建完成
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 创建调度器...
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 创建调度器: LyapunovScheduler
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 调度器创建完成: LyapunovScheduler
+2025-10-13 21:01:44 - WSN_Simulation - INFO - info:115 - 开始仿真...
+2025-10-13 21:04:41 - WSN_Simulation - INFO - info:115 - 仿真完成
+2025-10-13 21:04:41 - WSN_Simulation - INFO - info:115 - 生成可视化图表...
+2025-10-13 21:04:55 - WSN_Simulation - INFO - info:115 - 可视化图表生成完成
+2025-10-13 21:04:55 - WSN_Simulation - INFO - info:115 - 输出统计信息...
+2025-10-13 21:04:55 - WSN_Simulation - INFO - info:115 - 保存结果...
+2025-10-13 21:04:57 - WSN_Simulation - INFO - info:115 - 结果已保存到: data/simulation_results_20251013_210455.csv
+2025-10-13 21:04:57 - WSN_Simulation - INFO - info:115 - 仿真过程中未发生错误
+2025-10-13 21:04:57 - WSN_Simulation - INFO - info:115 - 程序执行完成
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - ==================================================
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - 无线传感器网络能量传输仿真系统
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - ==================================================
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - ==================================================
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - 无线传感器网络能量传输仿真系统 - 并行模式
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - ==================================================
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - 从 src/config/parallel_config.json 加载配置
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - 开始并行仿真...
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - 开始并行仿真: 5 次运行
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - 使用 2 个并行进程
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - 种子模式: 固定种子（对比实验）
+2025-10-13 21:05:03 - WSN_Simulation - INFO - info:115 - 启用权重扫描: w_b从0.1开始，步长0.1
+2025-10-13 21:11:35 - WSN_Simulation - WARNING - warning:119 - 保存运行 2 结果时出错: cannot unpack non-iterable int object
+2025-10-13 21:11:46 - WSN_Simulation - WARNING - warning:119 - 保存运行 3 结果时出错: cannot unpack non-iterable int object
+2025-10-13 21:14:57 - WSN_Simulation - WARNING - warning:119 - 保存运行 4 结果时出错: cannot unpack non-iterable int object

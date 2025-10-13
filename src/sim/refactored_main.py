@@ -17,6 +17,7 @@ from scheduling.schedulers import (
 )
 from utils.error_handling import logger, error_handler, handle_exceptions
 from viz.plotter import plot_node_distribution, plot_energy_over_time
+from sim.parallel_executor import ParallelSimulationExecutor
 
 
 def create_scheduler(config_manager: ConfigManager):
@@ -162,6 +163,42 @@ def compare_schedulers():
     return results
 
 
+def run_parallel_simulation(config_file: str = None):
+    """运行并行仿真"""
+    logger.info("=" * 50)
+    logger.info("无线传感器网络能量传输仿真系统 - 并行模式")
+    logger.info("=" * 50)
+    
+    # 1. 加载配置
+    if config_file and os.path.exists(config_file):
+        config_manager = ConfigManager(config_file)
+        logger.info(f"从 {config_file} 加载配置")
+    else:
+        config_manager = ConfigManager()
+        logger.info("使用默认配置")
+    
+    # 检查并行配置
+    if not config_manager.parallel_config.enabled:
+        logger.error("并行模式未在配置中启用")
+        logger.info("请在配置文件中设置 parallel.enabled = true")
+        return
+    
+    # 2. 运行并行仿真
+    logger.info("开始并行仿真...")
+    with handle_exceptions("并行仿真运行", recoverable=False):
+        executor = ParallelSimulationExecutor(config_manager)
+        results = executor.run_parallel_simulations()
+        
+        successful_runs = [r for r in results if r["status"] == "success"]
+        failed_runs = [r for r in results if r["status"] == "failed"]
+        
+        logger.info(f"并行仿真完成: 成功 {len(successful_runs)}/{len(results)} 次运行")
+        if failed_runs:
+            logger.warning(f"失败 {len(failed_runs)} 次运行")
+    
+    logger.info("并行仿真程序执行完成")
+
+
 def main():
     """主函数"""
     logger.info("=" * 50)
@@ -177,11 +214,16 @@ def main():
             # 使用指定配置文件
             config_file = sys.argv[2] if len(sys.argv) > 2 else "src/config/default_config.json"
             run_simulation(config_file)
+        elif sys.argv[1] == "parallel":
+            # 并行仿真模式
+            config_file = sys.argv[2] if len(sys.argv) > 2 else "src/config/default_config.json"
+            run_parallel_simulation(config_file)
         else:
             logger.error(f"未知参数: {sys.argv[1]}")
             logger.info("使用方法:")
             logger.info("  python main.py                    # 使用默认配置运行仿真")
             logger.info("  python main.py config <file>      # 使用指定配置文件")
+            logger.info("  python main.py parallel <file>     # 运行并行仿真")
             logger.info("  python main.py compare            # 比较调度器性能")
     else:
         # 使用默认配置运行仿真

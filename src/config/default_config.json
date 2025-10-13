@@ -81,5 +81,20 @@
         "vc_marker_size": 12,
         "line_width": 1.0,
         "path_line_width": 2.0
+    },
+    "parallel": {
+        "enabled": false,
+        "num_runs": 10,
+        "max_workers": 4,
+        "use_same_seed": true,
+        "base_seed": 42,
+        "enable_weight_scan": false,
+        "w_b_start": 0.1,
+        "w_b_step": 0.1,
+        "w_d_fixed": 0.8,
+        "w_l_fixed": 1.5,
+        "output_base_dir": "data/parallel",
+        "save_individual_results": true,
+        "generate_summary": true
     }
 }

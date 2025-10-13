@@ -56,13 +56,7 @@ class Network:
 
         self.create_nodes()
 
-        # ---- ADCR 信息层（虚拟中心版）----
-        try:
-            # ADCR链路层将在外部通过ConfigManager创建
-            self.adcr_link = None
-        except Exception as e:
-            print("[ADCR-Link-Virtual] init failed:", e)
-            self.adcr_link = None
+
 
     def create_nodes(self):
         """

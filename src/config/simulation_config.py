@@ -123,6 +123,31 @@ class ADCRConfig:
     path_line_width: float = 2.0  # 路径线条宽度
 
 
+@dataclass
+class ParallelConfig:
+    """并行仿真配置参数"""
+    # 基本并行参数
+    enabled: bool = False  # 是否启用并行模式
+    num_runs: int = 10  # 运行次数
+    max_workers: int = 4  # 最大并行进程数
+    
+    # 种子管理
+    use_same_seed: bool = True  # 是否使用相同种子（对比实验）
+    base_seed: int = 42  # 基础种子值
+    
+    # 权重扫描实验
+    enable_weight_scan: bool = False  # 是否启用权重扫描
+    w_b_start: float = 0.1  # w_b起始值
+    w_b_step: float = 0.1  # w_b步长
+    w_d_fixed: float = 0.8  # w_d固定值
+    w_l_fixed: float = 1.5  # w_l固定值
+    
+    # 输出管理
+    output_base_dir: str = "data/parallel"  # 并行输出基础目录
+    save_individual_results: bool = True  # 是否保存单次运行结果
+    generate_summary: bool = True  # 是否生成汇总报告
+
+
 class ConfigManager:
     """配置管理器"""
     
@@ -132,6 +157,7 @@ class ConfigManager:
         self.simulation_config = SimulationConfig()
         self.scheduler_config = SchedulerConfig()
         self.adcr_config = ADCRConfig()
+        self.parallel_config = ParallelConfig()
         
         if config_file and os.path.exists(config_file):
             self.load_from_file(config_file)
@@ -153,6 +179,8 @@ class ConfigManager:
                 self._update_dataclass(self.scheduler_config, config_data['scheduler'])
             if 'adcr' in config_data:
                 self._update_dataclass(self.adcr_config, config_data['adcr'])
+            if 'parallel' in config_data:
+                self._update_dataclass(self.parallel_config, config_data['parallel'])
                 
             print(f"配置已从 {config_file} 加载")
         except Exception as e:
@@ -167,7 +195,8 @@ class ConfigManager:
                 'network': asdict(self.network_config),
                 'simulation': asdict(self.simulation_config),
                 'scheduler': asdict(self.scheduler_config),
-                'adcr': asdict(self.adcr_config)
+                'adcr': asdict(self.adcr_config),
+                'parallel': asdict(self.parallel_config)
             }
             
             with open(config_file, 'w', encoding='utf-8') as f:
