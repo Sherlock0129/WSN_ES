@@ -57,5 +57,29 @@
         "adaptive_w_b": 0.8,
         "adaptive_w_d": 0.8,
         "adaptive_w_l": 1.5
+    },
+    "adcr": {
+        "round_period": 1440,
+        "r_neighbor": 1.732,
+        "r_min_ch": 1.0,
+        "c_k": 1.2,
+        "max_hops": 5,
+        "plan_paths": true,
+        "consume_energy": true,
+        "output_dir": "adcr",
+        "max_probability": 0.9,
+        "min_probability": 0.05,
+        "distance_weight": 1.0,
+        "energy_weight": 0.2,
+        "tx_rx_ratio": 0.5,
+        "sensor_energy": 0.1,
+        "image_width": 900,
+        "image_height": 700,
+        "image_scale": 3,
+        "node_marker_size": 7,
+        "ch_marker_size": 10,
+        "vc_marker_size": 12,
+        "line_width": 1.0,
+        "path_line_width": 2.0
     }
 }

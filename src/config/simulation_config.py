@@ -87,6 +87,42 @@ class SchedulerConfig:
     adaptive_w_l: float = 1.5  # 损耗惩罚权重
 
 
+@dataclass
+class ADCRConfig:
+    """ADCR链路层配置参数"""
+    # 核心算法参数
+    round_period: int = 1440  # 重聚类周期（分钟）
+    r_neighbor: float = 1.732  # 邻居检测半径（sqrt(3.0)）
+    r_min_ch: float = 1.0  # 簇头间最小距离
+    c_k: float = 1.2  # K值估计系数
+    max_hops: int = 5  # 最大跳数
+    plan_paths: bool = True  # 是否规划路径
+    consume_energy: bool = True  # 是否消耗能量
+    output_dir: str = "adcr"  # 输出目录
+    
+    # 簇头选择参数
+    max_probability: float = 0.9  # 最大选择概率
+    min_probability: float = 0.05  # 最小选择概率
+    
+    # 聚类成本函数参数
+    distance_weight: float = 1.0  # 距离权重
+    energy_weight: float = 0.2  # 能量权重
+    
+    # 通信能耗参数
+    tx_rx_ratio: float = 0.5  # 发送接收能量比例
+    sensor_energy: float = 0.1  # 感知能耗
+    
+    # 可视化参数
+    image_width: int = 900  # 图像宽度
+    image_height: int = 700  # 图像高度
+    image_scale: int = 3  # 图像缩放
+    node_marker_size: int = 7  # 节点标记大小
+    ch_marker_size: int = 10  # 簇头标记大小
+    vc_marker_size: int = 12  # 虚拟中心标记大小
+    line_width: float = 1.0  # 线条宽度
+    path_line_width: float = 2.0  # 路径线条宽度
+
+
 class ConfigManager:
     """配置管理器"""
     
@@ -95,6 +131,7 @@ class ConfigManager:
         self.network_config = NetworkConfig()
         self.simulation_config = SimulationConfig()
         self.scheduler_config = SchedulerConfig()
+        self.adcr_config = ADCRConfig()
         
         if config_file and os.path.exists(config_file):
             self.load_from_file(config_file)
@@ -114,6 +151,8 @@ class ConfigManager:
                 self._update_dataclass(self.simulation_config, config_data['simulation'])
             if 'scheduler' in config_data:
                 self._update_dataclass(self.scheduler_config, config_data['scheduler'])
+            if 'adcr' in config_data:
+                self._update_dataclass(self.adcr_config, config_data['adcr'])
                 
             print(f"配置已从 {config_file} 加载")
         except Exception as e:
@@ -127,7 +166,8 @@ class ConfigManager:
                 'node': asdict(self.node_config),
                 'network': asdict(self.network_config),
                 'simulation': asdict(self.simulation_config),
-                'scheduler': asdict(self.scheduler_config)
+                'scheduler': asdict(self.scheduler_config),
+                'adcr': asdict(self.adcr_config)
             }
             
             with open(config_file, 'w', encoding='utf-8') as f:
@@ -266,6 +306,40 @@ class ConfigManager:
             w_d=self.simulation_config.w_d,
             w_l=self.simulation_config.w_l,
             use_lookahead=self.simulation_config.use_lookahead
+        )
+    
+    def create_adcr_link_layer(self, network):
+        """创建ADCRLinkLayerVirtual对象"""
+        from acdr.adcr_link_layer import ADCRLinkLayerVirtual
+        return ADCRLinkLayerVirtual(
+            network=network,
+            # 核心算法参数
+            round_period=self.adcr_config.round_period,
+            r_neighbor=self.adcr_config.r_neighbor,
+            r_min_ch=self.adcr_config.r_min_ch,
+            c_k=self.adcr_config.c_k,
+            max_hops=self.adcr_config.max_hops,
+            plan_paths=self.adcr_config.plan_paths,
+            consume_energy=self.adcr_config.consume_energy,
+            output_dir=self.adcr_config.output_dir,
+            # 簇头选择参数
+            max_probability=self.adcr_config.max_probability,
+            min_probability=self.adcr_config.min_probability,
+            # 聚类成本函数参数
+            distance_weight=self.adcr_config.distance_weight,
+            energy_weight=self.adcr_config.energy_weight,
+            # 通信能耗参数
+            tx_rx_ratio=self.adcr_config.tx_rx_ratio,
+            sensor_energy=self.adcr_config.sensor_energy,
+            # 可视化参数
+            image_width=self.adcr_config.image_width,
+            image_height=self.adcr_config.image_height,
+            image_scale=self.adcr_config.image_scale,
+            node_marker_size=self.adcr_config.node_marker_size,
+            ch_marker_size=self.adcr_config.ch_marker_size,
+            vc_marker_size=self.adcr_config.vc_marker_size,
+            line_width=self.adcr_config.line_width,
+            path_line_width=self.adcr_config.path_line_width
         )
     
     def __str__(self) -> str:

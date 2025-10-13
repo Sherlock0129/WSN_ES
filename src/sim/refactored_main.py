@@ -58,6 +58,12 @@ def run_simulation(config_file: str = None):
         network = config_manager.create_network()
         logger.info(f"网络创建完成: {network.num_nodes} 个节点")
     
+    # 2.5. 创建ADCR链路层
+    logger.info("创建ADCR链路层...")
+    with handle_exceptions("ADCR链路层创建", recoverable=True):
+        network.adcr_link = config_manager.create_adcr_link_layer(network)
+        logger.info("ADCR链路层创建完成")
+    
     # 3. 创建调度器
     logger.info("创建调度器...")
     with handle_exceptions("调度器创建", recoverable=False):

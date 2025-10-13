@@ -1,8 +1,6 @@
-import math
-import random
 import numpy as np
 
-from routing.adcr_link_layer import *
+from acdr.adcr_link_layer import *
 from .SensorNode import SensorNode
 from .energy_management import balance_energy
 
@@ -60,14 +58,8 @@ class Network:
 
         # ---- ADCR 信息层（虚拟中心版）----
         try:
-            self.adcr_link = ADCRLinkLayerVirtual(
-                self,
-                round_period=60,
-                plan_paths=True,
-                consume_energy=True,
-                max_hops=self.max_hops,
-                output_dir=self.output_dir
-            )
+            # ADCR链路层将在外部通过ConfigManager创建
+            self.adcr_link = None
         except Exception as e:
             print("[ADCR-Link-Virtual] init failed:", e)
             self.adcr_link = None
