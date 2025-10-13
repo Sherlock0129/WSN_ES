@@ -8,18 +8,53 @@ from .energy_management import balance_energy
 
 
 class Network:
-    def __init__(self, num_nodes, network_config, **kwargs):
+    def __init__(self, 
+                 num_nodes: int = 25,
+                 low_threshold: float = 0.1,
+                 high_threshold: float = 0.9,
+                 node_initial_energy: float = 40000,
+                 max_hops: int = 3,
+                 distribution_mode: str = "random",
+                 network_area_width: float = 10.0,
+                 network_area_height: float = 10.0,
+                 min_distance: float = 0.5,
+                 random_seed: int = 129,
+                 solar_node_ratio: float = 0.6,
+                 mobile_node_ratio: float = 0.1,
+                 output_dir: str = "data"):
+        """
+        初始化网络
+        
+        :param num_nodes: 节点数量
+        :param low_threshold: 低能量阈值
+        :param high_threshold: 高能量阈值
+        :param node_initial_energy: 节点初始能量
+        :param max_hops: 最大跳数
+        :param distribution_mode: 分布模式 (uniform/random)
+        :param network_area_width: 网络区域宽度
+        :param network_area_height: 网络区域高度
+        :param min_distance: 节点间最小距离
+        :param random_seed: 随机种子
+        :param solar_node_ratio: 太阳能节点比例
+        :param mobile_node_ratio: 移动节点比例
+        :param output_dir: 输出目录
+        """
         self.num_nodes = num_nodes
         self.nodes = []
-        self.network_config = network_config
-
-        self.low_threshold = network_config.get('low_threshold', 0.25)
-        self.high_threshold = network_config.get('high_threshold', 0.75)
-        self.node_initial_energy = network_config.get('node_initial_energy', 10000)
-        self.max_hops = network_config.get('max_hops', 3)
         
-        # 分布模式配置
-        self.distribution_mode = network_config.get('distribution_mode', 'uniform')
+        # 网络参数
+        self.low_threshold = low_threshold
+        self.high_threshold = high_threshold
+        self.node_initial_energy = node_initial_energy
+        self.max_hops = max_hops
+        self.distribution_mode = distribution_mode
+        self.network_area_width = network_area_width
+        self.network_area_height = network_area_height
+        self.min_distance = min_distance
+        self.random_seed = random_seed
+        self.solar_node_ratio = solar_node_ratio
+        self.mobile_node_ratio = mobile_node_ratio
+        self.output_dir = output_dir
 
         self.create_nodes()
 
@@ -31,7 +66,7 @@ class Network:
                 plan_paths=True,
                 consume_energy=True,
                 max_hops=self.max_hops,
-                output_dir=self.network_config.get("output_dir", "data")   # ← 新增
+                output_dir=self.output_dir
             )
         except Exception as e:
             print("[ADCR-Link-Virtual] init failed:", e)
@@ -56,10 +91,9 @@ class Network:
         Randomly assign 40% of nodes to be without solar energy harvesting capability.
         """
         import random
-        # 固定随机种子（可通过 network_config 传入，默认 42）
-        seed = self.network_config.get("random_seed", 42)
-        random.seed(seed)
-        np.random.seed(seed)
+        # 固定随机种子
+        random.seed(self.random_seed)
+        np.random.seed(self.random_seed)
 
         horizontal_spacing = 1.0
         vertical_spacing = np.sqrt(3) / 2 * horizontal_spacing
@@ -69,11 +103,11 @@ class Network:
 
         # 生成所有 node_id
         all_node_ids = list(range(self.num_nodes))
-        num_without_solar = int(0.4 * self.num_nodes)
-        no_solar_nodes = set(random.sample(all_node_ids, num_without_solar))  # 随机选30%
+        num_without_solar = int((1 - self.solar_node_ratio) * self.num_nodes)
+        no_solar_nodes = set(random.sample(all_node_ids, num_without_solar))
 
-        # 10% of all nodes → 从 no_solar_nodes 中挑选移动节点
-        num_mobile = int(0.1 * self.num_nodes)
+        # 从 no_solar_nodes 中挑选移动节点
+        num_mobile = int(self.mobile_node_ratio * self.num_nodes)
         mobile_nodes = set(random.sample(list(no_solar_nodes), num_mobile))
 
         node_id = 0
@@ -108,8 +142,7 @@ class Network:
                     has_solar=has_solar,
                     is_mobile=is_mobile,
                     mobility_pattern=mobility_pattern,
-                    mobility_params=mobility_params,
-                    **{k: v for k, v in self.network_config.items() if k not in ['low_threshold', 'high_threshold']}
+                    mobility_params=mobility_params
                 )
 
                 self.nodes.append(node)
@@ -123,15 +156,13 @@ class Network:
         import math
         
         # 设置随机种子
-        seed = self.network_config.get("random_seed", 42)
-        random.seed(seed)
-        np.random.seed(seed)
+        random.seed(self.random_seed)
+        np.random.seed(self.random_seed)
         
         # 获取网络区域参数
-        area = self.network_config.get("network_area", {"width": 10.0, "height": 10.0})
-        width = area["width"]
-        height = area["height"]
-        min_dist = self.network_config.get("min_distance", 0.5)
+        width = self.network_area_width
+        height = self.network_area_height
+        min_dist = self.min_distance
         
         # 生成随机位置
         positions = []
@@ -198,11 +229,11 @@ class Network:
         
         # 生成所有 node_id
         all_node_ids = list(range(self.num_nodes))
-        num_without_solar = int(0.4 * self.num_nodes)
+        num_without_solar = int((1 - self.solar_node_ratio) * self.num_nodes)
         no_solar_nodes = set(random.sample(all_node_ids, num_without_solar))
         
-        # 10% of all nodes → 从 no_solar_nodes 中挑选移动节点
-        num_mobile = int(0.1 * self.num_nodes)
+        # 从 no_solar_nodes 中挑选移动节点
+        num_mobile = int(self.mobile_node_ratio * self.num_nodes)
         mobile_nodes = set(random.sample(list(no_solar_nodes), num_mobile))
         
         # 创建节点
@@ -229,8 +260,7 @@ class Network:
                 has_solar=has_solar,
                 is_mobile=is_mobile,
                 mobility_pattern=mobility_pattern,
-                mobility_params=mobility_params,
-                **{k: v for k, v in self.network_config.items() if k not in ['low_threshold', 'high_threshold']}
+                mobility_params=mobility_params
             )
             
             self.nodes.append(node)

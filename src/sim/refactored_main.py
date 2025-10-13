@@ -11,8 +11,6 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.simulation_config import ConfigManager, load_config
-from core.network import Network
-from core.energy_simulation import EnergySimulation
 from scheduling.schedulers import (
     LyapunovScheduler, ClusterScheduler, PredictionScheduler,
     PowerControlScheduler, BaselineHeuristic
@@ -57,8 +55,7 @@ def run_simulation(config_file: str = None):
     # 2. 创建网络
     logger.info("创建网络...")
     with handle_exceptions("网络创建", recoverable=False):
-        network_config = config_manager.get_network_config_dict()
-        network = Network(network_config["num_nodes"], network_config)
+        network = config_manager.create_network()
         logger.info(f"网络创建完成: {network.num_nodes} 个节点")
     
     # 3. 创建调度器
@@ -70,20 +67,7 @@ def run_simulation(config_file: str = None):
     # 4. 运行仿真
     logger.info("开始仿真...")
     with handle_exceptions("仿真运行", recoverable=False):
-        simulation = EnergySimulation(
-            network, 
-            config_manager.simulation_config.time_steps, 
-            scheduler,
-            # 自适应K值参数
-            initial_K=config_manager.simulation_config.initial_K,
-            K_max=config_manager.simulation_config.K_max,
-            hysteresis=config_manager.simulation_config.hysteresis,
-            w_b=config_manager.simulation_config.w_b,
-            w_d=config_manager.simulation_config.w_d,
-            w_l=config_manager.simulation_config.w_l,
-            use_lookahead=config_manager.simulation_config.use_lookahead
-        )
-        
+        simulation = config_manager.create_energy_simulation(network, scheduler)
         simulation.simulate()
         logger.info("仿真完成")
     

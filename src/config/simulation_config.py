@@ -54,7 +54,7 @@ class SimulationConfig:
     output_dir: str = "data"
     log_level: str = "INFO"
     
-    # EnergySimulation 参数
+    # EnergySimulation K值相关参数
     initial_K: int = 1  # 初始K值
     K_max: int = 24  # 最大K值
     hysteresis: float = 0.2  # 滞回阈值
@@ -199,9 +199,76 @@ class ConfigManager:
         else:
             raise ValueError(f"未知的调度器类型: {scheduler_type}")
     
+    def create_network(self):
+        """创建Network对象"""
+        from core.network import Network
+        return Network(
+            num_nodes=self.network_config.num_nodes,
+            low_threshold=self.node_config.low_threshold,
+            high_threshold=self.node_config.high_threshold,
+            node_initial_energy=self.node_config.initial_energy,
+            max_hops=self.network_config.max_hops,
+            distribution_mode=self.network_config.distribution_mode,
+            network_area_width=self.network_config.network_area_width,
+            network_area_height=self.network_config.network_area_height,
+            min_distance=self.network_config.min_distance,
+            random_seed=self.network_config.random_seed,
+            solar_node_ratio=self.network_config.solar_node_ratio,
+            mobile_node_ratio=self.network_config.mobile_node_ratio,
+            output_dir=self.simulation_config.output_dir
+        )
+    
+    def create_sensor_node(self, node_id: int, position: list, 
+                          has_solar: bool = True, is_mobile: bool = False,
+                          mobility_pattern: str = None, mobility_params: dict = None):
+        """创建SensorNode对象"""
+        from core.SensorNode import SensorNode
+        return SensorNode(
+            node_id=node_id,
+            initial_energy=self.node_config.initial_energy,
+            low_threshold=self.node_config.low_threshold,
+            high_threshold=self.node_config.high_threshold,
+            position=position,
+            has_solar=has_solar,
+            # 电池参数
+            capacity=self.node_config.capacity,
+            voltage=self.node_config.voltage,
+            # 太阳能参数
+            solar_efficiency=self.node_config.solar_efficiency,
+            solar_area=self.node_config.solar_area,
+            max_solar_irradiance=self.node_config.max_solar_irradiance,
+            env_correction_factor=self.node_config.env_correction_factor,
+            # 传输参数
+            energy_char=self.node_config.energy_char,
+            energy_elec=self.node_config.energy_elec,
+            epsilon_amp=self.node_config.epsilon_amp,
+            bit_rate=self.node_config.bit_rate,
+            path_loss_exponent=self.node_config.path_loss_exponent,
+            energy_decay_rate=self.node_config.energy_decay_rate,
+            sensor_energy=self.node_config.sensor_energy,
+            # 移动性参数
+            is_mobile=is_mobile,
+            mobility_pattern=mobility_pattern,
+            mobility_params=mobility_params
+        )
+    
+    def create_energy_simulation(self, network, scheduler=None):
+        """创建EnergySimulation对象"""
+        from core.energy_simulation import EnergySimulation
+        return EnergySimulation(
+            network=network,
+            time_steps=self.simulation_config.time_steps,
+            scheduler=scheduler,
+            initial_K=self.simulation_config.initial_K,
+            K_max=self.simulation_config.K_max,
+            hysteresis=self.simulation_config.hysteresis,
+            w_b=self.simulation_config.w_b,
+            w_d=self.simulation_config.w_d,
+            w_l=self.simulation_config.w_l,
+            use_lookahead=self.simulation_config.use_lookahead
+        )
     
     def __str__(self) -> str:
-        """返回配置的字符串表示"""
         return json.dumps({
             'node': asdict(self.node_config),
             'network': asdict(self.network_config),

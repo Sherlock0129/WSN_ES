@@ -4,18 +4,58 @@ import numpy as np
 
 
 class SensorNode:
-    def __init__(self, node_id, initial_energy, low_threshold, high_threshold,
-                 position, has_solar=True, **kwargs):
+    def __init__(self,
+                 node_id: int,
+                 initial_energy: float,
+                 low_threshold: float,
+                 high_threshold: float,
+                 position: list,
+                 has_solar: bool = True,
+                 # 电池参数
+                 capacity: float = 5200,
+                 voltage: float = 3.7,
+                 # 太阳能参数
+                 solar_efficiency: float = 0.2,
+                 solar_area: float = 0.1,
+                 max_solar_irradiance: float = 1500.0,
+                 env_correction_factor: float = 1.0,
+                 # 传输参数
+                 energy_char: float = 1000.0,
+                 energy_elec: float = 1e-4,
+                 epsilon_amp: float = 1e-5,
+                 bit_rate: float = 1000000.0,
+                 path_loss_exponent: float = 2.0,
+                 energy_decay_rate: float = 5.0,
+                 sensor_energy: float = 0.1,
+                 # 移动性参数
+                 is_mobile: bool = False,
+                 mobility_pattern: str = None,
+                 mobility_params: dict = None):
         """
-        Initialize the sensor node with energy and other parameters.
-
-        :param node_id: The unique ID for the sensor node.
-        :param initial_energy: Initial energy of the sensor node (in Joules).
-        :param low_threshold: Low energy threshold (percentage of the total capacity).
-        :param high_threshold: High energy threshold (percentage of the total capacity).
-        :param position: The position of the node in the network (e.g., [x, y]).
-        :param has_solar: Whether the node has a solar panel for energy harvesting.
-        :param kwargs: Additional parameters for node configuration.
+        初始化传感器节点
+        
+        :param node_id: 节点唯一ID
+        :param initial_energy: 初始能量 (Joules)
+        :param low_threshold: 低能量阈值 (容量百分比)
+        :param high_threshold: 高能量阈值 (容量百分比)
+        :param position: 节点位置 [x, y]
+        :param has_solar: 是否具有太阳能收集能力
+        :param capacity: 电池容量 (mAh)
+        :param voltage: 电压 (V)
+        :param solar_efficiency: 太阳能效率
+        :param solar_area: 太阳能板面积 (m^2)
+        :param max_solar_irradiance: 最大太阳辐射 (W/m^2)
+        :param env_correction_factor: 环境修正因子
+        :param energy_char: 充电能量 (J)
+        :param energy_elec: 电子能量 (J per bit)
+        :param epsilon_amp: 放大能量 (J per bit per distance^2)
+        :param bit_rate: 传输比特率 (bits)
+        :param path_loss_exponent: 路径损耗指数
+        :param energy_decay_rate: 能量衰减率 (J per time step)
+        :param sensor_energy: 传感器能量 (J per time step)
+        :param is_mobile: 是否可移动
+        :param mobility_pattern: 移动模式
+        :param mobility_params: 移动参数
         """
         self.node_id = node_id
         self.position = position  # [x, y] position of the node
@@ -25,24 +65,24 @@ class SensorNode:
         self.initial_energy = initial_energy
         self.low_threshold = low_threshold
         self.high_threshold = high_threshold
-        self.capacity = kwargs.get('capacity', 5200)  # Battery capacity in mAh
-        self.V = kwargs.get('V', 3.7)  # Voltage (V)
+        self.capacity = capacity  # Battery capacity in mAh
+        self.V = voltage  # Voltage (V)
         self.energy_history = []  # To track energy consumption and generation over time
         self.current_energy = initial_energy
 
         # Solar panel parameters (if the node has a solar panel)
-        self.solar_efficiency = kwargs.get('solar_efficiency', 0.2)
-        self.solar_area = kwargs.get('solar_area', 0.1)  # Area of a solar panel in m^2
-        self.G_max = kwargs.get('G_max', 1500)  # Max solar irradiance in W/m^2
-        self.env_correction_factor = kwargs.get('env_correction_factor', 1.0)  # Environmental factor for solar collection
+        self.solar_efficiency = solar_efficiency
+        self.solar_area = solar_area  # Area of a solar panel in m^2
+        self.G_max = max_solar_irradiance  # Max solar irradiance in W/m^2
+        self.env_correction_factor = env_correction_factor  # Environmental factor for solar collection
 
         # Wireless Energy Transfer (WET) parameters
-        self.E_char = kwargs.get('E_char', 1000)  # Energy consumed for charging during WET (J)
-        self.E_elec = kwargs.get('E_elec', 1e-4)  # Energy consumed for electronics (per bit) (J)
-        self.epsilon_amp = kwargs.get('epsilon_amp', 1e-5)  # Amplification energy for transmission (per bit per distance^2) (J)
-        self.B = kwargs.get('B', 1000000)  # Transmission bit rate in bits
-        self.d = kwargs.get('d', 1)  # Distance between nodes
-        self.tau = kwargs.get('tau', 2)  # Path loss exponent
+        self.E_char = energy_char  # Energy consumed for charging during WET (J)
+        self.E_elec = energy_elec  # Energy consumed for electronics (per bit) (J)
+        self.epsilon_amp = epsilon_amp  # Amplification energy for transmission (per bit per distance^2) (J)
+        self.B = bit_rate  # Transmission bit rate in bits
+        self.d = 1  # Distance between nodes (will be calculated dynamically)
+        self.tau = path_loss_exponent  # Path loss exponent
 
         # Threshold energy calculation
         self.low_threshold_energy = self.low_threshold * self.capacity * self.V * 3600  # Convert to Joules
@@ -54,9 +94,13 @@ class SensorNode:
         self.received_history = []  # List to track received energy history
         self.transferred_history = []  # List to track transferred energy history
 
-        self.is_mobile = kwargs.get('is_mobile', False)
-        self.mobility_pattern = kwargs.get('mobility_pattern', None)  # e.g., "circle", "line", "oscillate"
-        self.mobility_params = kwargs.get('mobility_params', {})  # custom parameters
+        self.is_mobile = is_mobile
+        self.mobility_pattern = mobility_pattern  # e.g., "circle", "line", "oscillate"
+        self.mobility_params = mobility_params or {}  # custom parameters
+
+        # Energy decay and sensor consumption
+        self.energy_decay_rate = energy_decay_rate
+        self.sensor_energy = sensor_energy
 
         # 在 __init__ 里：
         self.position_history = [tuple(self.position)]
