@@ -19,12 +19,25 @@ except Exception:
     PowerControlScheduler = None
 
 class EnergySimulation:
-    def __init__(self, network, time_steps,scheduler=None):
+    def __init__(self, network, time_steps, scheduler=None, 
+                 # 自适应K值参数
+                 initial_K=1, K_max=24, hysteresis=0.2, 
+                 w_b=0.8, w_d=0.8, w_l=1.5,
+                 # 其他参数
+                 use_lookahead=False):
         """
         Initialize the energy simulation for the network.
 
         :param network: The network object that contains nodes and their parameters.
         :param time_steps: Total number of time steps to simulate.
+        :param scheduler: Optional scheduler for energy transfer planning.
+        :param initial_K: Initial K value for adaptive concurrency.
+        :param K_max: Maximum K value for adaptive concurrency.
+        :param hysteresis: Hysteresis threshold for K adaptation.
+        :param w_b: Weight for balance improvement factor.
+        :param w_d: Weight for delivery factor.
+        :param w_l: Weight for loss penalty factor.
+        :param use_lookahead: Whether to use lookahead simulation.
         """
         self.network = network
         self.time_steps = time_steps
@@ -32,15 +45,15 @@ class EnergySimulation:
         self.scheduler = scheduler  # ← 新增：可插拔调度器
         self.plans_by_time = {}
 
-        # 自适应并发参数
-        self.K = 1
-        self.K_max = 24
+        # 自适应并发参数 - 从构造函数参数获取
+        self.K = initial_K
+        self.K_max = K_max
         self.last_reward = None
         self.last_direction = +1
-        self.hysteresis = 0.2  # 滞回阈值
-        self.w_b = 0.8  # 均衡改进权重
-        self.w_d = 0.8  # 有效送达量权重
-        self.w_l = 1.5  # 损耗惩罚权重
+        self.hysteresis = hysteresis  # 滞回阈值
+        self.w_b = w_b  # 均衡改进权重
+        self.w_d = w_d  # 有效送达量权重
+        self.w_l = w_l  # 损耗惩罚权重
 
         # 记录K值历史
         self.K_history = []
@@ -53,10 +66,8 @@ class EnergySimulation:
 
         self.cand = []
 
-
         # 是否使用前瞻模拟
-        self.use_lookahead = False
-
+        self.use_lookahead = use_lookahead
 
         # adaptK 日志控制（只在本次仿真内生效）
         self._adaptk_logged_header = False

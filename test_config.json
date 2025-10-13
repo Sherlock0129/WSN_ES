@@ -1,0 +1,17 @@
+{
+  "node": {
+    "initial_energy": 50000.0,
+    "low_threshold": 0.2
+  },
+  "network": {
+    "num_nodes": 50,
+    "max_hops": 5
+  },
+  "simulation": {
+    "time_steps": 5000
+  },
+  "scheduler": {
+    "scheduler_type": "ClusterScheduler",
+    "cluster_round_period": 180
+  }
+}

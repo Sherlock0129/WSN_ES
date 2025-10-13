@@ -15,6 +15,10 @@ class BaseScheduler(object):
         self.K = K
         self.max_hops = max_hops
 
+    def get_name(self):
+        """获取调度器名称"""
+        return self.__class__.__name__
+
     def plan(self, network, t):
         """返回路由/传能计划列表：[{receiver, donor, path, distance, (可选)energy_sent}, ...]"""
         raise NotImplementedError

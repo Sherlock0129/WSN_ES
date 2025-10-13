@@ -1,0 +1,1 @@
+2025-10-13 16:16:37 - WSN_Simulation - ERROR - error:123 - 严重错误 [网络创建]: AttributeError - 'Network' object has no attribute 'get_num_nodes'
