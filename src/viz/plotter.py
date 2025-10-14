@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import plotly.graph_objects as go
+from utils.output_manager import OutputManager
 
 # 小工具：确保目录存在
 def _ensure_dir(path: str):
@@ -99,7 +100,10 @@ def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=N
                    tickfont=dict(size=8, family='Arial'))
     )
 
-    save_path = os.path.join(output_dir, 'node_distribution.png')
+    # 创建按日期命名的输出目录
+    session_dir = OutputManager.get_session_dir(output_dir)
+    
+    save_path = OutputManager.get_file_path(session_dir, 'node_distribution.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
     fig.show()
     # IEEE Caption: Fig. 1. Node distribution in 2D space.
@@ -132,7 +136,10 @@ def plot_energy_distribution(nodes, time_step, output_dir="data"):
                    tickfont=dict(size=8, family='Arial'))
     )
 
-    save_path = os.path.join(output_dir, f'energy_distribution_t{time_step}.png')
+    # 创建按日期命名的输出目录
+    session_dir = OutputManager.get_session_dir(output_dir)
+    
+    save_path = OutputManager.get_file_path(session_dir, f'energy_distribution_t{time_step}.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
     fig.show()
     # IEEE Caption: Fig. X. Node energy distribution at time step {time_step}.
@@ -193,7 +200,10 @@ def plot_energy_paths_at_time(network, plans, t, output_path=None):
     plt.xlabel('X (m)'); plt.ylabel('Y (m)')
     plt.axis('equal'); plt.grid(True, alpha=0.3)
 
-    out = output_path or f'data/energy_paths_t{t}.png'
+    # 创建按日期命名的输出目录
+    session_dir = OutputManager.get_session_dir("data")
+    
+    out = output_path or OutputManager.get_file_path(session_dir, f'energy_paths_t{t}.png')
     plt.tight_layout(); plt.savefig(out, dpi=200); plt.show()
 
 def plot_energy_over_time(nodes, results, output_dir="data"):
@@ -242,7 +252,10 @@ def plot_energy_over_time(nodes, results, output_dir="data"):
                    tickfont=dict(size=8, family='Arial'))
     )
 
-    save_path = os.path.join(output_dir, 'energy_over_time.png')
+    # 创建按日期命名的输出目录
+    session_dir = OutputManager.get_session_dir(output_dir)
+    
+    save_path = OutputManager.get_file_path(session_dir, 'energy_over_time.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
     fig.show()
     # IEEE Caption: Fig. X. Energy change over time for each node.
@@ -274,7 +287,10 @@ def plot_energy_histogram(nodes, time_step, output_dir="data"):
                    tickfont=dict(size=8, family='Arial'))
     )
 
-    save_path = os.path.join(output_dir, f'energy_histogram_t{time_step}.png')
+    # 创建按日期命名的输出目录
+    session_dir = OutputManager.get_session_dir(output_dir)
+    
+    save_path = OutputManager.get_file_path(session_dir, f'energy_histogram_t{time_step}.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
     fig.show()
     # IEEE Caption: Fig. X. Energy distribution histogram at time step {time_step}.
@@ -323,7 +339,10 @@ def plot_routing_path(path, output_dir="data"):
                    tickfont=dict(size=8, family='Arial'))
     )
 
-    save_path = os.path.join(output_dir, 'routing_path.png')
+    # 创建按日期命名的输出目录
+    session_dir = OutputManager.get_session_dir(output_dir)
+    
+    save_path = OutputManager.get_file_path(session_dir, 'routing_path.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
     fig.show()
     # IEEE Caption: Fig. X. Optimal routing path using OECR algorithm.
@@ -370,7 +389,10 @@ def plot_energy_transfer_history(nodes, output_dir="data"):
     fig.update_xaxes(showgrid=True, gridcolor='rgba(0,0,0,0.25)', tickangle=0)
     fig.update_yaxes(showgrid=True, gridcolor='rgba(0,0,0,0.25)', zeroline=False)
 
-    save_path = os.path.join(output_dir, 'energy_transfer_history.png')
+    # 创建按日期命名的输出目录
+    session_dir = OutputManager.get_session_dir(output_dir)
+    
+    save_path = OutputManager.get_file_path(session_dir, 'energy_transfer_history.png')
     fig.write_image(save_path, width=1040, height=780, scale=2)
     fig.show()
     # IEEE Caption: Fig. X. Energy transfer history for each node (sorted by transferred energy, left is larger).

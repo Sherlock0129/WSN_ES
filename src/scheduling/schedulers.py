@@ -6,7 +6,7 @@ import math
 import random
 import numpy as np
 
-from routing.EEOR import *
+from routing.EEOR import eeor_find_path, eeor_find_path_adaptive
 
 
 # ------------------ 通用基类 ------------------

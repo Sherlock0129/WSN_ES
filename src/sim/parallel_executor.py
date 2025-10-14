@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.simulation_config import ConfigManager
 from utils.error_handling import logger, handle_exceptions
+from utils.output_manager import OutputManager
 
 
 class ParallelSimulationExecutor:
@@ -42,7 +43,7 @@ class ParallelSimulationExecutor:
             logger.info(f"启用权重扫描: w_b从{self.parallel_config.w_b_start}开始，步长{self.parallel_config.w_b_step}")
         
         # 创建输出目录
-        os.makedirs(self.parallel_config.output_base_dir, exist_ok=True)
+        OutputManager.ensure_dir_exists(self.parallel_config.output_base_dir)
         
         start_time = time.time()
         results = []
@@ -108,9 +109,8 @@ class ParallelSimulationExecutor:
     def _run_single_simulation(self, run_id: int, custom_weights: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         """单次仿真执行（进程安全）"""
         try:
-            # 创建独立的输出目录
-            output_dir = os.path.join(self.parallel_config.output_base_dir, f"run_{run_id}")
-            os.makedirs(output_dir, exist_ok=True)
+            # 创建独立的输出目录（按日期+运行ID组织）
+            output_dir = OutputManager.get_parallel_run_dir(self.parallel_config.output_base_dir, run_id)
             
             # 设置种子
             if self.parallel_config.use_same_seed:
@@ -136,8 +136,11 @@ class ParallelSimulationExecutor:
             # 创建调度器
             scheduler = self._create_scheduler(config_manager)
             
-            # 创建仿真
+            # 创建仿真（使用统一的输出目录）
             simulation = config_manager.create_energy_simulation(network, scheduler)
+            # 设置仿真的输出目录为当前运行目录
+            simulation.output_dir = output_dir
+            simulation.session_dir = output_dir
             
             # 应用自定义权重
             if custom_weights:
@@ -235,7 +238,7 @@ class ParallelSimulationExecutor:
         try:
             # 保存K值历史
             if hasattr(simulation, 'K_history') and simulation.K_history:
-                k_history_file = os.path.join(output_dir, f"K_value_history_run_{run_id}.csv")
+                k_history_file = OutputManager.get_file_path(output_dir, f"K_value_history_run_{run_id}.csv")
                 with open(k_history_file, 'w') as f:
                     f.write("time_step,K_value\n")
                     for t, k in simulation.K_history:
@@ -243,12 +246,12 @@ class ParallelSimulationExecutor:
             
             # 保存权重信息
             if custom_weights:
-                weights_file = os.path.join(output_dir, f"weights_run_{run_id}.json")
+                weights_file = OutputManager.get_file_path(output_dir, f"weights_run_{run_id}.json")
                 with open(weights_file, 'w') as f:
                     json.dump(custom_weights, f, indent=2)
             
             # 保存仿真结果
-            results_file = os.path.join(output_dir, f"simulation_results_run_{run_id}.csv")
+            results_file = OutputManager.get_file_path(output_dir, f"simulation_results_run_{run_id}.csv")
             simulation.save_results(results_file)
             
         except Exception as e:
@@ -257,7 +260,9 @@ class ParallelSimulationExecutor:
     def _generate_summary_report(self, successful_runs: List[Dict[str, Any]]):
         """生成汇总报告"""
         try:
-            summary_file = os.path.join(self.parallel_config.output_base_dir, "parallel_summary.json")
+            # 使用当前日期的目录
+            summary_dir = OutputManager.get_session_dir(self.parallel_config.output_base_dir)
+            summary_file = OutputManager.get_file_path(summary_dir, "parallel_summary.json")
             
             # 计算汇总统计
             durations = [r["duration"] for r in successful_runs]

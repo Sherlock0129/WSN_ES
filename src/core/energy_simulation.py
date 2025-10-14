@@ -1,17 +1,16 @@
 
 import csv
+import os
 import random
 from turtle import pd
 from datetime import datetime, timedelta
 import numpy as np
 from matplotlib import pyplot as plt
-from datetime import datetime, timedelta
-
-from matplotlib import pyplot as plt
 
 from scheduling import schedulers
-from scheduling.lookahead import *
+from scheduling.lookahead import _eval_one_candidate, _compute_stats_for_network
 from .energy_management import balance_energy
+from utils.output_manager import OutputManager
 try:
     from scheduling.schedulers import PowerControlScheduler
 except Exception:
@@ -24,7 +23,7 @@ class EnergySimulation:
                  initial_K=1, K_max=24, hysteresis=0.2, 
                  w_b=0.8, w_d=0.8, w_l=1.5,
                  # 其他参数
-                 use_lookahead=False):
+                 use_lookahead=False, output_dir="data"):
         """
         Initialize the energy simulation for the network.
 
@@ -68,6 +67,10 @@ class EnergySimulation:
 
         # 是否使用前瞻模拟
         self.use_lookahead = use_lookahead
+        self.output_dir = output_dir
+        
+        # 创建按日期命名的输出目录
+        self.session_dir = OutputManager.get_session_dir(output_dir)
 
         # adaptK 日志控制（只在本次仿真内生效）
         self._adaptk_logged_header = False
@@ -391,7 +394,8 @@ class EnergySimulation:
 
         # 显示图表
         plt.tight_layout()
-        plt.savefig('K_value_over_time.png')
+        k_value_plot_path = OutputManager.get_file_path(self.session_dir, 'K_value_over_time.png')
+        plt.savefig(k_value_plot_path)
         plt.show()
 
         # 同时创建表格形式的数据
@@ -412,8 +416,10 @@ class EnergySimulation:
         daily_stats = df.groupby('Day')['K_Value'].agg(['mean', 'min', 'max', 'std']).round(2)
 
         # 保存到CSV文件
-        df.to_csv('K_value_history.csv', index=False)
-        daily_stats.to_csv('K_value_daily_stats.csv')
+        k_history_path = OutputManager.get_file_path(self.session_dir, 'K_value_history.csv')
+        daily_stats_path = OutputManager.get_file_path(self.session_dir, 'K_value_daily_stats.csv')
+        df.to_csv(k_history_path, index=False)
+        daily_stats.to_csv(daily_stats_path)
 
         print("K值历史记录和统计信息已保存到CSV文件")
         print("\n每日K值统计:")
@@ -469,8 +475,10 @@ class EnergySimulation:
         daily_stats = df.groupby('Day')['K_Value'].agg(['mean', 'min', 'max', 'std']).round(2)
 
         # 保存到CSV文件
-        df.to_csv('K_value_history.csv', index=False)
-        daily_stats.to_csv('K_value_daily_stats.csv')
+        k_history_path = OutputManager.get_file_path(self.session_dir, 'K_value_history.csv')
+        daily_stats_path = OutputManager.get_file_path(self.session_dir, 'K_value_daily_stats.csv')
+        df.to_csv(k_history_path, index=False)
+        daily_stats.to_csv(daily_stats_path)
 
         print("K值历史记录和统计信息已保存到CSV文件")
         print("\n每日K值统计:")
@@ -489,8 +497,11 @@ class EnergySimulation:
             })
         self.results.append(energy_data)
 
-    def save_results(self, filename="data/results.csv"):
+    def save_results(self, filename=None):
         """Save the simulation results to a CSV file."""
+        if filename is None:
+            filename = OutputManager.get_file_path(self.session_dir, 'simulation_results.csv')
+        
         with open(filename, mode='w', newline='') as file:
             writer = csv.writer(file)
             # Write header

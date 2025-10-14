@@ -99,10 +99,9 @@ def run_simulation(config_file: str = None):
     # 7. 保存结果
     logger.info("保存结果...")
     with handle_exceptions("结果保存", recoverable=True):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        results_file = f"data/simulation_results_{timestamp}.csv"
-        simulation.save_results(results_file)
-        logger.info(f"结果已保存到: {results_file}")
+        # 使用EnergySimulation的默认路径（按日期组织）
+        simulation.save_results()
+        logger.info(f"结果已保存到: {simulation.session_dir}")
     
     # 8. 输出错误摘要
     error_summary = error_handler.get_error_summary()

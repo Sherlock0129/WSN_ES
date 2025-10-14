@@ -5,6 +5,7 @@ import math
 import random
 import os
 from collections import defaultdict
+from utils.output_manager import OutputManager
 
 try:
     from routing.opportunistic_routing import opportunistic_routing
@@ -38,10 +39,7 @@ class ADCRLinkLayerVirtual(object):
 
         # 新增：统一的图片保存目录
         self.output_dir = output_dir
-        try:
-            os.makedirs(self.output_dir, exist_ok=True)
-        except Exception:
-            pass
+        OutputManager.ensure_dir_exists(self.output_dir)
 
         # 运行态
         self.last_round_t = None
@@ -367,7 +365,7 @@ class ADCRLinkLayerVirtual(object):
         # 统一输出目录：优先函数入参，其次类属性 self.output_dir，最后退回 "data"
         if output_dir is None:
             output_dir = getattr(self, "output_dir", "data")
-        os.makedirs(output_dir, exist_ok=True)
+        OutputManager.ensure_dir_exists(output_dir)
 
         nodes = self.net.nodes
         id2node = {n.node_id: n for n in nodes}
@@ -451,8 +449,11 @@ class ADCRLinkLayerVirtual(object):
             xaxis=dict(scaleanchor='y', scaleratio=1)
         )
 
+        # 创建ADCR子目录
+        adcr_dir = OutputManager.get_adcr_dir(output_dir)
+        
         # 正确的保存写法：join 成完整路径
-        out_png = os.path.join(output_dir, 'adcr_info_paths.png')
+        out_png = OutputManager.get_file_path(adcr_dir, 'adcr_info_paths.png')
         try:
             fig.write_image(out_png, width=self.image_width, height=self.image_height, scale=self.image_scale)
         except Exception as e:

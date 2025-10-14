@@ -69,8 +69,9 @@ class Logger:
     
     def _setup_logging(self):
         """设置日志系统"""
-        # 创建日志目录
-        log_dir = "logs"
+        # 创建按日期命名的日志目录
+        date_str = datetime.now().strftime('%Y%m%d')
+        log_dir = os.path.join("logs", date_str)
         os.makedirs(log_dir, exist_ok=True)
         
         # 创建主日志器
@@ -93,14 +94,14 @@ class Logger:
         self.logger.addHandler(console_handler)
         
         # 文件处理器
-        log_file = os.path.join(log_dir, f"simulation_{datetime.now().strftime('%Y%m%d')}.log")
+        log_file = os.path.join(log_dir, "simulation.log")
         file_handler = logging.FileHandler(log_file, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
         
         # 错误文件处理器
-        error_file = os.path.join(log_dir, f"errors_{datetime.now().strftime('%Y%m%d')}.log")
+        error_file = os.path.join(log_dir, "errors.log")
         error_handler = logging.FileHandler(error_file, encoding='utf-8')
         error_handler.setLevel(logging.ERROR)
         error_handler.setFormatter(formatter)

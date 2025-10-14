@@ -1,6 +1,7 @@
 import numpy as np
+import math
 
-from acdr.adcr_link_layer import *
+from acdr.adcr_link_layer import ADCRLinkLayerVirtual
 from .SensorNode import SensorNode
 from .energy_management import balance_energy
 
