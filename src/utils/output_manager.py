@@ -16,16 +16,16 @@ class OutputManager:
     @staticmethod
     def get_session_dir(base_dir: str = "data") -> str:
         """
-        获取按日期命名的会话目录
+        获取按日期+时间命名的会话目录
         
         Args:
             base_dir: 基础目录，默认为"data"
             
         Returns:
-            str: 会话目录路径，格式为 base_dir/YYYYMMDD
+            str: 会话目录路径，格式为 base_dir/YYYYMMDD_HHMMSS
         """
-        date_str = datetime.now().strftime("%Y%m%d")
-        session_dir = os.path.join(base_dir, date_str)
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_dir = os.path.join(base_dir, timestamp_str)
         os.makedirs(session_dir, exist_ok=True)
         return session_dir
     
@@ -39,10 +39,10 @@ class OutputManager:
             run_id: 运行ID
             
         Returns:
-            str: 运行目录路径，格式为 base_dir/YYYYMMDD/run_X
+            str: 运行目录路径，格式为 base_dir/YYYYMMDD_HHMMSS/run_X
         """
-        date_str = datetime.now().strftime("%Y%m%d")
-        run_dir = os.path.join(base_dir, date_str, f"run_{run_id}")
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = os.path.join(base_dir, timestamp_str, f"run_{run_id}")
         os.makedirs(run_dir, exist_ok=True)
         return run_dir
     
@@ -110,13 +110,13 @@ class OutputManager:
     @staticmethod
     def get_log_dir() -> str:
         """
-        获取按日期命名的日志目录
+        获取按日期+时间命名的日志目录
         
         Returns:
-            str: 日志目录路径，格式为 logs/YYYYMMDD
+            str: 日志目录路径，格式为 logs/YYYYMMDD_HHMMSS
         """
-        date_str = datetime.now().strftime("%Y%m%d")
-        log_dir = os.path.join("logs", date_str)
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_dir = os.path.join("logs", timestamp_str)
         os.makedirs(log_dir, exist_ok=True)
         return log_dir
     
@@ -129,7 +129,7 @@ class OutputManager:
             log_type: 日志类型（simulation, errors等）
             
         Returns:
-            str: 日志文件路径，格式为 logs/YYYYMMDD/log_type.log
+            str: 日志文件路径，格式为 logs/YYYYMMDD_HHMMSS/log_type.log
         """
         log_dir = OutputManager.get_log_dir()
         return os.path.join(log_dir, f"{log_type}.log")

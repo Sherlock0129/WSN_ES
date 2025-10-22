@@ -15,7 +15,8 @@ from scheduling.schedulers import (
     LyapunovScheduler, ClusterScheduler, PredictionScheduler,
     PowerControlScheduler, BaselineHeuristic
 )
-from utils.error_handling import logger, error_handler, handle_exceptions
+from utils.logger import logger, get_detailed_plan_logger
+from utils.error_handling import error_handler, handle_exceptions
 from viz.plotter import plot_node_distribution, plot_energy_over_time
 from sim.parallel_executor import ParallelSimulationExecutor
 
@@ -82,10 +83,10 @@ def run_simulation(config_file: str = None):
     logger.info("生成可视化图表...")
     with handle_exceptions("可视化生成", recoverable=True):
         # 绘制节点分布图
-        plot_node_distribution(network.nodes)
+        plot_node_distribution(network.nodes, session_dir=simulation.session_dir)
         
         # 绘制能量随时间变化图
-        plot_energy_over_time(network.nodes, simulation.results)
+        plot_energy_over_time(network.nodes, simulation.result_manager.get_results(), session_dir=simulation.session_dir)
         
         # 绘制K值变化图
         simulation.plot_K_history()
@@ -96,14 +97,31 @@ def run_simulation(config_file: str = None):
     logger.info("输出统计信息...")
     stats = simulation.print_statistics()
     
-    # 7. 保存结果
+    # 7. 导出配置参数
+    logger.info("导出配置参数...")
+    with handle_exceptions("配置参数导出", recoverable=True):
+        config_file = config_manager.export_config_to_session(simulation.session_dir)
+        if config_file:
+            logger.info(f"配置参数已导出到: {config_file}")
+        else:
+            logger.warning("配置参数导出失败")
+    
+    # 8. 保存详细计划日志
+    logger.info("保存详细计划日志...")
+    with handle_exceptions("详细计划日志保存", recoverable=True):
+        # 创建详细计划日志记录器，使用仿真的会话目录
+        plan_logger = get_detailed_plan_logger(simulation.session_dir)
+        plan_logger.save_simulation_plans(simulation)
+        logger.info("详细计划日志保存完成")
+    
+    # 9. 保存结果
     logger.info("保存结果...")
     with handle_exceptions("结果保存", recoverable=True):
         # 使用EnergySimulation的默认路径（按日期组织）
         simulation.save_results()
         logger.info(f"结果已保存到: {simulation.session_dir}")
     
-    # 8. 输出错误摘要
+    # 10. 输出错误摘要
     error_summary = error_handler.get_error_summary()
     if error_summary['total_errors'] > 0:
         logger.warning(f"仿真过程中发生 {error_summary['total_errors']} 个错误")

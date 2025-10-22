@@ -8,7 +8,7 @@ def _ensure_dir(path: str):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
 
-def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=None):
+def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=None, session_dir=None):
     """
     Plot 2D node distribution, distinguishing solar/non-solar nodes with optional mobile node paths.
     Uses Plotly for interactivity, ensures equal axis scaling, and saves in IEEE style.
@@ -100,8 +100,9 @@ def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=N
                    tickfont=dict(size=8, family='Arial'))
     )
 
-    # 创建按日期命名的输出目录
-    session_dir = OutputManager.get_session_dir(output_dir)
+    # 使用传入的会话目录或创建新的
+    if session_dir is None:
+        session_dir = OutputManager.get_session_dir(output_dir)
     
     save_path = OutputManager.get_file_path(session_dir, 'node_distribution.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
@@ -206,7 +207,7 @@ def plot_energy_paths_at_time(network, plans, t, output_path=None):
     out = output_path or OutputManager.get_file_path(session_dir, f'energy_paths_t{t}.png')
     plt.tight_layout(); plt.savefig(out, dpi=200); plt.show()
 
-def plot_energy_over_time(nodes, results, output_dir="data"):
+def plot_energy_over_time(nodes, results, output_dir="data", session_dir=None):
     """
     Plot the energy change of each node over time using Plotly and save in IEEE style.
     """
@@ -252,8 +253,9 @@ def plot_energy_over_time(nodes, results, output_dir="data"):
                    tickfont=dict(size=8, family='Arial'))
     )
 
-    # 创建按日期命名的输出目录
-    session_dir = OutputManager.get_session_dir(output_dir)
+    # 使用传入的会话目录或创建新的
+    if session_dir is None:
+        session_dir = OutputManager.get_session_dir(output_dir)
     
     save_path = OutputManager.get_file_path(session_dir, 'energy_over_time.png')
     fig.write_image(save_path, width=800, height=600, scale=3)

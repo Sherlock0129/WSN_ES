@@ -19,7 +19,8 @@ from typing import Dict, List, Any, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.simulation_config import ConfigManager
-from utils.error_handling import logger, handle_exceptions
+from utils.logger import logger
+from utils.error_handling import handle_exceptions
 from utils.output_manager import OutputManager
 
 

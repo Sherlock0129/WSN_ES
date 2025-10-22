@@ -4,6 +4,13 @@ import math
 from acdr.adcr_link_layer import ADCRLinkLayerVirtual
 from .SensorNode import SensorNode
 from .energy_management import balance_energy
+from utils.gpu_compute import get_gpu_manager, compute_distance_matrix_gpu
+
+# 尝试导入路由模块
+try:
+    from routing.opportunistic_routing import opportunistic_routing
+except ImportError:
+    opportunistic_routing = None
 
 
 class Network:
@@ -20,7 +27,14 @@ class Network:
                  random_seed: int = 129,
                  solar_node_ratio: float = 0.6,
                  mobile_node_ratio: float = 0.1,
-                 output_dir: str = "data"):
+                 output_dir: str = "data",
+                 use_gpu: bool = False,
+                 # 能量空洞模式参数
+                 energy_hole_enabled: bool = False,
+                 energy_hole_ratio: float = 0.4,
+                 energy_hole_center_mode: str = "random",
+                 energy_hole_cluster_radius: float = 2.0,
+                 energy_hole_mobile_ratio: float = 0.1):
         """
         初始化网络
         
@@ -29,7 +43,7 @@ class Network:
         :param high_threshold: 高能量阈值
         :param node_initial_energy: 节点初始能量
         :param max_hops: 最大跳数
-        :param distribution_mode: 分布模式 (uniform/random)
+        :param distribution_mode: 分布模式 (uniform/random/energy_hole)
         :param network_area_width: 网络区域宽度
         :param network_area_height: 网络区域高度
         :param min_distance: 节点间最小距离
@@ -37,9 +51,24 @@ class Network:
         :param solar_node_ratio: 太阳能节点比例
         :param mobile_node_ratio: 移动节点比例
         :param output_dir: 输出目录
+        :param use_gpu: 是否使用GPU加速
+        :param energy_hole_enabled: 是否启用能量空洞模式
+        :param energy_hole_ratio: 非太阳能节点比例（形成能量空洞）
+        :param energy_hole_center_mode: 空洞中心选择模式
+        :param energy_hole_cluster_radius: 能量空洞聚集半径
+        :param energy_hole_mobile_ratio: 能量空洞中移动节点比例
         """
         self.num_nodes = num_nodes
         self.nodes = []
+        self.use_gpu = use_gpu
+        self.gpu_manager = get_gpu_manager(use_gpu)
+        
+        # 能量空洞模式参数
+        self.energy_hole_enabled = energy_hole_enabled
+        self.energy_hole_ratio = energy_hole_ratio
+        self.energy_hole_center_mode = energy_hole_center_mode
+        self.energy_hole_cluster_radius = energy_hole_cluster_radius
+        self.energy_hole_mobile_ratio = energy_hole_mobile_ratio
         
         # 网络参数
         self.low_threshold = low_threshold
@@ -56,6 +85,33 @@ class Network:
         self.output_dir = output_dir
 
         self.create_nodes()
+        
+        # 预计算距离矩阵（GPU加速）
+        self._distance_matrix = None
+        self._distance_matrix_valid = False
+    
+    def _update_distance_matrix(self):
+        """更新距离矩阵（GPU加速）"""
+        if self.use_gpu:
+            self._distance_matrix = compute_distance_matrix_gpu(self.nodes, self.gpu_manager)
+        else:
+            # CPU版本：计算所有节点间距离
+            n = len(self.nodes)
+            self._distance_matrix = np.zeros((n, n))
+            for i in range(n):
+                for j in range(n):
+                    if i != j:
+                        self._distance_matrix[i, j] = self.nodes[i].distance_to(self.nodes[j])
+        self._distance_matrix_valid = True
+    
+    def get_distance(self, node1, node2):
+        """获取两个节点间的距离（支持GPU加速）"""
+        if not self._distance_matrix_valid:
+            self._update_distance_matrix()
+        
+        idx1 = self.nodes.index(node1)
+        idx2 = self.nodes.index(node2)
+        return self._distance_matrix[idx1, idx2]
 
 
 
@@ -67,6 +123,8 @@ class Network:
             self._create_uniform_nodes()
         elif self.distribution_mode == "random":
             self._create_random_nodes()
+        elif self.distribution_mode == "energy_hole":
+            self._create_energy_hole_nodes()
         else:
             # 默认使用均匀分布
             print(f"未知的分布模式: {self.distribution_mode}, 使用默认的均匀分布")
@@ -208,6 +266,103 @@ class Network:
         # 分配太阳能和移动属性
         self._assign_node_properties(positions)
     
+    def _create_energy_hole_nodes(self):
+        """
+        创建能量空洞模式的节点分布
+        将非太阳能节点聚集在一个中心点附近，形成能量空洞
+        """
+        import random
+        import math
+        
+        # 设置随机种子
+        random.seed(self.random_seed)
+        np.random.seed(self.random_seed)
+        
+        # 获取网络区域参数
+        width = self.network_area_width
+        height = self.network_area_height
+        min_dist = self.min_distance
+        
+        print(f"正在生成 {self.num_nodes} 个能量空洞模式节点...")
+        
+        # 1) 先生成所有节点坐标（使用三角形网格模式）
+        horizontal_spacing = 1.0
+        vertical_spacing = np.sqrt(3) / 2 * horizontal_spacing
+        
+        cols = int(np.ceil(np.sqrt(self.num_nodes)))
+        rows = int(np.ceil(self.num_nodes / cols))
+        
+        positions = []
+        node_id = 0
+        for row in range(rows):
+            for col in range(cols):
+                if node_id >= self.num_nodes:
+                    break
+                x = col * horizontal_spacing
+                if row % 2 == 1:
+                    x += horizontal_spacing / 2.0
+                y = row * vertical_spacing
+                positions.append([x, y])
+                node_id += 1
+        
+        positions = np.array(positions)
+        
+        # 2) 计算非太阳能节点数
+        all_node_ids = list(range(self.num_nodes))
+        num_without_solar = int(self.energy_hole_ratio * self.num_nodes)
+        
+        # 3) 选择能量空洞中心
+        if self.energy_hole_center_mode == "random":
+            center_idx = random.choice(all_node_ids)
+            center = positions[center_idx]
+        elif self.energy_hole_center_mode == "corner":
+            center = np.array([0.0, 0.0])  # 左下角
+        elif self.energy_hole_center_mode == "center":
+            center = np.mean(positions, axis=0)  # 几何中心
+        else:
+            center = positions[int(len(positions)/2)]  # 近似中心
+        
+        # 4) 按到中心的距离排序，取前 num_without_solar 个作为"无太阳能节点"
+        diffs = positions - center
+        d2 = np.sum(diffs * diffs, axis=1)
+        order = np.argsort(d2)
+        selected = order[:num_without_solar]
+        no_solar_nodes = set(int(i) for i in selected)
+        
+        # 5) 从"无太阳能集合"里抽取移动节点
+        num_mobile = int(self.energy_hole_mobile_ratio * self.num_nodes)
+        mobile_pool = list(no_solar_nodes)
+        mobile_nodes = set(random.sample(mobile_pool, min(num_mobile, len(mobile_pool))))
+        
+        # 6) 创建节点
+        for node_id in range(self.num_nodes):
+            x, y = positions[node_id]
+            has_solar = node_id not in no_solar_nodes
+            is_mobile = node_id in mobile_nodes
+            
+            mobility_pattern = "circle" if is_mobile else None
+            mobility_params = {
+                "radius": 1.0,
+                "speed": 0.01,
+                "center": [float(x), float(y)]
+            } if is_mobile else {}
+            
+            node = SensorNode(
+                node_id=node_id,
+                initial_energy=self.node_initial_energy,
+                low_threshold=self.low_threshold,
+                high_threshold=self.high_threshold,
+                position=[float(x), float(y)],
+                has_solar=has_solar,
+                is_mobile=is_mobile,
+                mobility_pattern=mobility_pattern,
+                mobility_params=mobility_params
+            )
+            
+            self.nodes.append(node)
+        
+        print(f"能量空洞模式生成完成：{num_without_solar} 个非太阳能节点聚集在中心 {center} 附近")
+
     def _assign_node_properties(self, positions):
         """
         为节点分配太阳能和移动属性
@@ -503,10 +658,18 @@ class Network:
                 continue
 
             # 按能量降序 + 距离升序排序
-            sorted_candidates = sorted(
-                candidate_nodes,
-                key=lambda n: (-n.current_energy, receiver.distance_to(n))
-            )
+            if self.use_gpu:
+                # 使用预计算的距离矩阵
+                sorted_candidates = sorted(
+                    candidate_nodes,
+                    key=lambda n: (-n.current_energy, self.get_distance(receiver, n))
+                )
+            else:
+                # 使用原始方法
+                sorted_candidates = sorted(
+                    candidate_nodes,
+                    key=lambda n: (-n.current_energy, receiver.distance_to(n))
+                )
 
             # 逐个尝试候选 donor，直到达到上限或没有可行路径
             quota = max_donors_per_receiver - receiver_donor_count[receiver]
@@ -514,7 +677,10 @@ class Network:
                 if quota <= 0:
                     break
 
-                distance = receiver.distance_to(donor)
+                if self.use_gpu:
+                    distance = self.get_distance(receiver, donor)
+                else:
+                    distance = receiver.distance_to(donor)
 
                 # 规划路径
                 if distance <= math.sqrt(3):
@@ -616,15 +782,16 @@ class Network:
         print("End of path")
 
     def display_energy_update(self, node, E_gen, E_con):
-        print(f"Node {node.node_id} energy updated:")
-        print(f"  Energy generated (solar): {E_gen:.2f} J")
-        print(f"  Energy decayed (battery loss): {E_con:.2f} J")
-        print(f"  Current energy: {node.current_energy:.2f} J")
+        # print(f"Node {node.node_id} energy updated:")  # 注释掉详细节点能量输出，影响可读性
+        # print(f"  Energy generated (solar): {E_gen:.2f} J")
+        # print(f"  Energy decayed (battery loss): {E_con:.2f} J")
+        # print(f"  Current energy: {node.current_energy:.2f} J")
+        pass
 
     def simulate_network(self, time_steps):
         """Simulate the network for a given number of time steps."""
         for t in range(time_steps):
-            print(f"\n--- Time step {t + 1} ---")
+            # print(f"\n--- Time step {t + 1} ---")  # 注释掉时间步输出，影响可读性
             self.run_routing(t)  # Pass t as a parameter
             self.update_network_energy(t)  # Pass t as a parameter
             self.balance_network_energy()
