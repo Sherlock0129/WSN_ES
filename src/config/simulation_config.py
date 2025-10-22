@@ -52,6 +52,7 @@ class NodeConfig:
     voltage: float = 3.7             # 电池电压 V（参考值）
 
     # 太阳能采集模型（仅当节点具备太阳能能力时参与估算）
+    enable_energy_harvesting: bool = False  # 是否启用能量采集，False时能量采集量=0
     solar_efficiency: float = 0.2    # 光伏转换效率（0~1）
     solar_area: float = 0.1          # 光伏面积 m^2
     max_solar_irradiance: float = 1500.0  # 峰值太阳辐照 W/m^2
@@ -117,6 +118,8 @@ class SimulationConfig:
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
     
     # K 值自适应（影响每个接收端可匹配的捐能者数量上限）
+    enable_k_adaptation: bool = False     # 是否启用K值自适应，False时使用固定K值
+    fixed_k: int = 1                     # 固定K值（当不使用自适应时）
     initial_K: int = 1                   # 初始 K 值（并行捐能数起点）
     K_max: int = 24                      # K 的上限（避免过度并行导致损耗/拥塞）
     hysteresis: float = 0.2              # 滞回阈值（防抖，避免频繁增减 K）
@@ -124,6 +127,7 @@ class SimulationConfig:
     w_d: float = 0.8                     # 有效送达量权重（关注到达接收端的总能量）
     w_l: float = 1.5                     # 损耗惩罚权重（抑制途损/无效能量开销）
     use_lookahead: bool = False          # 是否进行短期前瞻评估以辅助 K 调整
+
     
     # 计算加速
     use_gpu_acceleration: bool = False   # GPU 加速开关（需要安装 CuPy 与 CUDA 驱动）
@@ -453,6 +457,7 @@ class ConfigManager:
             capacity=self.node_config.capacity,
             voltage=self.node_config.voltage,
             # 太阳能参数
+            enable_energy_harvesting=self.node_config.enable_energy_harvesting,
             solar_efficiency=self.node_config.solar_efficiency,
             solar_area=self.node_config.solar_area,
             max_solar_irradiance=self.node_config.max_solar_irradiance,
@@ -478,6 +483,7 @@ class ConfigManager:
             network=network,
             time_steps=self.simulation_config.time_steps,
             scheduler=scheduler,
+            enable_k_adaptation=self.simulation_config.enable_k_adaptation,
             initial_K=self.simulation_config.initial_K,
             K_max=self.simulation_config.K_max,
             hysteresis=self.simulation_config.hysteresis,
@@ -485,6 +491,7 @@ class ConfigManager:
             w_d=self.simulation_config.w_d,
             w_l=self.simulation_config.w_l,
             use_lookahead=self.simulation_config.use_lookahead,
+            fixed_k=self.simulation_config.fixed_k,
             use_gpu=self.simulation_config.use_gpu_acceleration
         )
     

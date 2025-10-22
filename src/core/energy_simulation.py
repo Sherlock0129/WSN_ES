@@ -16,16 +16,17 @@ except Exception:
 class EnergySimulation:
     def __init__(self, network, time_steps, scheduler=None, 
                  # 自适应K值参数
-                 initial_K=1, K_max=24, hysteresis=0.2, 
+                 enable_k_adaptation=True, initial_K=1, K_max=24, hysteresis=0.2, 
                  w_b=0.8, w_d=0.8, w_l=1.5,
                  # 其他参数
-                 use_lookahead=False, output_dir="data", use_gpu=False):
+                 use_lookahead=False, fixed_k=3, output_dir="data", use_gpu=False):
         """
         Initialize the energy simulation for the network.
 
         :param network: The network object that contains nodes and their parameters.
         :param time_steps: Total number of time steps to simulate.
         :param scheduler: Optional scheduler for energy transfer planning.
+        :param enable_k_adaptation: Whether to enable K value adaptation.
         :param initial_K: Initial K value for adaptive concurrency.
         :param K_max: Maximum K value for adaptive concurrency.
         :param hysteresis: Hysteresis threshold for K adaptation.
@@ -33,6 +34,7 @@ class EnergySimulation:
         :param w_d: Weight for delivery factor.
         :param w_l: Weight for loss penalty factor.
         :param use_lookahead: Whether to use lookahead simulation.
+        :param fixed_k: Fixed K value when not using adaptive K.
         :param use_gpu: Whether to use GPU acceleration.
         """
         self.network = network
@@ -40,6 +42,8 @@ class EnergySimulation:
         self.scheduler = scheduler
         self.plans_by_time = {}
         self.use_gpu = use_gpu
+        self.enable_k_adaptation = enable_k_adaptation
+        self.fixed_k = fixed_k
 
         # 创建按日期命名的输出目录
         self.session_dir = OutputManager.get_session_dir(output_dir)

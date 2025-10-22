@@ -15,6 +15,7 @@ class SensorNode:
                  capacity: float = 5200,
                  voltage: float = 3.7,
                  # 太阳能参数
+                 enable_energy_harvesting: bool = True,
                  solar_efficiency: float = 0.2,
                  solar_area: float = 0.1,
                  max_solar_irradiance: float = 1500.0,
@@ -71,6 +72,7 @@ class SensorNode:
         self.current_energy = initial_energy
 
         # Solar panel parameters (if the node has a solar panel)
+        self.enable_energy_harvesting = enable_energy_harvesting
         self.solar_efficiency = solar_efficiency
         self.solar_area = solar_area  # Area of a solar panel in m^2
         self.G_max = max_solar_irradiance  # Max solar irradiance in W/m^2
@@ -149,8 +151,8 @@ class SensorNode:
         :param t: Time in minutes since the start of the day (e.g., 0 to 1440 minutes).
         :return: The energy harvested in Joules during the current time step.
         """
-        if not self.has_solar:
-            return 0  # If the node doesn't have a solar panel, no energy is harvested.
+        if not self.has_solar or not self.enable_energy_harvesting:
+            return 0  # If the node doesn't have a solar panel or energy harvesting is disabled, no energy is harvested.
         G_t = self.solar_irradiance(t)  # Get solar irradiance at time t
         delta_t = 60  # Energy harvested per minute (in Joules)
         harvested_energy = self.solar_efficiency * self.solar_area * G_t * self.env_correction_factor
