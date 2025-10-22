@@ -106,7 +106,7 @@ def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=N
     
     save_path = OutputManager.get_file_path(session_dir, 'node_distribution.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
-    fig.show()
+    print(f"节点分布图已保存到: {save_path}")
     # IEEE Caption: Fig. 1. Node distribution in 2D space.
 
 def plot_energy_distribution(nodes, time_step, output_dir="data"):
@@ -259,7 +259,7 @@ def plot_energy_over_time(nodes, results, output_dir="data", session_dir=None):
     
     save_path = OutputManager.get_file_path(session_dir, 'energy_over_time.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
-    fig.show()
+    print(f"能量变化图已保存到: {save_path}")
     # IEEE Caption: Fig. X. Energy change over time for each node.
 
 def plot_energy_histogram(nodes, time_step, output_dir="data"):
