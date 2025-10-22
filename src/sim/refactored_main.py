@@ -60,11 +60,15 @@ def run_simulation(config_file: str = None):
         network = config_manager.create_network()
         logger.info(f"网络创建完成: {network.num_nodes} 个节点")
     
-    # 2.5. 创建ADCR链路层
-    logger.info("创建ADCR链路层...")
-    with handle_exceptions("ADCR链路层创建", recoverable=True):
-        network.adcr_link = config_manager.create_adcr_link_layer(network)
-        logger.info("ADCR链路层创建完成")
+    # 2.5. 创建ADCR链路层（可选）
+    if config_manager.simulation_config.enable_adcr_link_layer:
+        logger.info("创建ADCR链路层...")
+        with handle_exceptions("ADCR链路层创建", recoverable=True):
+            network.adcr_link = config_manager.create_adcr_link_layer(network)
+            logger.info("ADCR链路层创建完成")
+    else:
+        logger.info("ADCR链路层已禁用")
+        network.adcr_link = None
     
     # 3. 创建调度器
     logger.info("创建调度器...")
@@ -90,6 +94,11 @@ def run_simulation(config_file: str = None):
         
         # 绘制K值变化图
         simulation.plot_K_history()
+        
+        # 绘制ADCR聚类和路径图
+        if hasattr(network, 'adcr_link') and network.adcr_link is not None:
+            from viz.plotter import plot_adcr_clusters_and_paths
+            plot_adcr_clusters_and_paths(network.adcr_link, session_dir=simulation.session_dir)
         
         logger.info("可视化图表生成完成")
     

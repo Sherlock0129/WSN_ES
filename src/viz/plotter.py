@@ -106,6 +106,7 @@ def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=N
     
     save_path = OutputManager.get_file_path(session_dir, 'node_distribution.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
+    fig.show()
     print(f"节点分布图已保存到: {save_path}")
     # IEEE Caption: Fig. 1. Node distribution in 2D space.
 
@@ -259,6 +260,7 @@ def plot_energy_over_time(nodes, results, output_dir="data", session_dir=None):
     
     save_path = OutputManager.get_file_path(session_dir, 'energy_over_time.png')
     fig.write_image(save_path, width=800, height=600, scale=3)
+    fig.show()
     print(f"能量变化图已保存到: {save_path}")
     # IEEE Caption: Fig. X. Energy change over time for each node.
 
@@ -398,3 +400,28 @@ def plot_energy_transfer_history(nodes, output_dir="data"):
     fig.write_image(save_path, width=1040, height=780, scale=2)
     fig.show()
     # IEEE Caption: Fig. X. Energy transfer history for each node (sorted by transferred energy, left is larger).
+
+
+def plot_adcr_clusters_and_paths(adcr_link_layer, output_dir="data", session_dir=None):
+    """
+    Plot ADCR clustering results and information paths to virtual center.
+    This is a wrapper function that calls the ADCR link layer's built-in plotting method.
+    
+    Args:
+        adcr_link_layer: ADCRLinkLayerVirtual instance
+        output_dir: Base directory to save the image
+        session_dir: Specific session directory (if provided, uses this instead of output_dir)
+    """
+    if adcr_link_layer is None:
+        print("[ADCR-Plot] ADCR link layer not available, skipping plot")
+        return
+    
+    # Use session_dir if provided, otherwise use output_dir
+    target_dir = session_dir if session_dir is not None else output_dir
+    
+    try:
+        # Call the ADCR link layer's built-in plotting method
+        adcr_link_layer.plot_clusters_and_paths(output_dir=target_dir)
+        print(f"[ADCR-Plot] ADCR clustering and paths plot saved to {target_dir}")
+    except Exception as e:
+        print(f"[ADCR-Plot] Failed to generate ADCR plot: {e}")

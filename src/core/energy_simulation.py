@@ -53,6 +53,11 @@ class EnergySimulation:
             initial_K=initial_K, K_max=K_max, hysteresis=hysteresis,
             w_b=w_b, w_d=w_d, w_l=w_l, use_lookahead=use_lookahead
         )
+        
+        # 如果不启用自适应K值，则设置为固定K值
+        if not self.enable_k_adaptation:
+            self.k_adaptation.K = self.fixed_k
+            
         self.stats = SimulationStats(self.session_dir, use_gpu=use_gpu)
         self.result_manager = ResultManager(self.session_dir)
 
@@ -73,6 +78,10 @@ class EnergySimulation:
         for t in range(self.time_steps):
             # Step 1: 更新节点能量（采集 + 衰减 + 位置）
             self.network.update_network_energy(t)
+
+            # Step 1.5: ADCR链路层处理（如果启用）
+            if hasattr(self.network, 'adcr_link') and self.network.adcr_link is not None:
+                self.network.adcr_link.step(t)
 
             # Step 2: 每小时一次执行能量传输 + 自适应并发 K
             if t % 60 == 0:
@@ -129,9 +138,14 @@ class EnergySimulation:
                     self.K, stats['pre_std'], stats['post_std'], stats['delivered_total'], stats['total_loss']
                 ))
             
+                # 根据配置决定是否进行自适应调 K
+                if self.enable_k_adaptation:
                 # 自适应调 K
-                self.k_adaptation._adaptk_last_t = t
-                self.k_adaptation.adapt_K(stats, self.network, self.scheduler)
+                    self.k_adaptation._adaptk_last_t = t
+                    self.k_adaptation.adapt_K(stats, self.network, self.scheduler)
+                else:
+                    # 使用固定K值
+                    self.k_adaptation.K = self.fixed_k
             
                 # 记录K值和对应时间
                 self.k_adaptation.record_K_value(current_time)
@@ -163,4 +177,38 @@ class EnergySimulation:
 
     def plot_energy_stats(self):
         """绘制能量统计图表"""
+
+
+    # 委托方法 - 将功能委托给相应的管理器
+    def print_statistics(self):
+        """打印仿真统计信息"""
+        return self.stats.print_statistics(self.network)
+    
+    def save_results(self, filename=None):
+        """保存仿真结果"""
+        return self.result_manager.save_results(filename)
+
+
+    def display_results(self):
+
+        """显示仿真结果"""
+        return self.result_manager.display_results()
+
+
+    def plot_results(self):
+
+        """绘制仿真结果"""
+        return self.stats.plot_results(self.result_manager.get_results(), self.time_steps, self.network)
+
+
+    def plot_energy_stats(self):
+        """绘制能量统计图表"""
         return self.stats.plot_energy_stats()
+
+    def plot_K_history(self):
+        """绘制K值历史图表"""
+        if hasattr(self.k_adaptation, 'K_history') and hasattr(self.k_adaptation, 'K_timestamps'):
+            return self.stats.plot_K_history(self.k_adaptation.K_history, self.k_adaptation.K_timestamps)
+        else:
+            print("没有K值历史记录可供绘制")
+            return None

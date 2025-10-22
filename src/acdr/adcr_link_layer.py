@@ -308,16 +308,21 @@ class ADCRLinkLayerVirtual(object):
         """
         为所有簇头上报路径结算通信能耗。
         - 对每条真实节点路径：逐跳扣费 (u<->v)
-        - 最后一跳到虚拟中心：只对“最后一个真实节点”按到虚拟中心的距离扣“单端发射+感知”的通信费用，
-          这里按照你的 energy_consumption 形式近似：我们构造一个“等效距离”的 E_tx+E_rx/2 + E_sen，
+        - 最后一跳到虚拟中心：只对"最后一个真实节点"按到虚拟中心的距离扣"单端发射+感知"的通信费用，
+          这里按照你的 energy_consumption 形式近似：我们构造一个"等效距离"的 E_tx+E_rx/2 + E_sen，
           但没有真实接收方，因此只扣发送端一次。
         """
+        print(f"[ADCR-DEBUG] _settle_comm_energy() called, consume_energy={self.consume_energy}")
         self.last_comms = []
         if not self.consume_energy:
+            print("[ADCR-DEBUG] Energy consumption disabled, skipping")
             return
 
         if not self.upstream_paths:
+            print("[ADCR-DEBUG] No upstream paths available, skipping")
             return
+        
+        print(f"[ADCR-DEBUG] Processing {len(self.upstream_paths)} upstream paths")
 
         cx, cy = self.virtual_center
 
@@ -449,15 +454,22 @@ class ADCRLinkLayerVirtual(object):
             xaxis=dict(scaleanchor='y', scaleratio=1)
         )
 
-        # 创建ADCR子目录
-        adcr_dir = OutputManager.get_adcr_dir(output_dir)
-        
-        # 正确的保存写法：join 成完整路径
-        out_png = OutputManager.get_file_path(adcr_dir, 'adcr_info_paths.png')
+        # 使用与其他图相同的保存方式
+        session_dir = OutputManager.get_session_dir(output_dir)
+        save_path = OutputManager.get_file_path(session_dir, 'adcr_info_paths.png')
         try:
-            fig.write_image(out_png, width=self.image_width, height=self.image_height, scale=self.image_scale)
+            # 使用与其他图相同的参数
+            fig.write_image(save_path, width=800, height=600, scale=3)
+            print(f"ADCR聚类和路径图已保存到: {save_path}")
         except Exception as e:
-            print("[ADCR-Link-Virtual] save image failed:", e)
+            print(f"[ADCR-Link-Virtual] save image failed: {e}")
+            # 如果保存失败，尝试保存为HTML文件
+            try:
+                html_path = save_path.replace('.png', '.html')
+                fig.write_html(html_path)
+                print(f"ADCR聚类和路径图已保存为HTML: {html_path}")
+            except Exception as e2:
+                print(f"[ADCR-Link-Virtual] HTML save also failed: {e2}")
 
         fig.show()
 
@@ -468,24 +480,38 @@ class ADCRLinkLayerVirtual(object):
         if (self.last_round_t is not None) and (t - self.last_round_t < self.round_period):
             return
         if not self.net.nodes:
+            print("[ADCR-DEBUG] Skipping - no nodes in network")
             return
+
+        print("[ADCR-DEBUG] Starting ADCR clustering process...")
 
         # 1) 更新虚拟几何中心
         self.virtual_center = self._geo_center()
+        print(f"[ADCR-DEBUG] Virtual center updated: {self.virtual_center}")
 
         # 2) 估计 K* 、选择簇头、成簇
         K_star = self._estimate_K_star()
+        print(f"[ADCR-DEBUG] Estimated K* = {K_star}")
+        
         ch_nodes = self._select_ch(K_star)
+        print(f"[ADCR-DEBUG] Selected {len(ch_nodes)} cluster heads: {[n.node_id for n in ch_nodes]}")
+        
         self._clustering(ch_nodes)
+        print(f"[ADCR-DEBUG] Clustering completed, {len(self.cluster_of)} nodes assigned to clusters")
+        
         self._summarize_clusters()
+        print(f"[ADCR-DEBUG] Cluster summary: {len(self.cluster_stats)} clusters")
 
-        # 3) 规划 CH→锚点（真实节点）的上报路径；最后对虚拟中心做“虚拟跳”
+        # 3) 规划 CH→锚点（真实节点）的上报路径；最后对虚拟中心做"虚拟跳"
         self._plan_paths_to_virtual()
+        print(f"[ADCR-DEBUG] Path planning completed, {len(self.upstream_paths)} paths planned")
 
         # 4) 结算通信能耗（逐跳 + 虚拟跳只扣发送端）
         self._settle_comm_energy()
+        print(f"[ADCR-DEBUG] Energy settlement completed, {len(self.last_comms)} communication hops processed")
 
         print("[ADCR-Link-Virtual] t={} | VC=({:.3f},{:.3f}) | K*={} | CHs={}".format(
             t, self.virtual_center[0], self.virtual_center[1], K_star, sorted(list(self.ch_set))
         ))
         self.last_round_t = t
+        print(f"[ADCR-DEBUG] ADCR step completed, last_round_t updated to {self.last_round_t}")

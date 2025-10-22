@@ -131,8 +131,11 @@ class ParallelSimulationExecutor:
             # 创建网络
             network = config_manager.create_network()
             
-            # 创建ADCR链路层
-            network.adcr_link = config_manager.create_adcr_link_layer(network)
+            # 创建ADCR链路层（可选）
+            if config_manager.simulation_config.enable_adcr_link_layer:
+                network.adcr_link = config_manager.create_adcr_link_layer(network)
+            else:
+                network.adcr_link = None
             
             # 创建调度器
             scheduler = self._create_scheduler(config_manager)

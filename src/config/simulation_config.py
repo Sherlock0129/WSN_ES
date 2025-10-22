@@ -83,7 +83,7 @@ class NetworkConfig:
     """
     num_nodes: int = 25
     max_hops: int = 3
-    distribution_mode: str = "energy_hole"  # 节点分布："uniform"（网格/规则）、"random"（随机）或 "energy_hole"（能量空洞）
+    distribution_mode: str = "random"  # 节点分布："uniform"（网格/规则）、"random"（随机）或 "energy_hole"（能量空洞）
     network_area_width: float = 10.0   # 区域宽度 m
     network_area_height: float = 10.0  # 区域高度 m
     min_distance: float = 0.5          # 节点间最小生成距离 m（避免过近重叠）
@@ -127,7 +127,9 @@ class SimulationConfig:
     w_d: float = 0.8                     # 有效送达量权重（关注到达接收端的总能量）
     w_l: float = 1.5                     # 损耗惩罚权重（抑制途损/无效能量开销）
     use_lookahead: bool = False          # 是否进行短期前瞻评估以辅助 K 调整
-
+    
+    # ADCR链路层
+    enable_adcr_link_layer: bool = True # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
     
     # 计算加速
     use_gpu_acceleration: bool = False   # GPU 加速开关（需要安装 CuPy 与 CUDA 驱动）
@@ -438,7 +440,9 @@ class ConfigManager:
             energy_hole_ratio=self.network_config.energy_hole_ratio,
             energy_hole_center_mode=self.network_config.energy_hole_center_mode,
             energy_hole_cluster_radius=self.network_config.energy_hole_cluster_radius,
-            energy_hole_mobile_ratio=self.network_config.energy_hole_mobile_ratio
+            energy_hole_mobile_ratio=self.network_config.energy_hole_mobile_ratio,
+            # 能量采集参数
+            enable_energy_harvesting=self.node_config.enable_energy_harvesting
         )
     
     def create_sensor_node(self, node_id: int, position: list, 

@@ -290,7 +290,7 @@ class DetailedPlanLogger:
                                 path_str = "->".join(path_ids)
                                 
                                 f.write(f"  [{i+1:2d}] 评分:{score:6.2f} | "
-                                       f"路径: {d_id}->{path_str}->{r_id} | "
+                                       f"路径: {path_str} | "
                                        f"距离:{distance:5.2f}m | "
                                        f"传输:{delivered:7.2f}J | "
                                        f"损失:{loss:7.2f}J\n")
@@ -312,7 +312,7 @@ class DetailedPlanLogger:
                             path_ids = [str(getattr(n, "node_id", n)) for n in path]
                             path_str = "->".join(path_ids)
                             
-                            f.write(f"  [{i+1:2d}] 路径: {d_id}->{path_str}->{r_id} | "
+                            f.write(f"  [{i+1:2d}] 路径: {path_str} | "
                                    f"距离:{distance:5.2f}m | "
                                    f"传输:{delivered:7.2f}J | "
                                    f"损失:{loss:7.2f}J\n")
@@ -380,7 +380,7 @@ class DetailedPlanLogger:
                             path_str = "->".join(path_ids)
                             
                             f.write(f"  [{i+1:2d}] 评分:{score:6.2f} | "
-                                   f"路径: {d_id}->{path_str}->{r_id} | "
+                                   f"路径: {path_str} | "
                                    f"传输:{delivered:7.2f}J\n")
                     f.write("\n")
                 
@@ -398,7 +398,7 @@ class DetailedPlanLogger:
                         path_ids = [str(getattr(n, "node_id", n)) for n in path]
                         path_str = "->".join(path_ids)
                         
-                        f.write(f"  [{i+1:2d}] 路径: {d_id}->{path_str}->{r_id} | "
+                        f.write(f"  [{i+1:2d}] 路径: {path_str} | "
                                f"传输:{delivered:7.2f}J\n")
                 else:
                     f.write("选中计划: 无\n")

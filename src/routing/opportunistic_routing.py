@@ -78,8 +78,7 @@ def opportunistic_routing(nodes, source_node, destination_node, max_hops=5, t=0,
     Use Dijkstra algorithm to find shortest path (by distance) between source and destination node.
     """
 
-    # 构建邻接表：只连接距离 <= sqrt(3) 的邻居
-    neighbor_range = math.sqrt(3)
+    # 构建邻接表：连接所有节点（无距离限制）
     neighbor_map = {node.node_id: [] for node in nodes}
     node_dict = {node.node_id: node for node in nodes}
 
@@ -87,8 +86,7 @@ def opportunistic_routing(nodes, source_node, destination_node, max_hops=5, t=0,
         for j, node_j in enumerate(nodes):
             if i != j:
                 d = node_i.distance_to(node_j)
-                if d <= neighbor_range:
-                    neighbor_map[node_i.node_id].append((node_j.node_id, d))
+                neighbor_map[node_i.node_id].append((node_j.node_id, d))
 
     # 初始化优先队列： (distance, hops, current_node_id, path_id_list)
     queue = [(0, 0, source_node.node_id, [source_node.node_id])]

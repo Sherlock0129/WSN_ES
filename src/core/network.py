@@ -34,7 +34,9 @@ class Network:
                  energy_hole_ratio: float = 0.4,
                  energy_hole_center_mode: str = "random",
                  energy_hole_cluster_radius: float = 2.0,
-                 energy_hole_mobile_ratio: float = 0.1):
+                 energy_hole_mobile_ratio: float = 0.1,
+                 # 能量采集参数
+                 enable_energy_harvesting: bool = True):
         """
         初始化网络
         
@@ -69,6 +71,9 @@ class Network:
         self.energy_hole_center_mode = energy_hole_center_mode
         self.energy_hole_cluster_radius = energy_hole_cluster_radius
         self.energy_hole_mobile_ratio = energy_hole_mobile_ratio
+        
+        # 能量采集参数
+        self.enable_energy_harvesting = enable_energy_harvesting
         
         # 网络参数
         self.low_threshold = low_threshold
@@ -187,7 +192,8 @@ class Network:
                     has_solar=has_solar,
                     is_mobile=is_mobile,
                     mobility_pattern=mobility_pattern,
-                    mobility_params=mobility_params
+                    mobility_params=mobility_params,
+                    enable_energy_harvesting=self.enable_energy_harvesting
                 )
 
                 self.nodes.append(node)
@@ -356,7 +362,8 @@ class Network:
                 has_solar=has_solar,
                 is_mobile=is_mobile,
                 mobility_pattern=mobility_pattern,
-                mobility_params=mobility_params
+                mobility_params=mobility_params,
+                enable_energy_harvesting=self.enable_energy_harvesting
             )
             
             self.nodes.append(node)
@@ -402,7 +409,8 @@ class Network:
                 has_solar=has_solar,
                 is_mobile=is_mobile,
                 mobility_pattern=mobility_pattern,
-                mobility_params=mobility_params
+                mobility_params=mobility_params,
+                enable_energy_harvesting=self.enable_energy_harvesting
             )
             
             self.nodes.append(node)
@@ -682,15 +690,12 @@ class Network:
                 else:
                     distance = receiver.distance_to(donor)
 
-                # 规划路径
-                if distance <= math.sqrt(3):
-                    path = [donor, receiver]
-                else:
-                    path = opportunistic_routing(self.nodes, donor, receiver, max_hops=self.max_hops, t=t)
-                    # path = eeor_find_path(self.nodes, donor, receiver, max_hops=self.max_hops)
-                    if path is None:
-                        print(f"[Routing Failed] {donor.node_id} → {receiver.node_id}")
-                        continue
+                # 规划路径 - 统一使用路由算法
+                path = opportunistic_routing(self.nodes, donor, receiver, max_hops=self.max_hops, t=t)
+                # path = eeor_find_path(self.nodes, donor, receiver, max_hops=self.max_hops)
+                if path is None:
+                    print(f"[Routing Failed] {donor.node_id} → {receiver.node_id}")
+                    continue
 
                 # ★ 只有在 path 成功后，才占用 donor 并计数
                 used_donors.add(donor)
@@ -724,6 +729,7 @@ class Network:
                 # 近距离直接传输：效率计算
                 eta = donor.energy_transfer_efficiency(receiver)
                 energy_received = energy_sent * eta
+                energy_loss = energy_sent - energy_received
 
                 donor.current_energy -= donor.energy_consumption(receiver, transfer_WET=True)
                 receiver.current_energy += energy_received
@@ -731,7 +737,7 @@ class Network:
                 donor.transferred_history.append(energy_sent)
                 receiver.received_history.append(energy_received)
 
-                print(f"[Direct WET] {donor.node_id} → {receiver.node_id}, η={eta:.2f}, +{energy_received:.2f}J")
+                print(f"[Direct WET] {donor.node_id} → {receiver.node_id}, η={eta:.2f}, +{energy_received:.2f}J, loss={energy_loss:.2f}J")
             
             else:
                 # 多跳传输：逐跳转发，每跳能量衰减
@@ -747,6 +753,7 @@ class Network:
 
                     # 计算本跳实际接收能量
                     energy_delivered = energy_left * eta
+                    energy_loss_this_hop = energy_left - energy_delivered
 
                     # 发射方消耗能量（包括WET只在第一跳加）
                     transfer_WET = (i == 0)  # 仅donor计算WET模块消耗
@@ -758,7 +765,7 @@ class Network:
 
                     # 打印日志
                     print(
-                        f"  [Hop {i + 1}] {sender.node_id} → {receiver_i.node_id}, d={sender.distance_to(receiver_i):.2f}m, η={eta:.3f}, +{energy_delivered:.2f}J")
+                        f"  [Hop {i + 1}] {sender.node_id} → {receiver_i.node_id}, d={sender.distance_to(receiver_i):.2f}m, η={eta:.3f}, +{energy_delivered:.2f}J, loss={energy_loss_this_hop:.2f}J")
 
                     # 准备下一跳
                     energy_left = energy_delivered
