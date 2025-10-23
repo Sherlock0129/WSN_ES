@@ -49,6 +49,9 @@ class ADCRLinkLayerVirtual(object):
                  base_data_size: int = 1000000,
                  aggregation_ratio: float = 1.0,
                  enable_dynamic_data_size: bool = True,
+                 # 直接传输优化参数
+                 enable_direct_transmission_optimization: bool = True,
+                 direct_transmission_threshold: float = 0.1,
                  # 可视化参数
                  image_width: int = 900,
                  image_height: int = 700,
@@ -84,6 +87,10 @@ class ADCRLinkLayerVirtual(object):
         self.base_data_size = int(base_data_size)
         self.aggregation_ratio = float(aggregation_ratio)
         self.enable_dynamic_data_size = bool(enable_dynamic_data_size)
+        
+        # 直接传输优化参数
+        self.enable_direct_transmission_optimization = bool(enable_direct_transmission_optimization)
+        self.direct_transmission_threshold = float(direct_transmission_threshold)
         
         # 可视化参数
         self.image_width = int(image_width)
@@ -262,6 +269,66 @@ class ADCRLinkLayerVirtual(object):
         print(f"[ADCR-DEBUG] Cluster {ch_id}: {cluster_size} members, data size: {aggregated_data_size} bits")
         return aggregated_data_size
 
+    def _calculate_energy_cost(self, sender, receiver, distance, data_size=None):
+        """
+        计算从sender到receiver的能耗
+        
+        :param sender: 发送节点
+        :param receiver: 接收节点（可以是虚拟中心）
+        :param distance: 传输距离
+        :param data_size: 数据量（bits），如果为None则使用sender.B
+        :return: 能耗值
+        """
+        if data_size is None:
+            data_size = sender.B
+        
+        E_elec = sender.E_elec
+        eps = sender.epsilon_amp
+        tau = sender.tau
+        
+        # 计算发送和接收能耗
+        E_tx = E_elec * data_size + eps * data_size * (distance ** tau)
+        E_rx = E_elec * data_size
+        
+        # 使用与SensorNode.energy_consumption相同的公式
+        E_com = (E_tx + E_rx) / 2 + sender.sensor_energy
+        
+        return E_com
+
+    def _should_use_direct_transmission(self, ch, anchor):
+        """
+        判断是否应该直接传输到虚拟中心
+        
+        :param ch: 簇头节点
+        :param anchor: 锚点节点
+        :return: True表示直接传输，False表示通过锚点传输
+        """
+        if not self.enable_direct_transmission_optimization:
+            return False
+        
+        # 计算距离
+        ch_to_vc_dist = self._dist_xy(ch.position, self.virtual_center)
+        ch_to_anchor_dist = ch.distance_to(anchor)
+        anchor_to_vc_dist = self._dist_xy(anchor.position, self.virtual_center)
+        
+        # 计算该簇的聚合数据量
+        aggregated_data_size = self._calculate_cluster_data_size(ch.node_id)
+        
+        # 计算能耗
+        direct_energy = self._calculate_energy_cost(ch, self.virtual_center, ch_to_vc_dist, aggregated_data_size)
+        via_anchor_energy = (self._calculate_energy_cost(ch, anchor, ch_to_anchor_dist, aggregated_data_size) + 
+                            self._calculate_energy_cost(anchor, self.virtual_center, anchor_to_vc_dist, aggregated_data_size))
+        
+        # 判断是否应该直接传输
+        should_direct = direct_energy <= via_anchor_energy * (1 + self.direct_transmission_threshold)
+        
+        print(f"[ADCR-DEBUG] CH {ch.node_id} transmission decision:")
+        print(f"  Direct: {ch_to_vc_dist:.2f}m, {direct_energy:.2f}J")
+        print(f"  Via anchor: {ch_to_anchor_dist:.2f}m + {anchor_to_vc_dist:.2f}m, {via_anchor_energy:.2f}J")
+        print(f"  Decision: {'Direct' if should_direct else 'Via anchor'}")
+        
+        return should_direct
+
     # ---------------- 路径规划到"虚拟中心" + 通信能耗结算 ----------------
 
     def _plan_paths_to_virtual(self):
@@ -286,8 +353,16 @@ class ADCRLinkLayerVirtual(object):
             if ch is anchor:
                 paths[ch_id] = [ch]  # 只有虚拟跳
                 continue
-            path = opportunistic_routing(self.net.nodes, ch, anchor, max_hops=self.max_hops, t=0)
-            paths[ch_id] = path  # 允许 None
+            
+            # 判断是否应该直接传输到虚拟中心
+            if self._should_use_direct_transmission(ch, anchor):
+                paths[ch_id] = [ch]  # 直接传输，只有虚拟跳
+                print(f"[ADCR-DEBUG] CH {ch_id}: Using direct transmission to virtual center")
+            else:
+                path = opportunistic_routing(self.net.nodes, ch, anchor, max_hops=self.max_hops, t=0)
+                paths[ch_id] = path  # 通过锚点传输
+                print(f"[ADCR-DEBUG] CH {ch_id}: Using path through anchor")
+        
         self.upstream_paths = paths
         return paths
 

@@ -217,6 +217,10 @@ class ADCRConfig:
     aggregation_ratio: float = 1.0      # 信息聚合比例（1.0表示完全聚合，0.5表示压缩50%）
     enable_dynamic_data_size: bool = True  # 是否启用基于簇大小的动态数据量
     
+    # 直接传输优化参数
+    enable_direct_transmission_optimization: bool = True  # 是否启用直接传输优化
+    direct_transmission_threshold: float = 0.1  # 直接传输阈值（能耗比例，0.1表示直接传输能耗不超过锚点传输的110%）
+    
     # 可视化与导出
     image_width: int = 900          # 输出图像宽度 px
     image_height: int = 700         # 输出图像高度 px
@@ -536,6 +540,9 @@ class ConfigManager:
             base_data_size=self.adcr_config.base_data_size,
             aggregation_ratio=self.adcr_config.aggregation_ratio,
             enable_dynamic_data_size=self.adcr_config.enable_dynamic_data_size,
+            # 直接传输优化参数
+            enable_direct_transmission_optimization=self.adcr_config.enable_direct_transmission_optimization,
+            direct_transmission_threshold=self.adcr_config.direct_transmission_threshold,
             # 可视化参数
             image_width=self.adcr_config.image_width,
             image_height=self.adcr_config.image_height,
