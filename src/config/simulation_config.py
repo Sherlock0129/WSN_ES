@@ -48,8 +48,8 @@ class NodeConfig:
     high_threshold: float = 0.9      # 高能量阈值（0~1，相对容量），用于判定“捐能/富余能量”的节点
 
     # 电池模型（用于参考或扩展），如需将 mAh/Volt 映射到焦耳：J ≈ mAh * 3.6 * V
-    capacity: float = 5200.0         # 电池容量 mAh（参考值）
-    voltage: float = 3.7             # 电池电压 V（参考值）
+    capacity: float = 3         # 电池容量 mAh（参考值）
+    voltage: float = 3.5             # 电池电压 V（参考值）
 
     # 太阳能采集模型（仅当节点具备太阳能能力时参与估算）
     enable_energy_harvesting: bool = False  # 是否启用能量采集，False时能量采集量=0
@@ -81,11 +81,11 @@ class NetworkConfig:
     - 分布模式决定初始位置生成方式；
     - max_hops 限制多跳路径长度（影响 EEOR/机会路由）。
     """
-    num_nodes: int = 25
+    num_nodes: int = 30
     max_hops: int = 3
-    distribution_mode: str = "random"  # 节点分布："uniform"（网格/规则）、"random"（随机）或 "energy_hole"（能量空洞）
-    network_area_width: float = 10.0   # 区域宽度 m
-    network_area_height: float = 10.0  # 区域高度 m
+    distribution_mode: str = "random"  # 节点分布："uniform"（网格/规则）、"random"（随机）、"energy_hole"（能量空洞）
+    network_area_width: float = 5.0    # 区域宽度 m
+    network_area_height: float = 5.0   # 区域高度 m
     min_distance: float = 0.5          # 节点间最小生成距离 m（避免过近重叠）
     random_seed: int = 129             # 随机种子（影响位置与属性抽样）
     solar_node_ratio: float = 0.6      # 具备太阳能节点比例（0~1）
@@ -97,6 +97,11 @@ class NetworkConfig:
     energy_hole_center_mode: str = "random"  # 空洞中心选择模式："random"（随机）、"corner"（角落）、"center"（中心）
     energy_hole_cluster_radius: float = 2.0  # 能量空洞聚集半径
     energy_hole_mobile_ratio: float = 0.1    # 能量空洞中移动节点比例
+    
+    # 能量分配模式配置
+    energy_distribution_mode: str = "uniform"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
+    center_energy: float = 60000.0      # 中心节点能量（最高，当energy_distribution_mode="center_decreasing"时使用）
+    edge_energy: float = 20000.0        # 边缘节点能量（最低，当energy_distribution_mode="center_decreasing"时使用）
 
 
 @dataclass
@@ -118,7 +123,7 @@ class SimulationConfig:
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
     
     # 能量传输控制
-    enable_energy_sharing: bool = False     # 是否启用节点间能量传输（WET）
+    enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
     
     # K 值自适应（影响每个接收端可匹配的捐能者数量上限）
     enable_k_adaptation: bool = False     # 是否启用K值自适应，False时使用固定K值
@@ -220,6 +225,10 @@ class ADCRConfig:
     # 直接传输优化参数
     enable_direct_transmission_optimization: bool = True  # 是否启用直接传输优化
     direct_transmission_threshold: float = 0.1  # 直接传输阈值（能耗比例，0.1表示直接传输能耗不超过锚点传输的110%）
+    
+    # 自动画图参数
+    auto_plot: bool = True  # 是否每次重聚类后自动画图
+    plot_filename_template: str = "adcr_day{day}_t{t}.png"  # 画图文件名模板
     
     # 可视化与导出
     image_width: int = 900          # 输出图像宽度 px
@@ -454,7 +463,11 @@ class ConfigManager:
             energy_hole_cluster_radius=self.network_config.energy_hole_cluster_radius,
             energy_hole_mobile_ratio=self.network_config.energy_hole_mobile_ratio,
             # 能量采集参数
-            enable_energy_harvesting=self.node_config.enable_energy_harvesting
+            enable_energy_harvesting=self.node_config.enable_energy_harvesting,
+            # 能量分配模式参数
+            energy_distribution_mode=self.network_config.energy_distribution_mode,
+            center_energy=self.network_config.center_energy,
+            edge_energy=self.network_config.edge_energy
         )
     
     def create_sensor_node(self, node_id: int, position: list, 
@@ -543,6 +556,9 @@ class ConfigManager:
             # 直接传输优化参数
             enable_direct_transmission_optimization=self.adcr_config.enable_direct_transmission_optimization,
             direct_transmission_threshold=self.adcr_config.direct_transmission_threshold,
+            # 自动画图参数
+            auto_plot=self.adcr_config.auto_plot,
+            plot_filename_template=self.adcr_config.plot_filename_template,
             # 可视化参数
             image_width=self.adcr_config.image_width,
             image_height=self.adcr_config.image_height,
