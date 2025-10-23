@@ -19,41 +19,6 @@ except Exception:
 
 
 class ADCRLinkLayerVirtual(object):
-    def __init__(self, network,
-                 round_period=1440,
-                 r_neighbor=math.sqrt(3.0),
-                 r_min_ch=1.0,
-                 c_k=1.2,
-                 plan_paths=True,
-                 consume_energy=True,
-                 max_hops=5,
-                 output_dir="data"):
-        self.net = network
-        self.round_period = int(round_period)
-        self.r_neighbor = float(r_neighbor)
-        self.r_min_ch = float(r_min_ch)
-        self.c_k = float(c_k)
-        self.plan_paths = bool(plan_paths)
-        self.consume_energy = bool(consume_energy)
-        self.max_hops = int(max_hops)
-
-        # 新增：统一的图片保存目录
-        self.output_dir = output_dir
-        OutputManager.ensure_dir_exists(self.output_dir)
-
-        # 运行态
-        self.last_round_t = None
-        self.virtual_center = (0.0, 0.0)
-        self.cluster_of = {}
-        self.ch_set = set()
-        self.cluster_stats = {}
-        self.upstream_paths = {}
-        self.last_comms = []
-
-    # 其余代码不变……
-
-
-class ADCRLinkLayerVirtual(object):
     """
     - 估计最优簇数 K*（近邻统计启发式）
     - 能量感知 + 空间抑制 选择簇头

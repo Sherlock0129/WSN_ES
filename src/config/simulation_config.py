@@ -490,6 +490,7 @@ class ConfigManager:
             network=network,
             time_steps=self.simulation_config.time_steps,
             scheduler=scheduler,
+            enable_energy_sharing=self.simulation_config.enable_energy_sharing,
             enable_k_adaptation=self.simulation_config.enable_k_adaptation,
             initial_K=self.simulation_config.initial_K,
             K_max=self.simulation_config.K_max,
@@ -499,6 +500,7 @@ class ConfigManager:
             w_l=self.simulation_config.w_l,
             use_lookahead=self.simulation_config.use_lookahead,
             fixed_k=self.simulation_config.fixed_k,
+            output_dir=self.simulation_config.output_dir,
             use_gpu=self.simulation_config.use_gpu_acceleration
         )
     
