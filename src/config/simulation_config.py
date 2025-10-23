@@ -212,6 +212,11 @@ class ADCRConfig:
     sensor_energy: float = 0.1      # 感知能耗 J/步（与 NodeConfig.sensor_energy 对齐）
     # 提示：同 NodeConfig，当前通信能耗中的传感能耗为固定常量 0.1 J，未与该配置绑定。
     
+    # 信息聚合参数
+    base_data_size: int = 1000000      # 基础数据大小（bits），每个节点贡献的基础信息量
+    aggregation_ratio: float = 1.0      # 信息聚合比例（1.0表示完全聚合，0.5表示压缩50%）
+    enable_dynamic_data_size: bool = True  # 是否启用基于簇大小的动态数据量
+    
     # 可视化与导出
     image_width: int = 900          # 输出图像宽度 px
     image_height: int = 700         # 输出图像高度 px
@@ -527,6 +532,10 @@ class ConfigManager:
             # 通信能耗参数
             tx_rx_ratio=self.adcr_config.tx_rx_ratio,
             sensor_energy=self.adcr_config.sensor_energy,
+            # 信息聚合参数
+            base_data_size=self.adcr_config.base_data_size,
+            aggregation_ratio=self.adcr_config.aggregation_ratio,
+            enable_dynamic_data_size=self.adcr_config.enable_dynamic_data_size,
             # 可视化参数
             image_width=self.adcr_config.image_width,
             image_height=self.adcr_config.image_height,

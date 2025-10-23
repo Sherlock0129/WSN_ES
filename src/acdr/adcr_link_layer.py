@@ -45,6 +45,10 @@ class ADCRLinkLayerVirtual(object):
                  # 通信能耗参数
                  tx_rx_ratio: float = 0.5,
                  sensor_energy: float = 0.1,
+                 # 信息聚合参数
+                 base_data_size: int = 1000000,
+                 aggregation_ratio: float = 1.0,
+                 enable_dynamic_data_size: bool = True,
                  # 可视化参数
                  image_width: int = 900,
                  image_height: int = 700,
@@ -75,6 +79,11 @@ class ADCRLinkLayerVirtual(object):
         # 通信能耗参数
         self.tx_rx_ratio = float(tx_rx_ratio)
         self.sensor_energy = float(sensor_energy)
+        
+        # 信息聚合参数
+        self.base_data_size = int(base_data_size)
+        self.aggregation_ratio = float(aggregation_ratio)
+        self.enable_dynamic_data_size = bool(enable_dynamic_data_size)
         
         # 可视化参数
         self.image_width = int(image_width)
@@ -230,7 +239,30 @@ class ADCRLinkLayerVirtual(object):
         self.cluster_stats = stats
         return stats
 
-    # ---------------- 路径规划到“虚拟中心” + 通信能耗结算 ----------------
+    # ---------------- 信息聚合计算 ----------------
+    
+    def _calculate_cluster_data_size(self, ch_id):
+        """
+        计算簇头需要传输的聚合数据量
+        
+        :param ch_id: 簇头节点ID
+        :return: 聚合后的数据量（bits）
+        """
+        if not self.enable_dynamic_data_size:
+            # 如果禁用动态数据量，使用基础数据量
+            return self.base_data_size
+        
+        # 计算该簇的成员数量（包括簇头自己）
+        cluster_members = [nid for nid, cid in self.cluster_of.items() if cid == ch_id]
+        cluster_size = len(cluster_members)
+        
+        # 计算聚合数据量：基础数据量 × 簇大小 × 聚合比例
+        aggregated_data_size = int(self.base_data_size * cluster_size * self.aggregation_ratio)
+        
+        print(f"[ADCR-DEBUG] Cluster {ch_id}: {cluster_size} members, data size: {aggregated_data_size} bits")
+        return aggregated_data_size
+
+    # ---------------- 路径规划到"虚拟中心" + 通信能耗结算 ----------------
 
     def _plan_paths_to_virtual(self):
         """
@@ -307,18 +339,25 @@ class ADCRLinkLayerVirtual(object):
             last_real = path[-1]
             # 计算到虚拟中心的欧式距离
             d = self._dist_xy(last_real.position, (cx, cy))
-            # 复用参数：B/E_elec/epsilon_amp/tau/E_char
-            B = last_real.B
+            
+            # 计算该簇的聚合数据量
+            aggregated_data_size = self._calculate_cluster_data_size(ch_id)
+            
+            # 使用聚合数据量计算能耗
             E_elec = last_real.E_elec
             eps = last_real.epsilon_amp
             tau = last_real.tau
-            # E_tx + E_rx 近似为：E_elec*B + eps*B*d^tau + E_elec*B
-            # 你的实现里最终是(E_tx+E_rx)/2 + E_sen；这里等价套用
-            E_tx_virtual = E_elec * B + eps * B * (d ** tau)
-            E_rx_virtual = E_elec * B
+            # 使用聚合数据量B_aggregated替代固定的B
+            E_tx_virtual = E_elec * aggregated_data_size + eps * aggregated_data_size * (d ** tau)
+            E_rx_virtual = E_elec * aggregated_data_size
             E_com = self.tx_rx_ratio * (E_tx_virtual + E_rx_virtual) + self.sensor_energy
             last_real.current_energy = max(0.0, last_real.current_energy - E_com)
-            self.last_comms.append({"hop": (last_real.node_id, "VIRTUAL"), "E_tx_only": E_com})
+            self.last_comms.append({
+                "hop": (last_real.node_id, "VIRTUAL"), 
+                "E_tx_only": E_com,
+                "data_size": aggregated_data_size,
+                "cluster_size": len([nid for nid, cid in self.cluster_of.items() if cid == ch_id])
+            })
 
     # ---------------- Plotly 可视化 ----------------
 

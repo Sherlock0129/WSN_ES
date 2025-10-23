@@ -127,7 +127,7 @@ class EnergySimulation:
                     # 能量传输被禁用，创建空的计划
                     plans = []
                     cand = []
-                
+            
                 # 计算统计信息
                 stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, self.network)
             
