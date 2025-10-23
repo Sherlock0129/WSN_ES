@@ -48,11 +48,11 @@ class NodeConfig:
     high_threshold: float = 0.9      # 高能量阈值（0~1，相对容量），用于判定“捐能/富余能量”的节点
 
     # 电池模型（用于参考或扩展），如需将 mAh/Volt 映射到焦耳：J ≈ mAh * 3.6 * V
-    capacity: float = 5200.0         # 电池容量 mAh（参考值）
+    capacity: float = 3.5         # 电池容量 mAh（参考值）
     voltage: float = 3.7             # 电池电压 V（参考值）
 
     # 太阳能采集模型（仅当节点具备太阳能能力时参与估算）
-    enable_energy_harvesting: bool = False  # 是否启用能量采集，False时能量采集量=0
+    enable_energy_harvesting: bool = True  # 是否启用能量采集，False时能量采集量=0
     solar_efficiency: float = 0.2    # 光伏转换效率（0~1）
     solar_area: float = 0.1          # 光伏面积 m^2
     max_solar_irradiance: float = 1500.0  # 峰值太阳辐照 W/m^2
@@ -118,7 +118,15 @@ class SimulationConfig:
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
     
     # 能量传输控制
-    enable_energy_sharing: bool = False     # 是否启用节点间能量传输（WET）
+    enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
+    
+    # 智能被动传能参数
+    passive_mode: bool = True               # 是否启用智能被动传能模式（False为定时主动传能）
+    check_interval: int = 10                # 智能检查间隔（分钟）
+    critical_ratio: float = 0.2             # 低能量节点临界比例（0-1）
+    energy_variance_threshold: float = 0.3  # 能量方差阈值，超过则触发传能
+    cooldown_period: int = 30               # 传能冷却期（分钟），避免频繁触发
+    predictive_window: int = 60             # 预测窗口（分钟），用于预测性触发
     
     # K 值自适应（影响每个接收端可匹配的捐能者数量上限）
     enable_k_adaptation: bool = False     # 是否启用K值自适应，False时使用固定K值
@@ -510,7 +518,14 @@ class ConfigManager:
             use_lookahead=self.simulation_config.use_lookahead,
             fixed_k=self.simulation_config.fixed_k,
             output_dir=self.simulation_config.output_dir,
-            use_gpu=self.simulation_config.use_gpu_acceleration
+            use_gpu=self.simulation_config.use_gpu_acceleration,
+            # 智能被动传能参数
+            passive_mode=self.simulation_config.passive_mode,
+            check_interval=self.simulation_config.check_interval,
+            critical_ratio=self.simulation_config.critical_ratio,
+            energy_variance_threshold=self.simulation_config.energy_variance_threshold,
+            cooldown_period=self.simulation_config.cooldown_period,
+            predictive_window=self.simulation_config.predictive_window
         )
     
     def create_adcr_link_layer(self, network):

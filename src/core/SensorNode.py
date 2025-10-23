@@ -12,7 +12,7 @@ class SensorNode:
                  position: list,
                  has_solar: bool = True,
                  # 电池参数
-                 capacity: float = 5200,
+                 capacity: float = 3.5,
                  voltage: float = 3.7,
                  # 太阳能参数
                  enable_energy_harvesting: bool = True,
@@ -21,7 +21,7 @@ class SensorNode:
                  max_solar_irradiance: float = 1500.0,
                  env_correction_factor: float = 1.0,
                  # 传输参数
-                 energy_char: float = 1000.0,
+                 energy_char: float = 300.0,
                  energy_elec: float = 1e-4,
                  epsilon_amp: float = 1e-5,
                  bit_rate: float = 1000000.0,
