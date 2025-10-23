@@ -117,6 +117,9 @@ class SimulationConfig:
     output_dir: str = "data"             # 仿真输出根目录，由 OutputManager 管理会话子目录
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
     
+    # 能量传输控制
+    enable_energy_sharing: bool = False     # 是否启用节点间能量传输（WET）
+    
     # K 值自适应（影响每个接收端可匹配的捐能者数量上限）
     enable_k_adaptation: bool = False     # 是否启用K值自适应，False时使用固定K值
     fixed_k: int = 1                     # 固定K值（当不使用自适应时）

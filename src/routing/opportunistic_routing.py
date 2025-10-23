@@ -1,9 +1,6 @@
 import random
 import numpy as np
 
-from . import plotter
-from .SensorNode import SensorNode
-
 
 # def opportunistic_routing(nodes, source_node, destination_node, max_hops=3, t=100, receive_WET=0):
 #     """

@@ -269,10 +269,12 @@ class ADCRLinkLayerVirtual(object):
 
     def _plan_paths_to_virtual(self):
         """
-        为每个簇头规划一条真实节点路径（CH -> … -> “靠近几何中心的真实节点”），
-        最后一跳视为“到虚拟中心”的逻辑汇报（不需要接收方能量）。
+        为每个簇头规划一条真实节点路径（CH -> … -> "靠近几何中心的真实节点"），
+        最后一跳视为"到虚拟中心"的逻辑汇报（不需要接收方能量）。
         """
+        print(f"[ADCR-DEBUG] _plan_paths_to_virtual: plan_paths={self.plan_paths}, opportunistic_routing={opportunistic_routing is not None}")
         if not self.plan_paths or opportunistic_routing is None:
+            print(f"[ADCR-DEBUG] Path planning disabled or routing function unavailable")
             self.upstream_paths = {}
             return {}
 
@@ -490,14 +492,26 @@ class ADCRLinkLayerVirtual(object):
         print(f"[ADCR-DEBUG] Virtual center updated: {self.virtual_center}")
 
         # 2) 估计 K* 、选择簇头、成簇
-        K_star = self._estimate_K_star()
-        print(f"[ADCR-DEBUG] Estimated K* = {K_star}")
+        try:
+            K_star = self._estimate_K_star()
+            print(f"[ADCR-DEBUG] Estimated K* = {K_star}")
+        except Exception as e:
+            print(f"[ADCR-DEBUG] Error in _estimate_K_star: {e}")
+            return
         
-        ch_nodes = self._select_ch(K_star)
-        print(f"[ADCR-DEBUG] Selected {len(ch_nodes)} cluster heads: {[n.node_id for n in ch_nodes]}")
+        try:
+            ch_nodes = self._select_ch(K_star)
+            print(f"[ADCR-DEBUG] Selected {len(ch_nodes)} cluster heads: {[n.node_id for n in ch_nodes]}")
+        except Exception as e:
+            print(f"[ADCR-DEBUG] Error in _select_ch: {e}")
+            return
         
-        self._clustering(ch_nodes)
-        print(f"[ADCR-DEBUG] Clustering completed, {len(self.cluster_of)} nodes assigned to clusters")
+        try:
+            self._clustering(ch_nodes)
+            print(f"[ADCR-DEBUG] Clustering completed, {len(self.cluster_of)} nodes assigned to clusters")
+        except Exception as e:
+            print(f"[ADCR-DEBUG] Error in _clustering: {e}")
+            return
         
         self._summarize_clusters()
         print(f"[ADCR-DEBUG] Cluster summary: {len(self.cluster_stats)} clusters")
@@ -505,6 +519,15 @@ class ADCRLinkLayerVirtual(object):
         # 3) 规划 CH→锚点（真实节点）的上报路径；最后对虚拟中心做"虚拟跳"
         self._plan_paths_to_virtual()
         print(f"[ADCR-DEBUG] Path planning completed, {len(self.upstream_paths)} paths planned")
+        
+        # 详细输出路径信息
+        for ch_id, path in self.upstream_paths.items():
+            if path is None:
+                print(f"[ADCR-DEBUG] CH {ch_id}: No path found")
+            elif len(path) == 1:
+                print(f"[ADCR-DEBUG] CH {ch_id}: Direct to virtual center (path length: 1)")
+            else:
+                print(f"[ADCR-DEBUG] CH {ch_id}: Path length {len(path)}, nodes: {[n.node_id for n in path]}")
 
         # 4) 结算通信能耗（逐跳 + 虚拟跳只扣发送端）
         self._settle_comm_energy()

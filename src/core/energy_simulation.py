@@ -15,6 +15,8 @@ except Exception:
 
 class EnergySimulation:
     def __init__(self, network, time_steps, scheduler=None, 
+                 # 能量传输控制
+                 enable_energy_sharing=True,
                  # 自适应K值参数
                  enable_k_adaptation=True, initial_K=1, K_max=24, hysteresis=0.2, 
                  w_b=0.8, w_d=0.8, w_l=1.5,
@@ -42,6 +44,7 @@ class EnergySimulation:
         self.scheduler = scheduler
         self.plans_by_time = {}
         self.use_gpu = use_gpu
+        self.enable_energy_sharing = enable_energy_sharing
         self.enable_k_adaptation = enable_k_adaptation
         self.fixed_k = fixed_k
 
@@ -93,32 +96,38 @@ class EnergySimulation:
                 node_energies = [node.current_energy for node in self.network.nodes]
                 self.stats.record_energy_stats(node_energies)
             
-                # ★ 优先使用外部调度器（若提供）
-                if self.scheduler is not None:
-                    # 同步自适应K给调度器（若其带 K）
-                    if hasattr(self.scheduler, "K"):
-                        try:
-                            self.scheduler.K = self.K
-                        except Exception:
-                            pass
-            
-                    result = self.scheduler.plan(self.network, t)
-                    if isinstance(result, tuple):
-                        plans, cand = result
+                # 检查是否启用能量传输
+                if self.enable_energy_sharing:
+                    # ★ 优先使用外部调度器（若提供）
+                    if self.scheduler is not None:
+                        # 同步自适应K给调度器（若其带 K）
+                        if hasattr(self.scheduler, "K"):
+                            try:
+                                self.scheduler.K = self.K
+                            except Exception:
+                                pass
+                
+                        result = self.scheduler.plan(self.network, t)
+                        if isinstance(result, tuple):
+                            plans, cand = result
+                        else:
+                            plans = result
+                            cand = []
+                
+                        # PowerControlScheduler 有自定义执行器（按 energy_sent 执行）
+                        if (PowerControlScheduler is not None) and isinstance(self.scheduler, PowerControlScheduler):
+                            self.scheduler.execute_plans(self.network, plans)
+                        else:
+                            self.network.execute_energy_transfer(plans)
                     else:
-                        plans = result
-                        cand = []
-            
-                    # PowerControlScheduler 有自定义执行器（按 energy_sent 执行）
-                    if (PowerControlScheduler is not None) and isinstance(self.scheduler, PowerControlScheduler):
-                        self.scheduler.execute_plans(self.network, plans)
-                    else:
+                        # 兼容旧逻辑：使用 network.run_routing()
+                        plans = self.network.run_routing(t, max_donors_per_receiver=self.K)
                         self.network.execute_energy_transfer(plans)
                 else:
-                    # 兼容旧逻辑：使用 network.run_routing()
-                    plans = self.network.run_routing(t, max_donors_per_receiver=self.K)
-                    self.network.execute_energy_transfer(plans)
-            
+                    # 能量传输被禁用，创建空的计划
+                    plans = []
+                    cand = []
+                
                 # 计算统计信息
                 stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, self.network)
             

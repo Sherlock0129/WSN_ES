@@ -7,7 +7,7 @@ from core.energy_simulation import EnergySimulation
 from core.network import Network
 from scheduling import schedulers
 from src.config.simulation_config import ConfigManager
-from src.core.Network import Network
+from src.core.network import Network
 from src.core.energy_simulation import EnergySimulation
 from src.scheduling.schedulers import LyapunovScheduler
 from src.viz.plotter import plot_node_distribution, plot_energy_over_time
