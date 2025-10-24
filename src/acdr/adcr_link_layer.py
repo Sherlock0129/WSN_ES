@@ -52,6 +52,9 @@ class ADCRLinkLayerVirtual(object):
                  # 直接传输优化参数
                  enable_direct_transmission_optimization: bool = True,
                  direct_transmission_threshold: float = 0.1,
+                 # 自动画图参数
+                 auto_plot: bool = False,
+                 plot_filename_template: str = "adcr_day{day}_t{t}.png",
                  # 可视化参数
                  image_width: int = 900,
                  image_height: int = 700,
@@ -92,6 +95,10 @@ class ADCRLinkLayerVirtual(object):
         self.enable_direct_transmission_optimization = bool(enable_direct_transmission_optimization)
         self.direct_transmission_threshold = float(direct_transmission_threshold)
         
+        # 自动画图参数
+        self.auto_plot = bool(auto_plot)
+        self.plot_filename_template = str(plot_filename_template)
+        
         # 可视化参数
         self.image_width = int(image_width)
         self.image_height = int(image_height)
@@ -102,12 +109,12 @@ class ADCRLinkLayerVirtual(object):
         self.line_width = float(line_width)
         self.path_line_width = float(path_line_width)
         # 运行态
-        self.last_round_t = None
+        self.last_round_t = 0  # 从0开始，避免在t=0时执行ADCR
         self.virtual_center = (0.0, 0.0)   # (cx, cy)
         self.cluster_of = {}               # node_id -> ch_id
         self.ch_set = set()
         self.cluster_stats = {}            # ch_id -> summary
-        self.upstream_paths = {}           # ch_id -> [SensorNode,...] 真实节点路径（不含虚拟中心“节点”）
+        self.upstream_paths = {}           # ch_id -> [SensorNode,...] 真实节点路径（不含虚拟中心"节点"）
 
         # 每轮通信统计
         self.last_comms = []               # list of dicts: {hop:(u->v), E_tx, E_rx, etc.}
@@ -436,7 +443,7 @@ class ADCRLinkLayerVirtual(object):
 
     # ---------------- Plotly 可视化 ----------------
 
-    def plot_clusters_and_paths(self, output_dir=None, title="ADCR clustering & info paths to virtual center"):
+    def plot_clusters_and_paths(self, output_dir=None, title="ADCR clustering & info paths to virtual center", filename=None):
         """
         画：所有节点、簇头（强调）、簇内连线、簇头到锚点路径、虚拟中心位置。
         保存为 PNG（需要 kaleido）。
@@ -537,7 +544,9 @@ class ADCRLinkLayerVirtual(object):
 
         # 使用与其他图相同的保存方式
         session_dir = OutputManager.get_session_dir(output_dir)
-        save_path = OutputManager.get_file_path(session_dir, 'adcr_info_paths.png')
+        if filename is None:
+            filename = 'adcr_info_paths.png'
+        save_path = OutputManager.get_file_path(session_dir, filename)
         try:
             # 使用与其他图相同的参数
             fig.write_image(save_path, width=800, height=600, scale=3)
@@ -558,7 +567,8 @@ class ADCRLinkLayerVirtual(object):
 
     def step(self, t):
         # 到期才重聚类 + 路径 + 结算
-        if (self.last_round_t is not None) and (t - self.last_round_t < self.round_period):
+        # 从第一个周期开始执行（跳过t=0）
+        if t - self.last_round_t < self.round_period:
             return
         if not self.net.nodes:
             print("[ADCR-DEBUG] Skipping - no nodes in network")
@@ -615,5 +625,30 @@ class ADCRLinkLayerVirtual(object):
         print("[ADCR-Link-Virtual] t={} | VC=({:.3f},{:.3f}) | K*={} | CHs={}".format(
             t, self.virtual_center[0], self.virtual_center[1], K_star, sorted(list(self.ch_set))
         ))
+        
+        # 5) 自动画图（如果启用）
+        if self.auto_plot:
+            self._auto_plot_clusters_and_paths(t)
+        
         self.last_round_t = t
         print(f"[ADCR-DEBUG] ADCR step completed, last_round_t updated to {self.last_round_t}")
+
+    def _auto_plot_clusters_and_paths(self, t):
+        """自动画图方法"""
+        try:
+            # 计算天数
+            day = t // 1440
+            
+            # 生成文件名
+            filename = self.plot_filename_template.format(day=day, t=t)
+            
+            # 创建ADCR专用子目录
+            adcr_output_dir = os.path.join(self.output_dir, "adcr_plots")
+            OutputManager.ensure_dir_exists(adcr_output_dir)
+            
+            # 调用画图方法
+            self.plot_clusters_and_paths(output_dir=adcr_output_dir, filename=filename)
+            print(f"[ADCR-Auto-Plot] 自动画图已保存: {filename}")
+            
+        except Exception as e:
+            print(f"[ADCR-Auto-Plot] 自动画图失败: {e}")

@@ -36,7 +36,11 @@ class Network:
                  energy_hole_cluster_radius: float = 2.0,
                  energy_hole_mobile_ratio: float = 0.1,
                  # 能量采集参数
-                 enable_energy_harvesting: bool = True):
+                 enable_energy_harvesting: bool = True,
+                 # 能量分配模式参数
+                 energy_distribution_mode: str = "uniform",
+                 center_energy: float = 60000.0,
+                 edge_energy: float = 20000.0):
         """
         初始化网络
         
@@ -75,6 +79,11 @@ class Network:
         # 能量采集参数
         self.enable_energy_harvesting = enable_energy_harvesting
         
+        # 能量分配模式参数
+        self.energy_distribution_mode = energy_distribution_mode
+        self.center_energy = center_energy
+        self.edge_energy = edge_energy
+        
         # 网络参数
         self.low_threshold = low_threshold
         self.high_threshold = high_threshold
@@ -90,6 +99,9 @@ class Network:
         self.output_dir = output_dir
 
         self.create_nodes()
+        
+        # 根据能量分布模式分配能量
+        self._assign_energy_by_virtual_center()
         
         # 预计算距离矩阵（GPU加速）
         self._distance_matrix = None
@@ -414,6 +426,45 @@ class Network:
             )
             
             self.nodes.append(node)
+
+    def _assign_energy_by_virtual_center(self):
+        """基于虚拟中心（几何中心）分配能量，实现从中心到边缘的线性递减"""
+        if self.energy_distribution_mode != "center_decreasing":
+            return
+        
+        # 计算网络几何中心（与ADCR虚拟中心相同）
+        xs, ys = zip(*[node.position for node in self.nodes])
+        center_x = sum(xs) / len(xs)
+        center_y = sum(ys) / len(ys)
+        network_center = (center_x, center_y)
+        
+        # 计算所有节点到中心的距离
+        distances = []
+        for node in self.nodes:
+            distance = math.sqrt((node.position[0] - center_x)**2 + (node.position[1] - center_y)**2)
+            distances.append(distance)
+        
+        max_distance = max(distances)
+        
+        print(f"[Energy-Distribution] 网络中心: ({center_x:.2f}, {center_y:.2f})")
+        print(f"[Energy-Distribution] 最大距离: {max_distance:.2f}m")
+        print(f"[Energy-Distribution] 中心能量: {self.center_energy}J, 边缘能量: {self.edge_energy}J")
+        
+        # 根据距离分配能量（线性递减）
+        for i, node in enumerate(self.nodes):
+            distance = distances[i]
+            
+            # 线性衰减：ratio = 1.0 - (distance / max_distance)
+            ratio = 1.0 - (distance / max_distance) if max_distance > 0 else 1.0
+            
+            # 计算能量
+            energy = self.edge_energy + (self.center_energy - self.edge_energy) * ratio
+            
+            # 更新节点能量
+            node.initial_energy = energy
+            node.current_energy = energy
+            
+            print(f"[Energy-Distribution] Node {node.node_id}: 距离={distance:.2f}m, 比例={ratio:.3f}, 能量={energy:.0f}J")
 
     # def create_nodes(self):
     #     """

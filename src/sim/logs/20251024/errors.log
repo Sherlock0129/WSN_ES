@@ -1,0 +1,1 @@
+2025-10-24 00:29:28 - WSN_Simulation - ERROR - error:97 - 严重错误 [仿真运行]: IndentationError - expected an indented block after 'if' statement on line 100 (energy_simulation.py, line 102)

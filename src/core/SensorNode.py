@@ -220,8 +220,17 @@ class SensorNode:
         d = self.distance_to(target_node)
         eta_0 = 0.6  # 1米处最大效率
         gamma = 2.0  # 衰减因子
-
-        efficiency = eta_0 / (d ** gamma)
+        
+        # 修复：使用更合理的效率公式
+        # 当距离很小时，效率接近但不等于1
+        # 使用指数衰减模型：eta = eta_0 * exp(-gamma * (d - 1))
+        if d <= 1.0:
+            # 距离≤1m时，效率为eta_0到1之间的线性插值
+            efficiency = eta_0 + (1.0 - eta_0) * (1.0 - d)
+        else:
+            # 距离>1m时，使用指数衰减
+            efficiency = eta_0 * (1.0 / (d ** gamma))
+        
         return min(1.0, max(0.0, efficiency))  # 限定在 [0, 1] 之间
 
     def update_energy(self, t):
