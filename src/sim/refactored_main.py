@@ -15,6 +15,7 @@ from scheduling.schedulers import (
     LyapunovScheduler, ClusterScheduler, PredictionScheduler,
     PowerControlScheduler, BaselineHeuristic
 )
+from scheduling.passive_transfer import compare_passive_modes as _compare_passive_modes
 from utils.logger import logger, get_detailed_plan_logger
 from utils.error_handling import error_handler, handle_exceptions
 from viz.plotter import plot_node_distribution, plot_energy_over_time
@@ -158,72 +159,8 @@ def run_simulation(config_file: str = None):
 
 
 def compare_passive_modes():
-    """比较智能被动传能 vs 传统主动传能的性能"""
-    logger.info("=" * 60)
-    logger.info("开始比较智能被动传能 vs 传统主动传能")
-    logger.info("=" * 60)
-    
-    modes_to_test = [
-        ("智能被动传能(默认)", {"passive_mode": True, "check_interval": 10, "critical_ratio": 0.2}),
-        ("智能被动传能(快速)", {"passive_mode": True, "check_interval": 5, "critical_ratio": 0.15}),
-        ("智能被动传能(节能)", {"passive_mode": True, "check_interval": 20, "critical_ratio": 0.3}),
-        ("传统主动传能(60分钟)", {"passive_mode": False}),
-    ]
-    
-    results = {}
-    
-    for mode_name, mode_config in modes_to_test:
-        logger.info(f"\n测试模式: {mode_name}")
-        logger.info("-" * 60)
-        
-        # 创建配置
-        config_manager = ConfigManager()
-        config_manager.simulation_config.enable_energy_sharing = True
-        config_manager.simulation_config.time_steps = 10080  # 测试1天
-        
-        # 应用模式配置
-        for key, value in mode_config.items():
-            setattr(config_manager.simulation_config, key, value)
-        
-        try:
-            # 创建网络和调度器
-            network = config_manager.create_network()
-            scheduler = create_scheduler(config_manager)
-            
-            # 运行仿真
-            simulation = config_manager.create_energy_simulation(network, scheduler)
-            simulation.simulate()
-            
-            # 收集统计信息
-            stats = simulation.print_statistics()
-            results[mode_name] = {
-                'avg_variance': stats['avg_variance'],
-                'total_loss_energy': stats['total_loss_energy'],
-                'energy_efficiency': stats['total_received_energy'] / stats['total_sent_energy'] if stats['total_sent_energy'] > 0 else 0,
-                'transfer_count': len([t for t in range(config_manager.simulation_config.time_steps) 
-                                      if t in simulation.plans_by_time])
-            }
-            logger.info(f"✓ {mode_name} 测试完成")
-            
-        except Exception as e:
-            logger.error(f"✗ {mode_name} 测试失败: {str(e)}")
-            results[mode_name] = None
-    
-    # 输出比较结果
-    logger.info("\n" + "=" * 60)
-    logger.info("传能模式性能比较结果:")
-    logger.info("=" * 60)
-    for mode_name, result in results.items():
-        if result:
-            logger.info(f"\n{mode_name}:")
-            logger.info(f"  传能次数: {result['transfer_count']} 次")
-            logger.info(f"  平均方差: {result['avg_variance']:.4f}")
-            logger.info(f"  总能量损失: {result['total_loss_energy']:.4f} J")
-            logger.info(f"  能量效率: {result['energy_efficiency']:.2%}")
-        else:
-            logger.info(f"\n{mode_name}: 测试失败")
-    
-    return results
+    """比较智能被动传能 vs 传统主动传能的性能（调用scheduling模块）"""
+    return _compare_passive_modes(ConfigManager, create_scheduler, logger)
 
 
 def compare_schedulers():

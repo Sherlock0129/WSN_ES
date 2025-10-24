@@ -6,6 +6,7 @@ from utils.output_manager import OutputManager
 from dynamic_k.k_adaptation import KAdaptationManager
 from .simulation_stats import SimulationStats
 from .result_manager import ResultManager
+from scheduling.passive_transfer import PassiveTransferManager
 
 try:
     from scheduling.schedulers import PowerControlScheduler
@@ -55,15 +56,15 @@ class EnergySimulation:
         self.enable_k_adaptation = enable_k_adaptation
         self.fixed_k = fixed_k
 
-        # 智能被动传能参数
-        self.passive_mode = passive_mode
-        self.check_interval = check_interval
-        self.critical_ratio = critical_ratio
-        self.energy_variance_threshold = energy_variance_threshold
-        self.cooldown_period = cooldown_period
-        self.predictive_window = predictive_window
-        self.last_transfer_time = -cooldown_period  # 上次传能时间
-        self.energy_history = []  # 记录能量历史用于预测
+        # 创建智能被动传能管理器
+        self.passive_manager = PassiveTransferManager(
+            passive_mode=passive_mode,
+            check_interval=check_interval,
+            critical_ratio=critical_ratio,
+            energy_variance_threshold=energy_variance_threshold,
+            cooldown_period=cooldown_period,
+            predictive_window=predictive_window
+        )
 
         # 创建按日期命名的输出目录
         self.session_dir = OutputManager.get_session_dir(output_dir)
@@ -91,105 +92,6 @@ class EnergySimulation:
         """设置K值"""
         self.k_adaptation.K = value
 
-    def should_trigger_energy_transfer(self, t):
-        """
-        智能综合决策：是否应该触发能量传输
-        
-        综合考虑以下因素：
-        1. 检查间隔：不是每个时间步都检查
-        2. 冷却期：避免频繁传能造成振荡
-        3. 低能量节点比例：达到临界比例才触发
-        4. 能量方差：网络能量分布不均衡程度
-        5. 预测性触发：基于能量消耗速率预测
-        
-        :param t: 当前时间步
-        :return: (是否触发, 触发原因)
-        """
-        # 如果不是被动模式，使用传统的定时触发（每60分钟）
-        if not self.passive_mode:
-            return (t % 60 == 0), "定时触发"
-        
-        # 1. 检查间隔：只在指定间隔检查
-        if t % self.check_interval != 0:
-            return False, None
-        
-        # 2. 冷却期检查：避免过于频繁的传能
-        if t - self.last_transfer_time < self.cooldown_period:
-            return False, None
-        
-        nodes = self.network.nodes
-        total_nodes = len(nodes)
-        
-        # 计算当前网络能量状态
-        energies = np.array([node.current_energy for node in nodes])
-        thresholds = np.array([node.low_threshold_energy for node in nodes])
-        
-        # 3. 低能量节点比例检查
-        low_energy_nodes = energies < thresholds
-        low_energy_ratio = np.sum(low_energy_nodes) / total_nodes
-        
-        # 4. 能量方差检查（归一化方差，考虑能量不均衡）
-        if len(energies) > 0 and np.mean(energies) > 0:
-            energy_cv = np.std(energies) / np.mean(energies)  # 变异系数
-        else:
-            energy_cv = 0
-        
-        # 5. 预测性检查：基于能量消耗速率
-        predict_critical = False
-        if len(self.energy_history) >= 2:
-            # 计算平均能量下降速率
-            recent_energies = self.energy_history[-min(5, len(self.energy_history)):]
-            if len(recent_energies) >= 2:
-                energy_rates = []
-                for i in range(len(recent_energies) - 1):
-                    rate = (recent_energies[i] - recent_energies[i + 1]) / self.check_interval
-                    energy_rates.append(rate)
-                avg_rate = np.mean(energy_rates)
-                
-                # 预测未来predictive_window分钟后的能量
-                predicted_energies = energies - avg_rate * self.predictive_window
-                predicted_low = np.sum(predicted_energies < thresholds) / total_nodes
-                
-                if predicted_low > self.critical_ratio * 0.5:  # 预测性阈值更宽松
-                    predict_critical = True
-        
-        # 记录当前能量状态
-        self.energy_history.append(np.mean(energies))
-        if len(self.energy_history) > 20:  # 只保留最近20次记录
-            self.energy_history.pop(0)
-        
-        # 综合决策逻辑
-        reasons = []
-        should_trigger = False
-        
-        # 条件1: 严重情况 - 低能量节点比例超过临界值
-        if low_energy_ratio > self.critical_ratio:
-            should_trigger = True
-            reasons.append(f"低能量节点比例={low_energy_ratio:.2%}>{self.critical_ratio:.2%}")
-        
-        # 条件2: 能量分布严重不均
-        if energy_cv > self.energy_variance_threshold:
-            should_trigger = True
-            reasons.append(f"能量变异系数={energy_cv:.3f}>{self.energy_variance_threshold:.3f}")
-        
-        # 条件3: 预测性触发
-        if predict_critical:
-            should_trigger = True
-            reasons.append(f"预测{self.predictive_window}分钟后将出现能量危机")
-        
-        # 条件4: 紧急情况 - 存在极低能量节点（低于阈值的50%）
-        critical_nodes = energies < (thresholds * 0.5)
-        if np.any(critical_nodes):
-            should_trigger = True
-            critical_count = np.sum(critical_nodes)
-            reasons.append(f"存在{critical_count}个极低能量节点（<阈值50%）")
-        
-        if should_trigger:
-            reason_str = " | ".join(reasons)
-            return True, reason_str
-        
-        return False, None
-
     def simulate(self):
         """Run the energy simulation for the specified number of time steps."""
         start_time = datetime(2023, 1, 2)
@@ -202,15 +104,15 @@ class EnergySimulation:
             if hasattr(self.network, 'adcr_link') and self.network.adcr_link is not None:
                 self.network.adcr_link.step(t)
 
-            # Step 2: 智能综合决策能量传输触发
-            should_trigger, trigger_reason = self.should_trigger_energy_transfer(t)
+            # Step 2: 智能综合决策能量传输触发（使用被动传能管理器）
+            should_trigger, trigger_reason = self.passive_manager.should_trigger_transfer(t, self.network)
             
             if should_trigger:
                 # 更新上次传能时间
-                self.last_transfer_time = t
+                self.passive_manager.update_last_transfer_time(t)
                 
                 # 输出触发信息
-                mode_label = "智能被动传能" if self.passive_mode else "定时主动传能"
+                mode_label = "智能被动传能" if self.passive_manager.passive_mode else "定时主动传能"
                 if trigger_reason:
                     print(f"\n[{mode_label}] 时间步 {t}: {trigger_reason}")
                 
