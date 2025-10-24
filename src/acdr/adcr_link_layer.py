@@ -109,12 +109,12 @@ class ADCRLinkLayerVirtual(object):
         self.line_width = float(line_width)
         self.path_line_width = float(path_line_width)
         # 运行态
-        self.last_round_t = None
+        self.last_round_t = 0  # 从0开始，避免在t=0时执行ADCR
         self.virtual_center = (0.0, 0.0)   # (cx, cy)
         self.cluster_of = {}               # node_id -> ch_id
         self.ch_set = set()
         self.cluster_stats = {}            # ch_id -> summary
-        self.upstream_paths = {}           # ch_id -> [SensorNode,...] 真实节点路径（不含虚拟中心“节点”）
+        self.upstream_paths = {}           # ch_id -> [SensorNode,...] 真实节点路径（不含虚拟中心"节点"）
 
         # 每轮通信统计
         self.last_comms = []               # list of dicts: {hop:(u->v), E_tx, E_rx, etc.}
@@ -567,7 +567,8 @@ class ADCRLinkLayerVirtual(object):
 
     def step(self, t):
         # 到期才重聚类 + 路径 + 结算
-        if (self.last_round_t is not None) and (t - self.last_round_t < self.round_period):
+        # 从第一个周期开始执行（跳过t=0）
+        if t - self.last_round_t < self.round_period:
             return
         if not self.net.nodes:
             print("[ADCR-DEBUG] Skipping - no nodes in network")

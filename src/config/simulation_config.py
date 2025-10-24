@@ -52,7 +52,7 @@ class NodeConfig:
     voltage: float = 3.5             # 电池电压 V（参考值）
 
     # 太阳能采集模型（仅当节点具备太阳能能力时参与估算）
-    enable_energy_harvesting: bool = False  # 是否启用能量采集，False时能量采集量=0
+    enable_energy_harvesting: bool = True  # 是否启用能量采集，False时能量采集量=0
     solar_efficiency: float = 0.2    # 光伏转换效率（0~1）
     solar_area: float = 0.1          # 光伏面积 m^2
     max_solar_irradiance: float = 1500.0  # 峰值太阳辐照 W/m^2
@@ -99,7 +99,7 @@ class NetworkConfig:
     energy_hole_mobile_ratio: float = 0.1    # 能量空洞中移动节点比例
     
     # 能量分配模式配置
-    energy_distribution_mode: str = "uniform"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
+    energy_distribution_mode: str = "center_decreasing"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
     center_energy: float = 60000.0      # 中心节点能量（最高，当energy_distribution_mode="center_decreasing"时使用）
     edge_energy: float = 20000.0        # 边缘节点能量（最低，当energy_distribution_mode="center_decreasing"时使用）
 
