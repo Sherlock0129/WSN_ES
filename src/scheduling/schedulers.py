@@ -49,12 +49,10 @@ class BaselineHeuristic(BaseScheduler):
                 if quota <= 0:
                     break
                 dist = r.distance_to(d)
-                if dist <= math.sqrt(3):
-                    path = [d, r]
-                else:
-                    path = eeor_find_path(nodes, d, r, max_hops=self.max_hops)
-                    if path is None:
-                        continue
+                # 使用自适应路径查找（自动处理单跳和多跳）
+                path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
+                if path is None:
+                    continue
                 plans.append({"receiver": r, "donor": d, "path": path, "distance": dist})
                 used.add(d)
                 quota -= 1
@@ -95,15 +93,11 @@ class LyapunovScheduler(BaseScheduler):
                 if d in used or d is r:
                     continue
                 dist = r.distance_to(d)
-                if dist <= math.sqrt(3):
-                    path = [d, r]
-                    eta = d.energy_transfer_efficiency(r)
-                else:
-                    path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
-                    # path = eeor_find_path(nodes, d, r, max_hops=self.max_hops)
-                    if path is None:
-                        continue
-                    eta = self._path_eta(path)
+                # 使用自适应路径查找（自动处理单跳和多跳）
+                path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
+                if path is None:
+                    continue
+                eta = self._path_eta(path)
                 # 效率低于10%的传输直接放弃
                 if eta < 0.1:
                     continue
@@ -188,12 +182,10 @@ class ClusterScheduler(BaseScheduler):
                     if r is ch:
                         continue
                     dist = r.distance_to(ch)
-                    if dist <= math.sqrt(3):
-                        path = [ch, r]
-                    else:
-                        path = eeor_find_path(nodes, ch, r, max_hops=self.max_hops)
-                        if path is None:
-                            continue
+                    # 使用自适应路径查找（自动处理单跳和多跳）
+                    path = eeor_find_path_adaptive(nodes, ch, r, max_hops=self.max_hops)
+                    if path is None:
+                        continue
                     plans.append({"receiver": r, "donor": ch, "path": path, "distance": dist})
             else:
                 # 先给 CH 充能
@@ -203,12 +195,10 @@ class ClusterScheduler(BaseScheduler):
                     if quota <= 0:
                         break
                     dist = ch.distance_to(d)
-                    if dist <= math.sqrt(3):
-                        path = [d, ch]
-                    else:
-                        path = eeor_find_path(nodes, d, ch, max_hops=self.max_hops)
-                        if path is None:
-                            continue
+                    # 使用自适应路径查找（自动处理单跳和多跳）
+                    path = eeor_find_path_adaptive(nodes, d, ch, max_hops=self.max_hops)
+                    if path is None:
+                        continue
                     plans.append({"receiver": ch, "donor": d, "path": path, "distance": dist})
                     quota -= 1
         return plans
@@ -250,12 +240,10 @@ class PredictionScheduler(BaseScheduler):
                 if quota <= 0:
                     break
                 dist = r.distance_to(d)
-                if dist <= math.sqrt(3):
-                    path = [d, r]
-                else:
-                    path = eeor_find_path(nodes, d, r, max_hops=self.max_hops)
-                    if path is None:
-                        continue
+                # 使用自适应路径查找（自动处理单跳和多跳）
+                path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
+                if path is None:
+                    continue
                 plans.append({"receiver": r, "donor": d, "path": path, "distance": dist})
                 used.add(d)
                 quota -= 1
@@ -294,12 +282,10 @@ class PowerControlScheduler(BaseScheduler):
                 if quota <= 0:
                     break
                 dist = r.distance_to(d)
-                if dist <= math.sqrt(3):
-                    path = [d, r]
-                else:
-                    path = eeor_find_path(nodes, d, r, max_hops=self.max_hops)
-                    if path is None:
-                        continue
+                # 使用自适应路径查找（自动处理单跳和多跳）
+                path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
+                if path is None:
+                    continue
                 eta = self._path_eta(path)
                 E_char = getattr(d, "E_char", 300.0)
                 scale = min(1.0, self.target_eta / eta)  # 低效率→更小发送量
@@ -319,7 +305,9 @@ class PowerControlScheduler(BaseScheduler):
             d = plan["donor"]; r = plan["receiver"]; path = plan["path"]; dist = plan["distance"]
             energy_sent = float(plan.get("energy_sent", getattr(d, "E_char", 300.0)))
 
-            if dist <= math.sqrt(3):
+            # 根据路径长度判断单跳或多跳（自适应路径查找已确定最优路径）
+            if len(path) == 2:
+                # 单跳直接传输
                 eta = d.energy_transfer_efficiency(r)
                 energy_received = energy_sent * eta
                 d.current_energy -= d.energy_consumption(r, transfer_WET=True)
@@ -327,6 +315,7 @@ class PowerControlScheduler(BaseScheduler):
                 d.transferred_history.append(energy_sent)
                 r.received_history.append(energy_received)
             else:
+                # 多跳传输
                 energy_left = energy_sent
                 d.transferred_history.append(energy_sent)
                 for i in range(len(path) - 1):
