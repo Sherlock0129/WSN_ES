@@ -30,17 +30,29 @@ class Network:
                  output_dir: str = "data",
                  use_gpu: bool = False,
                  # 能量空洞模式参数
-                 energy_hole_enabled: bool = False,
-                 energy_hole_ratio: float = 0.4,
+                 enable_energy_hole: bool = False,
                  energy_hole_center_mode: str = "random",
-                 energy_hole_cluster_radius: float = 2.0,
                  energy_hole_mobile_ratio: float = 0.1,
                  # 能量采集参数
                  enable_energy_harvesting: bool = True,
                  # 能量分配模式参数
                  energy_distribution_mode: str = "uniform",
                  center_energy: float = 60000.0,
-                 edge_energy: float = 20000.0):
+                 edge_energy: float = 20000.0,
+                 # NodeConfig参数（传递给SensorNode）
+                 capacity: float = 3.5,
+                 voltage: float = 3.7,
+                 solar_efficiency: float = 0.2,
+                 solar_area: float = 0.1,
+                 max_solar_irradiance: float = 1500.0,
+                 env_correction_factor: float = 1.0,
+                 energy_char: float = 1000.0,
+                 energy_elec: float = 1e-4,
+                 epsilon_amp: float = 1e-5,
+                 bit_rate: float = 1000000.0,
+                 path_loss_exponent: float = 2.0,
+                 energy_decay_rate: float = 5.0,
+                 sensor_energy: float = 0.1):
         """
         初始化网络
         
@@ -58,11 +70,9 @@ class Network:
         :param mobile_node_ratio: 移动节点比例
         :param output_dir: 输出目录
         :param use_gpu: 是否使用GPU加速
-        :param energy_hole_enabled: 是否启用能量空洞模式
-        :param energy_hole_ratio: 非太阳能节点比例（形成能量空洞）
+        :param enable_energy_hole: 是否启用能量空洞模式（非太阳能节点聚集分布）
         :param energy_hole_center_mode: 空洞中心选择模式
-        :param energy_hole_cluster_radius: 能量空洞聚集半径
-        :param energy_hole_mobile_ratio: 能量空洞中移动节点比例
+        :param energy_hole_mobile_ratio: 能量空洞区域中移动节点比例
         """
         self.num_nodes = num_nodes
         self.nodes = []
@@ -70,10 +80,8 @@ class Network:
         self.gpu_manager = get_gpu_manager(use_gpu)
         
         # 能量空洞模式参数
-        self.energy_hole_enabled = energy_hole_enabled
-        self.energy_hole_ratio = energy_hole_ratio
+        self.enable_energy_hole = enable_energy_hole
         self.energy_hole_center_mode = energy_hole_center_mode
-        self.energy_hole_cluster_radius = energy_hole_cluster_radius
         self.energy_hole_mobile_ratio = energy_hole_mobile_ratio
         
         # 能量采集参数
@@ -83,6 +91,21 @@ class Network:
         self.energy_distribution_mode = energy_distribution_mode
         self.center_energy = center_energy
         self.edge_energy = edge_energy
+        
+        # NodeConfig参数（传递给SensorNode）
+        self.node_capacity = capacity
+        self.node_voltage = voltage
+        self.node_solar_efficiency = solar_efficiency
+        self.node_solar_area = solar_area
+        self.node_max_solar_irradiance = max_solar_irradiance
+        self.node_env_correction_factor = env_correction_factor
+        self.node_energy_char = energy_char
+        self.node_energy_elec = energy_elec
+        self.node_epsilon_amp = epsilon_amp
+        self.node_bit_rate = bit_rate
+        self.node_path_loss_exponent = path_loss_exponent
+        self.node_energy_decay_rate = energy_decay_rate
+        self.node_sensor_energy = sensor_energy
         
         # 网络参数
         self.low_threshold = low_threshold
@@ -135,110 +158,90 @@ class Network:
     def create_nodes(self):
         """
         根据配置的分布模式创建节点
+        采用职责分离的三步法：
+        1. 生成节点位置（根据 distribution_mode）
+        2. 分配节点属性（根据 enable_energy_hole）
+        3. 创建节点对象
         """
+        # Step 1: 生成位置
         if self.distribution_mode == "uniform":
-            self._create_uniform_nodes()
+            positions = self._generate_uniform_positions()
         elif self.distribution_mode == "random":
-            self._create_random_nodes()
-        elif self.distribution_mode == "energy_hole":
-            self._create_energy_hole_nodes()
+            positions = self._generate_random_positions()
         else:
-            # 默认使用均匀分布
-            print(f"未知的分布模式: {self.distribution_mode}, 使用默认的均匀分布")
-            self._create_uniform_nodes()
-
-    def _create_uniform_nodes(self):
+            print(f"未知的分布模式: {self.distribution_mode}, 使用默认的随机分布")
+            positions = self._generate_random_positions()
+        
+        # Step 2: 分配属性（太阳能、移动性）
+        no_solar_nodes, mobile_nodes = self._assign_solar_properties(positions)
+        
+        # Step 3: 创建节点
+        self._create_nodes_from_positions_and_properties(positions, no_solar_nodes, mobile_nodes)
+        
+        # Step 4: 根据能量分配模式调整初始能量
+        self._assign_energy_by_virtual_center()
+    
+    def _generate_uniform_positions(self) -> np.ndarray:
         """
-        Create nodes in an approximate square layout using equilateral triangle grid pattern.
-        Randomly assign 40% of nodes to be without solar energy harvesting capability.
+        生成均匀网格分布的节点位置（三角形网格模式）
+        
+        Returns:
+            np.ndarray: (N, 2) 数组，每行为 [x, y] 坐标
         """
         import random
-        # 固定随机种子
         random.seed(self.random_seed)
         np.random.seed(self.random_seed)
-
+        
         horizontal_spacing = 1.0
         vertical_spacing = np.sqrt(3) / 2 * horizontal_spacing
-
+        
         cols = int(np.ceil(np.sqrt(self.num_nodes)))
         rows = int(np.ceil(self.num_nodes / cols))
-
-        # 生成所有 node_id
-        all_node_ids = list(range(self.num_nodes))
-        num_without_solar = int((1 - self.solar_node_ratio) * self.num_nodes)
-        no_solar_nodes = set(random.sample(all_node_ids, num_without_solar))
-
-        # 从 no_solar_nodes 中挑选移动节点
-        num_mobile = int(self.mobile_node_ratio * self.num_nodes)
-        mobile_nodes = set(random.sample(list(no_solar_nodes), num_mobile))
-
+        
+        positions = []
         node_id = 0
         for row in range(rows):
             for col in range(cols):
                 if node_id >= self.num_nodes:
                     break
-
+                
                 x = col * horizontal_spacing
                 if row % 2 == 1:
                     x += horizontal_spacing / 2
                 y = row * vertical_spacing
-
-                # 是否具有太阳能能力
-                has_solar = node_id not in no_solar_nodes
-
-                is_mobile = node_id in mobile_nodes
-
-                mobility_pattern = "circle" if is_mobile else None
-                mobility_params = {
-                    "radius": 1.0,
-                    "speed": 0.01,
-                    "center": [x, y]  # 以初始位置为圆心
-                } if is_mobile else {}
-
-                node = SensorNode(
-                    node_id=node_id,
-                    initial_energy=self.node_initial_energy,
-                    low_threshold=self.low_threshold,
-                    high_threshold=self.high_threshold,
-                    position=[x, y],
-                    has_solar=has_solar,
-                    is_mobile=is_mobile,
-                    mobility_pattern=mobility_pattern,
-                    mobility_params=mobility_params,
-                    enable_energy_harvesting=self.enable_energy_harvesting
-                )
-
-                self.nodes.append(node)
+                
+                positions.append([x, y])
                 node_id += 1
-
-    def _create_random_nodes(self):
+        
+        print(f"✓ 生成 {len(positions)} 个均匀网格位置")
+        return np.array(positions)
+    
+    def _generate_random_positions(self) -> np.ndarray:
         """
-        创建完全随机分布的节点
+        生成随机分布的节点位置（带最小距离约束）
+        
+        Returns:
+            np.ndarray: (N, 2) 数组，每行为 [x, y] 坐标
         """
         import random
         import math
         
-        # 设置随机种子
         random.seed(self.random_seed)
         np.random.seed(self.random_seed)
         
-        # 获取网络区域参数
         width = self.network_area_width
         height = self.network_area_height
         min_dist = self.min_distance
         
-        # 生成随机位置
         positions = []
         attempts = 0
-        max_attempts = self.num_nodes * 100  # 防止无限循环
-        
-        print(f"正在生成 {self.num_nodes} 个随机分布的节点...")
+        max_attempts = self.num_nodes * 100
         
         while len(positions) < self.num_nodes and attempts < max_attempts:
             x = random.uniform(0, width)
             y = random.uniform(0, height)
             
-            # 检查与已有节点的最小距离
+            # 检查最小距离约束
             valid_position = True
             for existing_pos in positions:
                 if math.sqrt((x - existing_pos[0])**2 + (y - existing_pos[1])**2) < min_dist:
@@ -250,12 +253,9 @@ class Network:
             
             attempts += 1
         
-        # 如果无法生成足够的节点，降低最小距离要求
+        # 如果无法满足最小距离，降低要求
         if len(positions) < self.num_nodes:
-            print(f"警告：无法在最小距离 {min_dist} 下生成所有节点，降低距离要求到 {min_dist/2}")
             min_dist = min_dist / 2
-            
-            # 重新生成剩余节点
             while len(positions) < self.num_nodes and attempts < max_attempts * 2:
                 x = random.uniform(0, width)
                 y = random.uniform(0, height)
@@ -271,65 +271,81 @@ class Network:
                 
                 attempts += 1
         
-        # 如果仍然无法生成足够的节点，使用完全随机分布（无距离限制）
+        # 最后兜底：完全随机
         if len(positions) < self.num_nodes:
-            print(f"警告：使用完全随机分布（无距离限制）生成剩余节点")
             while len(positions) < self.num_nodes:
                 x = random.uniform(0, width)
                 y = random.uniform(0, height)
                 positions.append([x, y])
         
-        print(f"成功生成 {len(positions)} 个节点位置")
-        
-        # 分配太阳能和移动属性
-        self._assign_node_properties(positions)
+        print(f"✓ 生成 {len(positions)} 个随机位置")
+        return np.array(positions)
     
-    def _create_energy_hole_nodes(self):
+    def _assign_solar_properties(self, positions: np.ndarray) -> tuple:
         """
-        创建能量空洞模式的节点分布
-        将非太阳能节点聚集在一个中心点附近，形成能量空洞
+        根据 enable_energy_hole 决定太阳能属性分配方式
+        
+        Args:
+            positions: (N, 2) 节点位置数组
+            
+        Returns:
+            tuple: (no_solar_nodes, mobile_nodes) 两个集合
+        """
+        if self.enable_energy_hole:
+            # 能量空洞模式：非太阳能节点聚集在某个中心附近
+            return self._assign_solar_clustered(positions)
+        else:
+            # 正常模式：随机均匀分配
+            return self._assign_solar_random(positions)
+    
+    def _assign_solar_random(self, positions: np.ndarray) -> tuple:
+        """
+        随机分配太阳能属性（默认方式）
+        
+        Args:
+            positions: (N, 2) 节点位置数组
+            
+        Returns:
+            tuple: (no_solar_nodes, mobile_nodes) 两个集合
+        """
+        import random
+        
+        # 重置随机种子，确保属性分配独立于位置生成
+        random.seed(self.random_seed)
+        
+        all_node_ids = list(range(self.num_nodes))
+        num_without_solar = int((1 - self.solar_node_ratio) * self.num_nodes)
+        no_solar_nodes = set(random.sample(all_node_ids, num_without_solar))
+        
+        # 从非太阳能节点中选择移动节点
+        num_mobile = int(self.mobile_node_ratio * self.num_nodes)
+        mobile_pool = list(no_solar_nodes) if no_solar_nodes else all_node_ids
+        mobile_nodes = set(random.sample(mobile_pool, min(num_mobile, len(mobile_pool))))
+        
+        print(f"✓ 随机分配属性：{len(no_solar_nodes)} 个非太阳能节点，{len(mobile_nodes)} 个移动节点")
+        return no_solar_nodes, mobile_nodes
+    
+    def _assign_solar_clustered(self, positions: np.ndarray) -> tuple:
+        """
+        聚集分配太阳能属性（能量空洞方式）
+        非太阳能节点聚集在某个中心点附近，形成能量空洞
+        
+        Args:
+            positions: (N, 2) 节点位置数组
+            
+        Returns:
+            tuple: (no_solar_nodes, mobile_nodes) 两个集合
         """
         import random
         import math
         
-        # 设置随机种子
+        # 重置随机种子，确保属性分配独立于位置生成
         random.seed(self.random_seed)
-        np.random.seed(self.random_seed)
         
-        # 获取网络区域参数
-        width = self.network_area_width
-        height = self.network_area_height
-        min_dist = self.min_distance
-        
-        print(f"正在生成 {self.num_nodes} 个能量空洞模式节点...")
-        
-        # 1) 先生成所有节点坐标（使用三角形网格模式）
-        horizontal_spacing = 1.0
-        vertical_spacing = np.sqrt(3) / 2 * horizontal_spacing
-        
-        cols = int(np.ceil(np.sqrt(self.num_nodes)))
-        rows = int(np.ceil(self.num_nodes / cols))
-        
-        positions = []
-        node_id = 0
-        for row in range(rows):
-            for col in range(cols):
-                if node_id >= self.num_nodes:
-                    break
-                x = col * horizontal_spacing
-                if row % 2 == 1:
-                    x += horizontal_spacing / 2.0
-                y = row * vertical_spacing
-                positions.append([x, y])
-                node_id += 1
-        
-        positions = np.array(positions)
-        
-        # 2) 计算非太阳能节点数
         all_node_ids = list(range(self.num_nodes))
-        num_without_solar = int(self.energy_hole_ratio * self.num_nodes)
+        num_without_solar = int((1 - self.solar_node_ratio) * self.num_nodes)
         
-        # 3) 选择能量空洞中心
+        # 选择能量空洞中心
         if self.energy_hole_center_mode == "random":
             center_idx = random.choice(all_node_ids)
             center = positions[center_idx]
@@ -340,21 +356,43 @@ class Network:
         else:
             center = positions[int(len(positions)/2)]  # 近似中心
         
-        # 4) 按到中心的距离排序，取前 num_without_solar 个作为"无太阳能节点"
+        # 按到中心的距离排序，取最近的 N 个作为非太阳能节点
         diffs = positions - center
-        d2 = np.sum(diffs * diffs, axis=1)
-        order = np.argsort(d2)
+        distances_squared = np.sum(diffs * diffs, axis=1)
+        order = np.argsort(distances_squared)
         selected = order[:num_without_solar]
         no_solar_nodes = set(int(i) for i in selected)
         
-        # 5) 从"无太阳能集合"里抽取移动节点
+        # 从非太阳能节点（能量空洞区域）中选择移动节点
         num_mobile = int(self.energy_hole_mobile_ratio * self.num_nodes)
         mobile_pool = list(no_solar_nodes)
         mobile_nodes = set(random.sample(mobile_pool, min(num_mobile, len(mobile_pool))))
         
-        # 6) 创建节点
+        # 计算能量空洞半径
+        max_distance = max([math.sqrt(distances_squared[i]) for i in no_solar_nodes])
+        
+        print(f"\n✓ 能量空洞模式配置：")
+        print(f"  - 能量空洞中心：({center[0]:.2f}, {center[1]:.2f}) [{self.energy_hole_center_mode}]")
+        print(f"  - 非太阳能节点：{num_without_solar}/{self.num_nodes} ({(1-self.solar_node_ratio)*100:.1f}%)")
+        print(f"  - 移动节点数：{len(mobile_nodes)}/{self.num_nodes} ({self.energy_hole_mobile_ratio*100:.1f}%)")
+        print(f"  - 能量空洞半径：{max_distance:.2f}m\n")
+        
+        return no_solar_nodes, mobile_nodes
+    
+    def _create_nodes_from_positions_and_properties(
+        self, positions: np.ndarray, no_solar_nodes: set, mobile_nodes: set):
+        """
+        根据位置和属性创建所有节点对象（统一创建方法）
+        
+        Args:
+            positions: (N, 2) 节点位置数组
+            no_solar_nodes: 非太阳能节点的ID集合
+            mobile_nodes: 移动节点的ID集合
+        """
         for node_id in range(self.num_nodes):
             x, y = positions[node_id]
+            
+            # 确定节点属性
             has_solar = node_id not in no_solar_nodes
             is_mobile = node_id in mobile_nodes
             
@@ -365,6 +403,7 @@ class Network:
                 "center": [float(x), float(y)]
             } if is_mobile else {}
             
+            # 创建节点
             node = SensorNode(
                 node_id=node_id,
                 initial_energy=self.node_initial_energy,
@@ -375,57 +414,26 @@ class Network:
                 is_mobile=is_mobile,
                 mobility_pattern=mobility_pattern,
                 mobility_params=mobility_params,
-                enable_energy_harvesting=self.enable_energy_harvesting
+                # NodeConfig参数
+                capacity=self.node_capacity,
+                voltage=self.node_voltage,
+                enable_energy_harvesting=self.enable_energy_harvesting,
+                solar_efficiency=self.node_solar_efficiency,
+                solar_area=self.node_solar_area,
+                max_solar_irradiance=self.node_max_solar_irradiance,
+                env_correction_factor=self.node_env_correction_factor,
+                energy_char=self.node_energy_char,
+                energy_elec=self.node_energy_elec,
+                epsilon_amp=self.node_epsilon_amp,
+                bit_rate=self.node_bit_rate,
+                path_loss_exponent=self.node_path_loss_exponent,
+                energy_decay_rate=self.node_energy_decay_rate,
+                sensor_energy=self.node_sensor_energy
             )
             
             self.nodes.append(node)
         
-        print(f"能量空洞模式生成完成：{num_without_solar} 个非太阳能节点聚集在中心 {center} 附近")
-
-    def _assign_node_properties(self, positions):
-        """
-        为节点分配太阳能和移动属性
-        """
-        import random
-        
-        # 生成所有 node_id
-        all_node_ids = list(range(self.num_nodes))
-        num_without_solar = int((1 - self.solar_node_ratio) * self.num_nodes)
-        no_solar_nodes = set(random.sample(all_node_ids, num_without_solar))
-        
-        # 从 no_solar_nodes 中挑选移动节点
-        num_mobile = int(self.mobile_node_ratio * self.num_nodes)
-        mobile_nodes = set(random.sample(list(no_solar_nodes), num_mobile))
-        
-        # 创建节点
-        for node_id in range(self.num_nodes):
-            x, y = positions[node_id]
-            
-            # 是否具有太阳能能力
-            has_solar = node_id not in no_solar_nodes
-            is_mobile = node_id in mobile_nodes
-            
-            mobility_pattern = "circle" if is_mobile else None
-            mobility_params = {
-                "radius": 1.0,
-                "speed": 0.01,
-                "center": [x, y]  # 以初始位置为圆心
-            } if is_mobile else {}
-            
-            node = SensorNode(
-                node_id=node_id,
-                initial_energy=self.node_initial_energy,
-                low_threshold=self.low_threshold,
-                high_threshold=self.high_threshold,
-                position=[x, y],
-                has_solar=has_solar,
-                is_mobile=is_mobile,
-                mobility_pattern=mobility_pattern,
-                mobility_params=mobility_params,
-                enable_energy_harvesting=self.enable_energy_harvesting
-            )
-            
-            self.nodes.append(node)
+        print(f"✓ 创建 {len(self.nodes)} 个节点对象完成")
 
     def _assign_energy_by_virtual_center(self):
         """基于虚拟中心（几何中心）分配能量，实现从中心到边缘的线性递减"""
