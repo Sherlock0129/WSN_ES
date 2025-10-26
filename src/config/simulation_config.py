@@ -59,7 +59,7 @@ class NodeConfig:
     env_correction_factor: float = 1.0    # 环境修正系数（天气/遮挡等），乘在辐照上
 
     # 无线能量传输/发送参数
-    energy_char: float = 1000.0      # 单次名义可下发能量 J（捐能上限/步）
+    energy_char: float = 100.0      # 单次名义可下发能量 J（捐能上限/步）
     energy_elec: float = 1e-4        # 电子学能耗 J/bit（发送/接收基底损耗）
     epsilon_amp: float = 1e-5        # 功放损耗系数 J/bit/m^path_loss_exponent
     bit_rate: float = 1000000.0      # 数据量 bits（用于估算一次发送/接收消耗）
@@ -81,7 +81,7 @@ class NetworkConfig:
     - 分布模式决定初始位置生成方式；
     - max_hops 限制多跳路径长度（影响 EEOR/机会路由）。
     """
-    num_nodes: int = 25
+    num_nodes: int = 30
     max_hops: int = 3
     distribution_mode: str = "random"  # 节点分布："uniform"（网格/规则）、"random"（随机）、"energy_hole"（能量空洞）
     network_area_width: float = 5.0    # 区域宽度 m
@@ -127,10 +127,10 @@ class SimulationConfig:
 
     # 智能被动传能参数
     passive_mode: bool = True               # 是否启用智能被动传能模式（False为定时主动传能）
-    check_interval: int = 10                # 智能检查间隔（分钟）
+    check_interval: int = 1                # 智能检查间隔（分钟）
     critical_ratio: float = 0.2             # 低能量节点临界比例（0-1）
-    energy_variance_threshold: float = 0.3  # 能量方差阈值，超过则触发传能
-    cooldown_period: int = 30               # 传能冷却期（分钟），避免频繁触发
+    energy_variance_threshold: float = 0.2  # 能量方差阈值，超过则触发传能
+    cooldown_period: int = 1               # 传能冷却期（分钟），避免频繁触发
     predictive_window: int = 60             # 预测窗口（分钟），用于预测性触发
     
     # K 值自适应（影响每个接收端可匹配的捐能者数量上限）
@@ -235,7 +235,7 @@ class ADCRConfig:
     direct_transmission_threshold: float = 0.1  # 直接传输阈值（能耗比例，0.1表示直接传输能耗不超过锚点传输的110%）
     
     # 自动画图参数
-    auto_plot: bool = True  # 是否每次重聚类后自动画图
+    auto_plot: bool = False  # 是否每次重聚类后自动画图
     plot_filename_template: str = "adcr_day{day}_t{t}.png"  # 画图文件名模板
 
     # 可视化与导出

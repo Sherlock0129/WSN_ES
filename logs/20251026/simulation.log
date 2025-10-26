@@ -1,0 +1,176 @@
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 无线传感器网络能量传输仿真系统
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 开始加载配置...
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 使用默认配置
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 智能被动传能模式已启用
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 -   - 检查间隔: 1 分钟
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 -   - 临界比例: 20.0%
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 -   - 能量方差阈值: 0.50
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 -   - 冷却期: 30 分钟
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 -   - 预测窗口: 60 分钟
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 创建网络...
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 网络创建完成: 25 个节点
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 创建ADCR链路层...
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - ADCR链路层创建完成
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 创建调度器...
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 创建调度器: LyapunovScheduler
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 调度器创建完成: LyapunovScheduler
+2025-10-26 22:16:55 - WSN_Simulation - INFO - info:89 - 开始仿真...
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 无线传感器网络能量传输仿真系统
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 开始加载配置...
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 使用默认配置
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 智能被动传能模式已启用
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 -   - 检查间隔: 1 分钟
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 -   - 临界比例: 20.0%
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 -   - 能量方差阈值: 0.50
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 -   - 冷却期: 30 分钟
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 -   - 预测窗口: 60 分钟
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 创建网络...
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 网络创建完成: 25 个节点
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 创建ADCR链路层...
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - ADCR链路层创建完成
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 创建调度器...
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 创建调度器: LyapunovScheduler
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 调度器创建完成: LyapunovScheduler
+2025-10-26 22:17:38 - WSN_Simulation - INFO - info:89 - 开始仿真...
+2025-10-26 22:18:12 - WSN_Simulation - INFO - info:89 - 仿真完成
+2025-10-26 22:18:12 - WSN_Simulation - INFO - info:89 - 生成可视化图表...
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 可视化图表生成完成
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 输出统计信息...
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 导出配置参数...
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 配置参数已导出到: data\20251026_221738\simulation_config.json
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 保存详细计划日志...
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 详细计划日志将保存到: data\20251026_221738\plans.txt
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 详细计划记录已保存到: data\20251026_221738\plans.txt
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 记录了 175 个时间步的计划信息
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 详细计划日志保存完成
+2025-10-26 22:18:26 - WSN_Simulation - INFO - info:89 - 保存结果...
+2025-10-26 22:18:27 - WSN_Simulation - INFO - info:89 - 结果已保存到: data\20251026_221738
+2025-10-26 22:18:27 - WSN_Simulation - INFO - info:89 - 仿真过程中未发生错误
+2025-10-26 22:18:27 - WSN_Simulation - INFO - info:89 - 程序执行完成
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 无线传感器网络能量传输仿真系统
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 开始加载配置...
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 使用默认配置
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 智能被动传能模式已启用
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 -   - 检查间隔: 1 分钟
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 -   - 临界比例: 20.0%
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 -   - 能量方差阈值: 0.50
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 -   - 冷却期: 30 分钟
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 -   - 预测窗口: 60 分钟
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 创建网络...
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 网络创建完成: 30 个节点
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 创建ADCR链路层...
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - ADCR链路层创建完成
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 创建调度器...
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 创建调度器: LyapunovScheduler
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 调度器创建完成: LyapunovScheduler
+2025-10-26 22:22:23 - WSN_Simulation - INFO - info:89 - 开始仿真...
+2025-10-26 22:22:41 - WSN_Simulation - INFO - info:89 - 仿真完成
+2025-10-26 22:22:41 - WSN_Simulation - INFO - info:89 - 生成可视化图表...
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 可视化图表生成完成
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 输出统计信息...
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 导出配置参数...
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 配置参数已导出到: data\20251026_222223\simulation_config.json
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 保存详细计划日志...
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 详细计划日志将保存到: data\20251026_222223\plans.txt
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 详细计划记录已保存到: data\20251026_222223\plans.txt
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 记录了 46 个时间步的计划信息
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 详细计划日志保存完成
+2025-10-26 22:22:56 - WSN_Simulation - INFO - info:89 - 保存结果...
+2025-10-26 22:22:57 - WSN_Simulation - INFO - info:89 - 结果已保存到: data\20251026_222223
+2025-10-26 22:22:57 - WSN_Simulation - INFO - info:89 - 仿真过程中未发生错误
+2025-10-26 22:22:57 - WSN_Simulation - INFO - info:89 - 程序执行完成
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 无线传感器网络能量传输仿真系统
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 开始加载配置...
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 使用默认配置
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 传统主动传能模式 (每60分钟定时触发)
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 创建网络...
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 网络创建完成: 30 个节点
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 创建ADCR链路层...
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - ADCR链路层创建完成
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 创建调度器...
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 创建调度器: LyapunovScheduler
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 调度器创建完成: LyapunovScheduler
+2025-10-26 22:24:30 - WSN_Simulation - INFO - info:89 - 开始仿真...
+2025-10-26 22:25:22 - WSN_Simulation - INFO - info:89 - 仿真完成
+2025-10-26 22:25:22 - WSN_Simulation - INFO - info:89 - 生成可视化图表...
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 可视化图表生成完成
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 输出统计信息...
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 导出配置参数...
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 配置参数已导出到: data\20251026_222430\simulation_config.json
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 保存详细计划日志...
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 详细计划日志将保存到: data\20251026_222430\plans.txt
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 详细计划记录已保存到: data\20251026_222430\plans.txt
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 记录了 168 个时间步的计划信息
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 详细计划日志保存完成
+2025-10-26 22:25:36 - WSN_Simulation - INFO - info:89 - 保存结果...
+2025-10-26 22:25:37 - WSN_Simulation - INFO - info:89 - 结果已保存到: data\20251026_222430
+2025-10-26 22:25:37 - WSN_Simulation - INFO - info:89 - 仿真过程中未发生错误
+2025-10-26 22:25:37 - WSN_Simulation - INFO - info:89 - 程序执行完成
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 无线传感器网络能量传输仿真系统
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 开始加载配置...
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 使用默认配置
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 传统主动传能模式 (每60分钟定时触发)
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 创建网络...
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 网络创建完成: 30 个节点
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 创建ADCR链路层...
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - ADCR链路层创建完成
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 创建调度器...
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 创建调度器: LyapunovScheduler
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 调度器创建完成: LyapunovScheduler
+2025-10-26 23:13:43 - WSN_Simulation - INFO - info:89 - 开始仿真...
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 无线传感器网络能量传输仿真系统
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 开始加载配置...
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 使用默认配置
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 智能被动传能模式已启用
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 -   - 检查间隔: 1 分钟
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 -   - 临界比例: 20.0%
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 -   - 能量方差阈值: 0.50
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 -   - 冷却期: 1 分钟
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 -   - 预测窗口: 60 分钟
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - ==================================================
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 创建网络...
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 网络创建完成: 30 个节点
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 创建ADCR链路层...
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - ADCR链路层创建完成
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 创建调度器...
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 创建调度器: LyapunovScheduler
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 调度器创建完成: LyapunovScheduler
+2025-10-26 23:14:05 - WSN_Simulation - INFO - info:89 - 开始仿真...
+2025-10-26 23:14:24 - WSN_Simulation - INFO - info:89 - 仿真完成
+2025-10-26 23:14:24 - WSN_Simulation - INFO - info:89 - 生成可视化图表...
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 可视化图表生成完成
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 输出统计信息...
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 导出配置参数...
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 配置参数已导出到: data\20251026_231405\simulation_config.json
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 保存详细计划日志...
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 详细计划日志将保存到: data\20251026_231405\plans.txt
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 详细计划记录已保存到: data\20251026_231405\plans.txt
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 记录了 45 个时间步的计划信息
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 详细计划日志保存完成
+2025-10-26 23:14:39 - WSN_Simulation - INFO - info:89 - 保存结果...
+2025-10-26 23:14:40 - WSN_Simulation - INFO - info:89 - 结果已保存到: data\20251026_231405
+2025-10-26 23:14:40 - WSN_Simulation - INFO - info:89 - 仿真过程中未发生错误
+2025-10-26 23:14:40 - WSN_Simulation - INFO - info:89 - 程序执行完成
