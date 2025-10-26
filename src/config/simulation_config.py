@@ -59,7 +59,7 @@ class NodeConfig:
     env_correction_factor: float = 1.0    # 环境修正系数（天气/遮挡等），乘在辐照上
 
     # 无线能量传输/发送参数
-    energy_char: float = 1000.0      # 单次名义可下发能量 J（捐能上限/步）
+    energy_char: float = 300.0      # 单次名义可下发能量 J（捐能上限/步）
     energy_elec: float = 1e-4        # 电子学能耗 J/bit（发送/接收基底损耗）
     epsilon_amp: float = 1e-5        # 功放损耗系数 J/bit/m^path_loss_exponent
     bit_rate: float = 1000000.0      # 数据量 bits（用于估算一次发送/接收消耗）
@@ -81,25 +81,24 @@ class NetworkConfig:
     - 分布模式决定初始位置生成方式；
     - max_hops 限制多跳路径长度（影响 EEOR/机会路由）。
     """
-    num_nodes: int = 25
+    num_nodes: int = 30
     max_hops: int = 3
-    distribution_mode: str = "random"  # 节点分布："uniform"（网格/规则）、"random"（随机）、"energy_hole"（能量空洞）
+    distribution_mode: str = "random"  # 节点位置分布模式："uniform"（网格/规则）、"random"（随机）
     network_area_width: float = 5.0    # 区域宽度 m
     network_area_height: float = 5.0   # 区域高度 m
     min_distance: float = 0.5          # 节点间最小生成距离 m（避免过近重叠）
-    random_seed: int = 129             # 随机种子（影响位置与属性抽样）
+    random_seed: int = 128            # 随机种子（影响位置与属性抽样）
     solar_node_ratio: float = 0.6      # 具备太阳能节点比例（0~1）
     mobile_node_ratio: float = 0.1     # 可移动节点比例（0~1，若启用移动模型）
     
-    # 能量空洞模式配置参数
-    energy_hole_enabled: bool = False  # 是否启用能量空洞模式
-    energy_hole_ratio: float = 0.4     # 非太阳能节点比例（形成能量空洞）
-    energy_hole_center_mode: str = "random"  # 空洞中心选择模式："random"（随机）、"corner"（角落）、"center"（中心）
-    energy_hole_cluster_radius: float = 2.0  # 能量空洞聚集半径
-    energy_hole_mobile_ratio: float = 0.1    # 能量空洞中移动节点比例
+    # 能量空洞模式配置参数（独立开关，可与任意 distribution_mode 组合）
+    # 说明：启用后，非太阳能节点（1-solar_node_ratio）会聚集在某个中心附近，形成能量空洞区域
+    enable_energy_hole: bool = True    # 是否启用能量空洞模式
+    energy_hole_center_mode: str = "random"  # 空洞中心选择模式："random"（随机节点）、"corner"（左下角）、"center"（几何中心）
+    energy_hole_mobile_ratio: float = 0.1    # 能量空洞区域中移动节点比例（0~1）
 
     # 能量分配模式配置
-    energy_distribution_mode: str = "center_decreasing"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
+    energy_distribution_mode: str = "uniform"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
     center_energy: float = 40000.0      # 中心节点能量（最高，当energy_distribution_mode="center_decreasing"时使用）
     edge_energy: float = 30000.0        # 边缘节点能量（最低，当energy_distribution_mode="center_decreasing"时使用）
 
@@ -117,8 +116,6 @@ class SimulationConfig:
     time_steps: int = 10080              # 总时间步数（分钟），默认 7 天
     energy_transfer_interval: int = 60   # 传能/调度触发间隔（分钟）
     # 注意：当前实现中触发条件写死为 `if t % 60 == 0`，未读取该配置值；后续可将其接入。
-    use_fixed_network: bool = True       # 是否固定网络（位置/属性），便于复现实验
-    fixed_seed: int = 130                # 若固定网络则使用此种子（当前未在运行路径中使用，保留项）
     output_dir: str = "data"             # 仿真输出根目录，由 OutputManager 管理会话子目录
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
     
@@ -126,7 +123,7 @@ class SimulationConfig:
     enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
 
     # 智能被动传能参数
-    passive_mode: bool = True               # 是否启用智能被动传能模式（False为定时主动传能）
+    passive_mode: bool = False          # 是否启用智能被动传能模式（False为定时主动传能）
     check_interval: int = 10                # 智能检查间隔（分钟）
     critical_ratio: float = 0.2             # 低能量节点临界比例（0-1）
     energy_variance_threshold: float = 0.3  # 能量方差阈值，超过则触发传能
@@ -235,7 +232,7 @@ class ADCRConfig:
     direct_transmission_threshold: float = 0.1  # 直接传输阈值（能耗比例，0.1表示直接传输能耗不超过锚点传输的110%）
     
     # 自动画图参数
-    auto_plot: bool = True  # 是否每次重聚类后自动画图
+    auto_plot: bool = False  # 是否每次重聚类后自动画图
     plot_filename_template: str = "adcr_day{day}_t{t}.png"  # 画图文件名模板
 
     # 可视化与导出
@@ -465,17 +462,29 @@ class ConfigManager:
             output_dir=self.simulation_config.output_dir,
             use_gpu=self.simulation_config.use_gpu_acceleration,
             # 能量空洞模式参数
-            energy_hole_enabled=self.network_config.energy_hole_enabled,
-            energy_hole_ratio=self.network_config.energy_hole_ratio,
+            enable_energy_hole=self.network_config.enable_energy_hole,
             energy_hole_center_mode=self.network_config.energy_hole_center_mode,
-            energy_hole_cluster_radius=self.network_config.energy_hole_cluster_radius,
             energy_hole_mobile_ratio=self.network_config.energy_hole_mobile_ratio,
             # 能量采集参数
             enable_energy_harvesting=self.node_config.enable_energy_harvesting,
             # 能量分配模式参数
             energy_distribution_mode=self.network_config.energy_distribution_mode,
             center_energy=self.network_config.center_energy,
-            edge_energy=self.network_config.edge_energy
+            edge_energy=self.network_config.edge_energy,
+            # NodeConfig参数（传递给SensorNode）
+            capacity=self.node_config.capacity,
+            voltage=self.node_config.voltage,
+            solar_efficiency=self.node_config.solar_efficiency,
+            solar_area=self.node_config.solar_area,
+            max_solar_irradiance=self.node_config.max_solar_irradiance,
+            env_correction_factor=self.node_config.env_correction_factor,
+            energy_char=self.node_config.energy_char,
+            energy_elec=self.node_config.energy_elec,
+            epsilon_amp=self.node_config.epsilon_amp,
+            bit_rate=self.node_config.bit_rate,
+            path_loss_exponent=self.node_config.path_loss_exponent,
+            energy_decay_rate=self.node_config.energy_decay_rate,
+            sensor_energy=self.node_config.sensor_energy
         )
     
     def create_sensor_node(self, node_id: int, position: list, 
