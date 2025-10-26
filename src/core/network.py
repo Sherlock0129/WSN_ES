@@ -784,8 +784,9 @@ class Network:
             # 传输能量上限（可调策略）
             energy_sent = donor.E_char
 
-            if distance <= math.sqrt(3):
-                # 近距离直接传输：效率计算
+            # 根据路径长度判断单跳或多跳（自适应路径查找已确定最优路径）
+            if len(path) == 2:
+                # 单跳直接传输：效率计算
                 eta = donor.energy_transfer_efficiency(receiver)
                 energy_received = energy_sent * eta
                 energy_loss = energy_sent - energy_received
