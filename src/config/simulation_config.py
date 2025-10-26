@@ -52,14 +52,14 @@ class NodeConfig:
     voltage: float = 3.5             # 电池电压 V（参考值）
 
     # 太阳能采集模型（仅当节点具备太阳能能力时参与估算）
-    enable_energy_harvesting: bool = False  # 是否启用能量采集，False时能量采集量=0
+    enable_energy_harvesting: bool = True  # 是否启用能量采集，False时能量采集量=0
     solar_efficiency: float = 0.2    # 光伏转换效率（0~1）
     solar_area: float = 0.1          # 光伏面积 m^2
     max_solar_irradiance: float = 1500.0  # 峰值太阳辐照 W/m^2
     env_correction_factor: float = 1.0    # 环境修正系数（天气/遮挡等），乘在辐照上
 
     # 无线能量传输/发送参数
-    energy_char: float = 1000.0      # 单次名义可下发能量 J（捐能上限/步）
+    energy_char: float = 300.0      # 单次名义可下发能量 J（捐能上限/步）
     energy_elec: float = 1e-4        # 电子学能耗 J/bit（发送/接收基底损耗）
     epsilon_amp: float = 1e-5        # 功放损耗系数 J/bit/m^path_loss_exponent
     bit_rate: float = 1000000.0      # 数据量 bits（用于估算一次发送/接收消耗）
