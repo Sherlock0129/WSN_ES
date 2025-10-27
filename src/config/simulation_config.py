@@ -59,7 +59,7 @@ class NodeConfig:
     env_correction_factor: float = 1.0    # 环境修正系数（天气/遮挡等），乘在辐照上
 
     # 无线能量传输/发送参数
-    energy_char: float = 300.0      # 单次名义可下发能量 J（捐能上限/步）
+    energy_char: float = 1000.0      # 单次名义可下发能量 J（捐能上限/步）
     energy_elec: float = 1e-4        # 电子学能耗 J/bit（发送/接收基底损耗）
     epsilon_amp: float = 1e-5        # 功放损耗系数 J/bit/m^path_loss_exponent
     bit_rate: float = 1000000.0      # 数据量 bits（用于估算一次发送/接收消耗）
@@ -89,13 +89,13 @@ class NetworkConfig:
     min_distance: float = 0.5          # 节点间最小生成距离 m（避免过近重叠）
     random_seed: int = 128            # 随机种子（影响位置与属性抽样）
     solar_node_ratio: float = 0.6      # 具备太阳能节点比例（0~1）
-    mobile_node_ratio: float = 0.1     # 可移动节点比例（0~1，若启用移动模型）
+    mobile_node_ratio: float = 0.0     # 可移动节点比例（0~1，若启用移动模型）
     
     # 能量空洞模式配置参数（独立开关，可与任意 distribution_mode 组合）
     # 说明：启用后，非太阳能节点（1-solar_node_ratio）会聚集在某个中心附近，形成能量空洞区域
-    enable_energy_hole: bool = True    # 是否启用能量空洞模式
+    enable_energy_hole: bool = False    # 是否启用能量空洞模式
     energy_hole_center_mode: str = "random"  # 空洞中心选择模式："random"（随机节点）、"corner"（左下角）、"center"（几何中心）
-    energy_hole_mobile_ratio: float = 0.1    # 能量空洞区域中移动节点比例（0~1）
+    energy_hole_mobile_ratio: float = 0.0    # 能量空洞区域中移动节点比例（0~1）
 
     # 能量分配模式配置
     energy_distribution_mode: str = "uniform"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
@@ -123,10 +123,10 @@ class SimulationConfig:
     enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
 
     # 智能被动传能参数
-    passive_mode: bool = False          # 是否启用智能被动传能模式（False为定时主动传能）
-    check_interval: int = 10                # 智能检查间隔（分钟）
+    passive_mode: bool = True          # 是否启用智能被动传能模式（False为定时主动传能）
+    check_interval: int = 1                # 智能检查间隔（分钟）
     critical_ratio: float = 0.2             # 低能量节点临界比例（0-1）
-    energy_variance_threshold: float = 0.2  # 能量方差阈值，超过则触发传能
+    energy_variance_threshold: float = 0.1  # 能量方差阈值，超过则触发传能
     cooldown_period: int = 1               # 传能冷却期（分钟），避免频繁触发
     predictive_window: int = 60             # 预测窗口（分钟），用于预测性触发
     
@@ -142,7 +142,7 @@ class SimulationConfig:
     use_lookahead: bool = False          # 是否进行短期前瞻评估以辅助 K 调整
     
     # ADCR链路层
-    enable_adcr_link_layer: bool = True # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
+    enable_adcr_link_layer: bool = False # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
     
     # 计算加速
     use_gpu_acceleration: bool = False   # GPU 加速开关（需要安装 CuPy 与 CUDA 驱动）
