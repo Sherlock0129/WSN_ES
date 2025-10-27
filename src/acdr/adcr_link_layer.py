@@ -122,10 +122,13 @@ class ADCRLinkLayerVirtual(object):
         self.last_round_t = 0  # 从0开始，避免在t=0时执行ADCR
         
         # 虚拟中心管理器
+        # 归档文件路径将在第一次使用时由 OutputManager 设置
         self.vc = VirtualCenter(
             initial_position=(0.0, 0.0),
             update_strategy="geometric_center",
-            enable_logging=True
+            enable_logging=True,
+            history_size=1000,  # 保留最近1000条历史记录
+            archive_path=None   # 稍后通过 set_archive_path 设置
         )
         
         self.cluster_of = {}               # node_id -> ch_id
@@ -135,6 +138,34 @@ class ADCRLinkLayerVirtual(object):
 
         # 每轮通信统计
         self.last_comms = []               # list of dicts: {hop:(u->v), E_tx, E_rx, etc.}
+        
+        # 初始化虚拟中心节点信息表（填充初始值）
+        self._initialize_virtual_center_info()
+    
+    def _initialize_virtual_center_info(self):
+        """
+        初始化虚拟中心节点信息表
+        
+        在ADCR创建时立即填充所有节点的初始状态信息
+        """
+        if self.net.nodes:
+            print(f"[ADCR] 初始化虚拟中心节点信息表...")
+            self.vc.initialize_node_info(
+                nodes=self.net.nodes,
+                initial_time=0  # 初始时间为0
+            )
+            print(f"[ADCR] 虚拟中心节点信息表初始化完成，已记录 {len(self.vc.latest_info)} 个节点")
+    
+    def set_archive_path(self, session_dir: str):
+        """
+        设置虚拟中心的归档路径
+        
+        :param session_dir: 会话目录路径
+        """
+        import os
+        archive_path = os.path.join(session_dir, "virtual_center_node_info.csv")
+        self.vc.archive_path = archive_path
+        print(f"[ADCR] 虚拟中心归档路径已设置: {archive_path}")
 
     # ---------------- 估计 K* / 选簇头 / 成簇细化 ----------------
 
@@ -396,6 +427,33 @@ class ADCRLinkLayerVirtual(object):
                 "cluster_size": len(cluster_members),
                 "type": "virtual_hop"
             })
+    
+    def _update_virtual_center_info(self, t: int):
+        """
+        更新虚拟中心的节点信息表
+        
+        在ADCR通信结算后调用，将所有节点的最新状态信息上报到虚拟中心
+        
+        :param t: 当前时间步
+        """
+        if not self.consume_energy:
+            # 如果不进行能量结算，也不更新节点信息
+            return
+        
+        # 计算每个簇的聚合数据量
+        data_sizes = {}
+        for ch_id in self.ch_set:
+            data_sizes[ch_id] = self._calculate_cluster_data_size(ch_id)
+        
+        # 批量更新所有节点信息到虚拟中心
+        self.vc.batch_update_node_info(
+            nodes=self.net.nodes,
+            current_time=t,
+            cluster_mapping=self.cluster_of,
+            data_sizes=data_sizes
+        )
+        
+        print(f"[ADCR] 虚拟中心节点信息表已更新，当前记录: {len(self.vc.latest_info)} 个节点")
 
     # ---------------- Plotly 可视化 ----------------
 
@@ -577,6 +635,9 @@ class ADCRLinkLayerVirtual(object):
         # 4) 结算通信能耗（逐跳 + 虚拟跳只扣发送端）
         self._settle_comm_energy()
         print(f"[ADCR-DEBUG] Energy settlement completed, {len(self.last_comms)} communication hops processed")
+        
+        # 4.5) 更新虚拟中心节点信息表
+        self._update_virtual_center_info(t)
 
         vc_pos = self.vc.get_position()
         print("[ADCR-Link-Virtual] t={} | VC=({:.3f},{:.3f}) | K*={} | CHs={}".format(

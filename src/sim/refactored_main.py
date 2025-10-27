@@ -97,8 +97,19 @@ def run_simulation(config_file: str = None):
     logger.info("开始仿真...")
     with handle_exceptions("仿真运行", recoverable=False):
         simulation = config_manager.create_energy_simulation(network, scheduler)
+        
+        # 设置虚拟中心归档路径（如果启用了ADCR）
+        if network.adcr_link is not None:
+            network.adcr_link.set_archive_path(simulation.session_dir)
+            logger.info("虚拟中心归档路径已设置")
+        
         simulation.simulate()
         logger.info("仿真完成")
+        
+        # 强制刷新虚拟中心归档（如果启用了ADCR）
+        if network.adcr_link is not None:
+            network.adcr_link.vc.force_flush_archive()
+            logger.info("虚拟中心归档已保存")
     
     # 5. 生成可视化
     logger.info("生成可视化图表...")

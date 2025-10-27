@@ -146,6 +146,10 @@ class ParallelSimulationExecutor:
             simulation.output_dir = output_dir
             simulation.session_dir = output_dir
             
+            # 设置虚拟中心归档路径（如果启用了ADCR）
+            if network.adcr_link is not None:
+                network.adcr_link.set_archive_path(output_dir)
+            
             # 应用自定义权重
             if custom_weights:
                 simulation.w_b = custom_weights.get("w_b", simulation.w_b)
@@ -156,6 +160,10 @@ class ParallelSimulationExecutor:
             start_time = time.time()
             simulation.simulate()
             end_time = time.time()
+            
+            # 强制刷新虚拟中心归档（如果启用了ADCR）
+            if network.adcr_link is not None:
+                network.adcr_link.vc.force_flush_archive()
             
             # 计算统计信息
             final_energies = [node.current_energy for node in network.nodes]

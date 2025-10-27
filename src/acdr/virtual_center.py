@@ -18,6 +18,9 @@
 
 from __future__ import annotations
 import math
+import csv
+import os
+from collections import deque
 from typing import List, Tuple, Dict, Optional, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -37,7 +40,9 @@ class VirtualCenter:
     def __init__(self, 
                  initial_position: Tuple[float, float] = (0.0, 0.0),
                  update_strategy: str = "geometric_center",
-                 enable_logging: bool = True):
+                 enable_logging: bool = True,
+                 history_size: int = 1000,
+                 archive_path: Optional[str] = None):
         """
         初始化虚拟中心
         
@@ -47,6 +52,8 @@ class VirtualCenter:
             - "energy_weighted_center": 能量加权中心（未来扩展）
             - "fixed": 固定位置（未来扩展）
         :param enable_logging: 是否启用日志输出
+        :param history_size: 近期历史缓存大小
+        :param archive_path: 归档文件路径（如果为None，使用默认路径）
         """
         self.position: Tuple[float, float] = initial_position
         self.update_strategy = update_strategy
@@ -56,7 +63,31 @@ class VirtualCenter:
         self.anchor_node: Optional[SensorNode] = None  # 当前锚点节点
         self.last_update_time: int = -1  # 最后更新时间
         
+        # ========== 节点信息表（三级缓存） ==========
+        # L1: 最新状态表（字典，O(1)查询）
+        # 结构: {node_id: {
+        #   'energy': float,           # 节点能量
+        #   'freshness': int,          # 信息新鲜度（采集时间）
+        #   'arrival_time': int,       # 到达虚拟中心的时间
+        #   'position': (x, y),        # 节点位置
+        #   'is_solar': bool,          # 是否有太阳能
+        #   'cluster_id': int,         # 所属簇ID
+        #   'data_size': int           # 数据包大小
+        # }}
+        self.latest_info: Dict[int, Dict] = {}
+        
+        # L2: 近期历史（deque，固定大小）
+        # 每个元素: (timestamp, node_id, energy, freshness, ...)
+        self.recent_history: deque = deque(maxlen=history_size)
+        
+        # L3: 长期归档配置
+        self.archive_path = archive_path
+        self.archive_buffer = []  # 缓冲区，积累一定数量后批量写入
+        self.archive_batch_size = 100  # 批量写入大小
+        self.archive_initialized = False  # 归档文件是否已初始化
+        
         self._log(f"[VirtualCenter] 初始化虚拟中心，位置: {self.position}, 策略: {update_strategy}")
+        self._log(f"[VirtualCenter] 节点信息表已启用，历史缓存: {history_size} 条")
     
     def _log(self, message: str):
         """内部日志方法"""
@@ -359,6 +390,262 @@ class VirtualCenter:
         
         return energy_cost
     
+    # ==================== 节点信息表管理 ====================
+    
+    def update_node_info(self, node_id: int, energy: float, freshness: int, 
+                        arrival_time: int, position: Tuple[float, float] = None,
+                        is_solar: bool = None, cluster_id: int = None, 
+                        data_size: int = None):
+        """
+        更新节点信息到虚拟中心的三级缓存表
+        
+        :param node_id: 节点ID
+        :param energy: 节点能量（J）
+        :param freshness: 信息新鲜度（信息采集时刻）
+        :param arrival_time: 到达虚拟中心的时间
+        :param position: 节点位置 (x, y)
+        :param is_solar: 是否有太阳能
+        :param cluster_id: 所属簇ID
+        :param data_size: 数据包大小（bits）
+        """
+        # 构造信息记录
+        info = {
+            'energy': energy,
+            'freshness': freshness,
+            'arrival_time': arrival_time,
+            'position': position,
+            'is_solar': is_solar,
+            'cluster_id': cluster_id,
+            'data_size': data_size,
+            'age': arrival_time - freshness  # 信息年龄（延迟）
+        }
+        
+        # L1: 更新最新状态表
+        self.latest_info[node_id] = info
+        
+        # L2: 添加到近期历史
+        history_record = (arrival_time, node_id, energy, freshness, position, 
+                         is_solar, cluster_id, data_size)
+        self.recent_history.append(history_record)
+        
+        # L3: 添加到归档缓冲区
+        self.archive_buffer.append({
+            'arrival_time': arrival_time,
+            'node_id': node_id,
+            'energy': energy,
+            'freshness': freshness,
+            'age': info['age'],
+            'position_x': position[0] if position else None,
+            'position_y': position[1] if position else None,
+            'is_solar': is_solar,
+            'cluster_id': cluster_id,
+            'data_size': data_size
+        })
+        
+        # 批量写入归档
+        if len(self.archive_buffer) >= self.archive_batch_size:
+            self._flush_archive()
+        
+        self._log(f"[VirtualCenter] 更新节点信息: Node {node_id}, "
+                 f"能量={energy:.1f}J, 新鲜度={freshness}, 到达时间={arrival_time}, "
+                 f"信息年龄={info['age']}分钟")
+    
+    def batch_update_node_info(self, nodes: List[SensorNode], current_time: int,
+                               cluster_mapping: Dict[int, int] = None,
+                               data_sizes: Dict[int, int] = None):
+        """
+        批量更新多个节点的信息（通常在ADCR聚类后调用）
+        
+        :param nodes: 节点列表
+        :param current_time: 当前时间
+        :param cluster_mapping: 簇映射 {node_id: cluster_id}
+        :param data_sizes: 数据大小映射 {node_id: data_size}
+        """
+        for node in nodes:
+            cluster_id = cluster_mapping.get(node.node_id) if cluster_mapping else None
+            data_size = data_sizes.get(node.node_id) if data_sizes else None
+            
+            self.update_node_info(
+                node_id=node.node_id,
+                energy=node.current_energy,
+                freshness=current_time,  # 假设信息是当前时刻采集的
+                arrival_time=current_time,  # 批量更新时，采集和到达同时发生
+                position=tuple(node.position),
+                is_solar=node.has_solar,
+                cluster_id=cluster_id,
+                data_size=data_size
+            )
+        
+        self._log(f"[VirtualCenter] 批量更新 {len(nodes)} 个节点信息")
+    
+    def initialize_node_info(self, nodes: List[SensorNode], initial_time: int = 0):
+        """
+        初始化节点信息表（在网络创建后立即调用）
+        
+        填充所有节点的初始状态信息到虚拟中心
+        
+        :param nodes: 节点列表
+        :param initial_time: 初始时间（默认为0）
+        """
+        self._log(f"[VirtualCenter] 开始初始化节点信息表，节点数: {len(nodes)}")
+        
+        for node in nodes:
+            self.update_node_info(
+                node_id=node.node_id,
+                energy=node.initial_energy,  # 使用初始能量
+                freshness=initial_time,
+                arrival_time=initial_time,
+                position=tuple(node.position),
+                is_solar=node.has_solar,
+                cluster_id=None,  # 初始时没有簇分配
+                data_size=None    # 初始时没有数据传输
+            )
+        
+        self._log(f"[VirtualCenter] 节点信息表初始化完成，记录数: {len(self.latest_info)}")
+        
+        # 输出统计信息
+        stats = self.get_statistics()
+        self._log(f"[VirtualCenter] 初始统计 - 平均能量: {stats['avg_energy']:.1f}J, "
+                 f"太阳能节点: {stats['solar_nodes']}/{stats['total_nodes']}")
+    
+    def get_node_info(self, node_id: int) -> Optional[Dict]:
+        """
+        获取节点的最新信息（L1查询）
+        
+        :param node_id: 节点ID
+        :return: 节点信息字典，如果不存在返回None
+        """
+        return self.latest_info.get(node_id)
+    
+    def get_all_nodes_info(self) -> Dict[int, Dict]:
+        """
+        获取所有节点的最新信息
+        
+        :return: {node_id: info_dict}
+        """
+        return self.latest_info.copy()
+    
+    def get_stale_nodes(self, current_time: int, staleness_threshold: int = 30) -> List[int]:
+        """
+        获取信息过期的节点列表
+        
+        :param current_time: 当前时间
+        :param staleness_threshold: 过期阈值（分钟）
+        :return: 过期节点ID列表
+        """
+        stale_nodes = []
+        for node_id, info in self.latest_info.items():
+            age = current_time - info['freshness']
+            if age > staleness_threshold:
+                stale_nodes.append(node_id)
+        
+        return stale_nodes
+    
+    def get_low_energy_nodes(self, energy_threshold: float) -> List[Tuple[int, float]]:
+        """
+        获取低能量节点列表
+        
+        :param energy_threshold: 能量阈值
+        :return: [(node_id, energy), ...] 按能量升序排序
+        """
+        low_energy = [(nid, info['energy']) 
+                      for nid, info in self.latest_info.items() 
+                      if info['energy'] < energy_threshold]
+        return sorted(low_energy, key=lambda x: x[1])
+    
+    def get_recent_history(self, limit: int = 100) -> List:
+        """
+        获取近期历史记录（L2查询）
+        
+        :param limit: 返回的记录数量
+        :return: 历史记录列表
+        """
+        if limit >= len(self.recent_history):
+            return list(self.recent_history)
+        else:
+            return list(self.recent_history)[-limit:]
+    
+    def _flush_archive(self):
+        """
+        将缓冲区中的数据批量写入归档文件（L3持久化）
+        """
+        if not self.archive_buffer:
+            return
+        
+        if self.archive_path is None:
+            self._log("[VirtualCenter] 警告：未设置归档路径，跳过归档")
+            self.archive_buffer.clear()
+            return
+        
+        # 确保目录存在
+        os.makedirs(os.path.dirname(self.archive_path), exist_ok=True)
+        
+        # 初始化CSV文件（写入表头）
+        if not self.archive_initialized:
+            with open(self.archive_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=[
+                    'arrival_time', 'node_id', 'energy', 'freshness', 'age',
+                    'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
+                ])
+                writer.writeheader()
+            self.archive_initialized = True
+            self._log(f"[VirtualCenter] 归档文件已初始化: {self.archive_path}")
+        
+        # 追加写入数据
+        with open(self.archive_path, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                'arrival_time', 'node_id', 'energy', 'freshness', 'age',
+                'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
+            ])
+            writer.writerows(self.archive_buffer)
+        
+        self._log(f"[VirtualCenter] 归档 {len(self.archive_buffer)} 条记录到 {self.archive_path}")
+        self.archive_buffer.clear()
+    
+    def force_flush_archive(self):
+        """
+        强制刷新归档缓冲区（在模拟结束时调用）
+        """
+        if self.archive_buffer:
+            self._flush_archive()
+            self._log("[VirtualCenter] 强制刷新归档完成")
+    
+    def get_statistics(self) -> Dict:
+        """
+        获取节点信息表的统计信息
+        
+        :return: 统计信息字典
+        """
+        if not self.latest_info:
+            return {
+                'total_nodes': 0,
+                'avg_energy': 0,
+                'min_energy': 0,
+                'max_energy': 0,
+                'avg_age': 0,
+                'max_age': 0,
+                'solar_nodes': 0,
+                'non_solar_nodes': 0
+            }
+        
+        energies = [info['energy'] for info in self.latest_info.values()]
+        ages = [info['age'] for info in self.latest_info.values()]
+        solar_count = sum(1 for info in self.latest_info.values() 
+                         if info.get('is_solar', False))
+        
+        return {
+            'total_nodes': len(self.latest_info),
+            'avg_energy': sum(energies) / len(energies),
+            'min_energy': min(energies),
+            'max_energy': max(energies),
+            'avg_age': sum(ages) / len(ages) if ages else 0,
+            'max_age': max(ages) if ages else 0,
+            'solar_nodes': solar_count,
+            'non_solar_nodes': len(self.latest_info) - solar_count,
+            'history_records': len(self.recent_history),
+            'archive_buffer_size': len(self.archive_buffer)
+        }
+    
     # ==================== 可视化支持 ====================
     
     def get_visualization_data(self) -> Dict:
@@ -373,7 +660,9 @@ class VirtualCenter:
             'y': self.position[1],
             'anchor_id': self.anchor_node.node_id if self.anchor_node else None,
             'last_update_time': self.last_update_time,
-            'update_strategy': self.update_strategy
+            'update_strategy': self.update_strategy,
+            'node_count': len(self.latest_info),
+            'statistics': self.get_statistics()
         }
     
     # ==================== 扩展接口 ====================
@@ -382,7 +671,15 @@ class VirtualCenter:
         """重置虚拟中心状态"""
         self.anchor_node = None
         self.last_update_time = -1
-        self._log("[VirtualCenter] 状态已重置")
+        
+        # 清空节点信息表
+        self.latest_info.clear()
+        self.recent_history.clear()
+        
+        # 强制刷新归档
+        self.force_flush_archive()
+        
+        self._log("[VirtualCenter] 状态已重置，节点信息表已清空")
     
     def __repr__(self):
         return f"VirtualCenter(pos={self.position}, anchor={self.anchor_node.node_id if self.anchor_node else None})"
