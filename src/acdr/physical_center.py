@@ -470,6 +470,152 @@ class NodeInfoManager:
         """
         return list(self.info_nodes.values())
     
+    # ==================== 指令下发 ====================
+    
+    def _collect_command_recipients(self, plans):
+        """
+        收集需要接收指令的节点
+        
+        从传能计划中提取所有参与节点（donor、receiver、relay），
+        自动去重，确保每个节点只被通知一次。
+        
+        :param plans: 传能计划列表
+        :return: 节点集合（SensorNode对象）
+        """
+        notified_nodes = set()
+        for plan in plans:
+            # donor和receiver
+            notified_nodes.add(plan['donor'])
+            notified_nodes.add(plan['receiver'])
+            # 中继节点（path中除了起点和终点的节点）
+            if 'path' in plan and len(plan['path']) > 2:
+                for node in plan['path'][1:-1]:
+                    notified_nodes.add(node)
+        return notified_nodes
+    
+    def _execute_broadcast(self, physical_center_node, notified_nodes, command_packet_size):
+        """
+        执行指令广播并扣除能量
+        
+        计算物理中心向每个节点发送指令的能量消耗：
+        - 中心发送：E_tx
+        - 节点接收：E_rx
+        - 双向扣除能量
+        
+        :param physical_center_node: 物理中心节点实体
+        :param notified_nodes: 需要通知的节点集合
+        :param command_packet_size: 指令包大小（字节）
+        :return: (total_energy, success)
+        """
+        total_energy = 0.0
+        center_energy_cost = 0.0
+        
+        # 临时保存原始B值
+        original_B_center = physical_center_node.B
+        
+        # 第一遍：计算总能量消耗
+        for node in notified_nodes:
+            # 临时设置数据包大小
+            physical_center_node.B = command_packet_size
+            original_B_node = node.B
+            node.B = command_packet_size
+            
+            # 计算中心发送能量
+            E_tx = physical_center_node.energy_consumption(
+                target_node=node,
+                transfer_WET=False
+            )
+            
+            # 计算节点接收能量
+            E_rx = node.energy_consumption(
+                target_node=physical_center_node,
+                transfer_WET=False
+            )
+            
+            # 恢复B值
+            physical_center_node.B = original_B_center
+            node.B = original_B_node
+            
+            # 累加能量
+            center_energy_cost += E_tx
+            total_energy += (E_tx + E_rx)
+        
+        # 检查中心能量是否足够
+        if physical_center_node.current_energy < center_energy_cost:
+            self._log(f"[NodeInfoManager] 指令下发失败：物理中心能量不足")
+            self._log(f"  需要能量: {center_energy_cost:.2f}J")
+            self._log(f"  当前能量: {physical_center_node.current_energy:.2f}J")
+            return 0.0, False
+        
+        # 第二遍：扣除能量
+        # 先扣除中心能量
+        physical_center_node.current_energy -= center_energy_cost
+        
+        # 再扣除各节点的接收能量
+        for node in notified_nodes:
+            # 临时设置数据包大小
+            physical_center_node.B = command_packet_size
+            original_B_node = node.B
+            node.B = command_packet_size
+            
+            E_rx = node.energy_consumption(
+                target_node=physical_center_node,
+                transfer_WET=False
+            )
+            
+            # 恢复B值
+            physical_center_node.B = original_B_center
+            node.B = original_B_node
+            
+            node.current_energy = max(0.0, node.current_energy - E_rx)
+        
+        return total_energy, True
+    
+    def broadcast_commands(self, physical_center_node, plans, command_packet_size=1):
+        """
+        物理中心向参与节点广播执行指令
+        
+        这是物理中心的主动行为之一（另一个是接收信息上报）。
+        当调度算法生成传能计划后，物理中心需要向所有参与节点
+        （donor、receiver、relay）下发指令，告知它们执行传能。
+        
+        功能：
+        1. 收集需要通知的节点（自动去重）
+        2. 计算通信能量（双向：E_tx + E_rx）
+        3. 检查中心能量是否足够
+        4. 扣除双向能量
+        5. 返回执行结果
+        
+        :param physical_center_node: 物理中心节点实体（SensorNode）
+        :param plans: 传能计划列表
+        :param command_packet_size: 指令包大小（字节），默认1B
+        :return: (total_energy, success, affected_nodes)
+                 - total_energy: 总能量消耗（J）
+                 - success: 是否成功（能量足够）
+                 - affected_nodes: 受影响的节点列表
+        """
+        if physical_center_node is None or not plans:
+            return 0.0, True, []
+        
+        # 1. 收集需要通知的节点（去重）
+        notified_nodes = self._collect_command_recipients(plans)
+        
+        # 2. 计算并扣除能量
+        total_energy, success = self._execute_broadcast(
+            physical_center_node, 
+            notified_nodes, 
+            command_packet_size
+        )
+        
+        # 3. 记录日志
+        if success:
+            self._log(f"[NodeInfoManager] 指令广播成功：通知 {len(notified_nodes)} 个节点，"
+                     f"总能量 {total_energy:.4f}J")
+        else:
+            self._log(f"[NodeInfoManager] 指令广播失败：物理中心能量不足")
+        
+        return total_energy, success, list(notified_nodes)
+    
     # ==================== 扩展接口 ====================
     
     def reset(self):
