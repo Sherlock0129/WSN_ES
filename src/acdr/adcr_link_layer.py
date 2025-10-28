@@ -122,11 +122,27 @@ class ADCRLinkLayerVirtual(object):
         # 运行态
         self.last_round_t = 0  # 从0开始，避免在t=0时执行ADCR
         
-        # 虚拟中心管理器
+        # 物理中心信息管理器（位置固定）
         # 归档文件路径将在第一次使用时由 OutputManager 设置
+        # 获取物理中心节点位置（如果启用）
+        physical_center = self.net.get_physical_center() if hasattr(self.net, 'get_physical_center') else None
+        if physical_center:
+            initial_pos = tuple(physical_center.position)
+            print(f"[ADCR] 使用物理中心节点位置: ({initial_pos[0]:.3f}, {initial_pos[1]:.3f})")
+        else:
+            # 如果没有物理中心，使用几何中心
+            if self.net.nodes:
+                initial_pos = (
+                    sum(n.position[0] for n in self.net.nodes) / len(self.net.nodes),
+                    sum(n.position[1] for n in self.net.nodes) / len(self.net.nodes)
+                )
+                print(f"[ADCR] 使用网络几何中心: ({initial_pos[0]:.3f}, {initial_pos[1]:.3f})")
+            else:
+                initial_pos = (0.0, 0.0)
+                print(f"[ADCR] 使用默认中心位置: (0.0, 0.0)")
+        
         self.vc = VirtualCenter(
-            initial_position=(0.0, 0.0),
-            update_strategy="geometric_center",
+            initial_position=initial_pos,
             enable_logging=True,
             history_size=1000,  # 保留最近1000条历史记录
             archive_path=None   # 稍后通过 set_archive_path 设置
@@ -601,11 +617,7 @@ class ADCRLinkLayerVirtual(object):
 
         print("[ADCR-DEBUG] Starting ADCR clustering process...")
 
-        # 1) 更新虚拟中心位置（用于节点信息表的几何中心计算）
-        self.vc.update_position(self.net.nodes, current_time=t)
-        
-        # 同时更新物理中心节点的位置（保持在几何中心）
-        self.net.update_physical_center_position()
+        # 1) 获取物理中心节点（位置固定不变）
         physical_center = self.net.get_physical_center()
         if physical_center:
             print(f"[ADCR-DEBUG] Physical center (ID=0) at: ({physical_center.position[0]:.3f}, {physical_center.position[1]:.3f})")

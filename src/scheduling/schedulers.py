@@ -11,7 +11,15 @@ from routing.EEOR import eeor_find_path, eeor_find_path_adaptive
 
 # ------------------ 通用基类 ------------------
 class BaseScheduler(object):
-    def __init__(self, K=2, max_hops=5):
+    def __init__(self, node_info_manager, K=2, max_hops=5):
+        """
+        初始化调度器
+        
+        :param node_info_manager: 节点信息管理器（NodeInfoManager实例）
+        :param K: 最大捐能者数量
+        :param max_hops: 最大跳数
+        """
+        self.nim = node_info_manager
         self.K = K
         self.max_hops = max_hops
 
@@ -28,7 +36,7 @@ class BaseScheduler(object):
         - 不能作为receiver（接收者）
         - 不能作为relay（中继节点，由EEOR处理）
         
-        :param nodes: 节点列表
+        :param nodes: 节点列表（可以是InfoNode或SensorNode）
         :return: 过滤后的普通节点列表
         """
         return [n for n in nodes if not n.is_physical_center]
@@ -45,8 +53,14 @@ class BaseScheduler(object):
 # ------------------ Baseline：与你 run_routing 类似的启发式 ------------------
 class BaselineHeuristic(BaseScheduler):
     def plan(self, network, t):
+        # 从信息表获取InfoNode（常驻实例，自动同步更新）
+        info_nodes = self.nim.get_info_nodes()
+        
+        # 构建ID到真实节点的映射（用于最后转换）
+        id2node = {n.node_id: n for n in network.nodes}
+        
         # 排除物理中心节点
-        nodes = self._filter_regular_nodes(network.nodes)
+        nodes = self._filter_regular_nodes(info_nodes)
         plans = []
         used = set()
 
@@ -68,7 +82,13 @@ class BaselineHeuristic(BaseScheduler):
                 path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
                 if path is None:
                     continue
-                plans.append({"receiver": r, "donor": d, "path": path, "distance": dist})
+                
+                # 转换回真实节点对象（保持返回格式兼容）
+                receiver = id2node[r.node_id]
+                donor = id2node[d.node_id]
+                real_path = [id2node[n.node_id] for n in path]
+                
+                plans.append({"receiver": receiver, "donor": donor, "path": real_path, "distance": dist})
                 used.add(d)
                 quota -= 1
         return plans
@@ -76,8 +96,8 @@ class BaselineHeuristic(BaseScheduler):
 
 # ------------------ Lyapunov：漂移+惩罚（无需预测） ------------------
 class LyapunovScheduler(BaseScheduler):
-    def __init__(self, V=0.5, K=2, max_hops=5):
-        BaseScheduler.__init__(self, K, max_hops)
+    def __init__(self, node_info_manager, V=0.5, K=2, max_hops=5):
+        BaseScheduler.__init__(self, node_info_manager, K, max_hops)
         self.V = float(V)
 
     def _path_eta(self, path):
@@ -91,8 +111,12 @@ class LyapunovScheduler(BaseScheduler):
         return eta
 
     def plan(self, network, t):
+        # 从信息表创建InfoNode
+        info_nodes = self.nim.get_info_nodes()
+        id2node = {n.node_id: n for n in network.nodes}
+        
         # 排除物理中心节点
-        nodes = self._filter_regular_nodes(network.nodes)
+        nodes = self._filter_regular_nodes(info_nodes)
         E = np.array([n.current_energy for n in nodes], dtype=float)
         E_bar = float(E.mean())
         Q = dict((n, max(0.0, E_bar - n.current_energy)) for n in nodes)
@@ -133,10 +157,16 @@ class LyapunovScheduler(BaseScheduler):
             for sc, d, rr, path, dist, delivered, loss in cand:
                 if quota <= 0:
                     break
+                
+                # 转换回真实节点对象
+                receiver = id2node[rr.node_id]
+                donor = id2node[d.node_id]
+                real_path = [id2node[n.node_id] for n in path]
+                
                 plans.append({
-                    "receiver": rr, 
-                    "donor": d, 
-                    "path": path, 
+                    "receiver": receiver, 
+                    "donor": donor, 
+                    "path": real_path, 
                     "distance": dist,
                     "delivered": delivered,
                     "loss": loss
@@ -148,8 +178,8 @@ class LyapunovScheduler(BaseScheduler):
 
 # ------------------ Cluster：LEACH-lite 轮换簇首 + 簇内均衡 ------------------
 class ClusterScheduler(BaseScheduler):
-    def __init__(self, round_period=360, K=2, max_hops=5, p_ch=0.05):
-        BaseScheduler.__init__(self, K, max_hops)
+    def __init__(self, node_info_manager, round_period=360, K=2, max_hops=5, p_ch=0.05):
+        BaseScheduler.__init__(self, node_info_manager, K, max_hops)
         self.round_period = int(round_period)
         self.p_ch = float(p_ch)
         self.cluster_of = {}  # node_id -> ch_id
@@ -174,8 +204,12 @@ class ClusterScheduler(BaseScheduler):
             self.cluster_of[n.node_id] = best.node_id
 
     def plan(self, network, t):
+        # 从信息表创建InfoNode
+        info_nodes = self.nim.get_info_nodes()
+        real_id2node = {n.node_id: n for n in network.nodes}
+        
         # 排除物理中心节点
-        nodes = self._filter_regular_nodes(network.nodes)
+        nodes = self._filter_regular_nodes(info_nodes)
         if (t % self.round_period == 0) or (not self.cluster_of):
             self._recluster(nodes, t)
 
@@ -203,7 +237,13 @@ class ClusterScheduler(BaseScheduler):
                     path = eeor_find_path_adaptive(nodes, ch, r, max_hops=self.max_hops)
                     if path is None:
                         continue
-                    plans.append({"receiver": r, "donor": ch, "path": path, "distance": dist})
+                    
+                    # 转换回真实节点对象
+                    receiver = real_id2node[r.node_id]
+                    donor = real_id2node[ch.node_id]
+                    real_path = [real_id2node[n.node_id] for n in path]
+                    
+                    plans.append({"receiver": receiver, "donor": donor, "path": real_path, "distance": dist})
             else:
                 # 先给 CH 充能
                 highs_sorted = sorted(highs, key=lambda x: (-x.current_energy, ch.distance_to(x)))
@@ -216,30 +256,40 @@ class ClusterScheduler(BaseScheduler):
                     path = eeor_find_path_adaptive(nodes, d, ch, max_hops=self.max_hops)
                     if path is None:
                         continue
-                    plans.append({"receiver": ch, "donor": d, "path": path, "distance": dist})
+                    
+                    # 转换回真实节点对象
+                    receiver = real_id2node[ch.node_id]
+                    donor = real_id2node[d.node_id]
+                    real_path = [real_id2node[n.node_id] for n in path]
+                    
+                    plans.append({"receiver": receiver, "donor": donor, "path": real_path, "distance": dist})
                     quota -= 1
         return plans
 
 
-# ------------------ Prediction：EWMA 的“未来富余量”排序 ------------------
+# ------------------ Prediction：EWMA 的"未来富余量"排序 ------------------
 class PredictionScheduler(BaseScheduler):
-    def __init__(self, alpha=0.6, horizon_min=60, K=2, max_hops=5):
-        BaseScheduler.__init__(self, K, max_hops)
+    def __init__(self, node_info_manager, alpha=0.6, horizon_min=60, K=2, max_hops=5):
+        BaseScheduler.__init__(self, node_info_manager, K, max_hops)
         self.alpha = float(alpha)
         self.horizon = int(horizon_min)
         self.prev_harv = {}  # node_id -> 上一步的估计
 
     def _predict_harvest(self, node, t):
-        obs = node.energy_harvest(t)
+        obs = node.energy_harvest(t)  # InfoNode有简化的energy_harvest方法
         last = self.prev_harv.get(node.node_id, obs)
         est = self.alpha * obs + (1.0 - self.alpha) * last
         self.prev_harv[node.node_id] = est
-        # 近似未来一小时汇总（你的 energy_harvest 单位为“此次步瞬时能量”，这里做一个简化）
+        # 近似未来一小时汇总（你的 energy_harvest 单位为"此次步瞬时能量"，这里做一个简化）
         return est * (self.horizon / 60.0)
 
     def plan(self, network, t):
+        # 从信息表创建InfoNode
+        info_nodes = self.nim.get_info_nodes()
+        id2node = {n.node_id: n for n in network.nodes}
+        
         # 排除物理中心节点
-        nodes = self._filter_regular_nodes(network.nodes)
+        nodes = self._filter_regular_nodes(info_nodes)
         avgE = float(np.mean([n.current_energy for n in nodes]))
         pred_surplus = dict((n, (n.current_energy + self._predict_harvest(n, t))) for n in nodes)
 
@@ -262,7 +312,13 @@ class PredictionScheduler(BaseScheduler):
                 path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
                 if path is None:
                     continue
-                plans.append({"receiver": r, "donor": d, "path": path, "distance": dist})
+                
+                # 转换回真实节点对象
+                receiver = id2node[r.node_id]
+                donor = id2node[d.node_id]
+                real_path = [id2node[n.node_id] for n in path]
+                
+                plans.append({"receiver": receiver, "donor": donor, "path": real_path, "distance": dist})
                 used.add(d)
                 quota -= 1
         return plans
@@ -270,8 +326,8 @@ class PredictionScheduler(BaseScheduler):
 
 # ------------------ PowerControl：EAST-like 的功率/下发量收缩 ------------------
 class PowerControlScheduler(BaseScheduler):
-    def __init__(self, target_eta=0.25, K=2, max_hops=5):
-        BaseScheduler.__init__(self, K, max_hops)
+    def __init__(self, node_info_manager, target_eta=0.25, K=2, max_hops=5):
+        BaseScheduler.__init__(self, node_info_manager, K, max_hops)
         self.target_eta = float(target_eta)
 
     def _path_eta(self, path):
@@ -285,8 +341,12 @@ class PowerControlScheduler(BaseScheduler):
         return eta
 
     def plan(self, network, t):
+        # 从信息表创建InfoNode
+        info_nodes = self.nim.get_info_nodes()
+        id2node = {n.node_id: n for n in network.nodes}
+        
         # 排除物理中心节点
-        nodes = self._filter_regular_nodes(network.nodes)
+        nodes = self._filter_regular_nodes(info_nodes)
         avgE = float(np.mean([n.current_energy for n in nodes]))
         receivers = sorted([n for n in nodes if n.current_energy < avgE],
                            key=lambda n: (avgE - n.current_energy), reverse=True)
@@ -309,8 +369,14 @@ class PowerControlScheduler(BaseScheduler):
                 E_char = getattr(d, "E_char", 300.0)
                 scale = min(1.0, self.target_eta / eta)  # 低效率→更小发送量
                 energy_sent = max(0.0, E_char * scale)
+                
+                # 转换回真实节点对象
+                receiver = id2node[r.node_id]
+                donor = id2node[d.node_id]
+                real_path = [id2node[n.node_id] for n in path]
+                
                 plans.append({
-                    "receiver": r, "donor": d, "path": path, "distance": dist,
+                    "receiver": receiver, "donor": donor, "path": real_path, "distance": dist,
                     "energy_sent": energy_sent
                 })
                 used.add(d)

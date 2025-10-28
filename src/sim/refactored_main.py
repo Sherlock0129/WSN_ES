@@ -22,25 +22,61 @@ from viz.plotter import plot_node_distribution, plot_energy_over_time
 from sim.parallel_executor import ParallelSimulationExecutor
 
 
-def create_scheduler(config_manager: ConfigManager):
-    """根据配置创建调度器"""
+def create_scheduler(config_manager: ConfigManager, network):
+    """
+    根据配置创建调度器
+    
+    :param config_manager: 配置管理器
+    :param network: 网络对象
+    :return: 调度器实例
+    """
     scheduler_type = config_manager.scheduler_config.scheduler_type
     scheduler_params = config_manager.get_scheduler_params()
     
+    # 获取节点信息管理器（从ADCR或PathCollector）
+    node_info_manager = None
+    if hasattr(network, 'adcr_link') and network.adcr_link is not None:
+        node_info_manager = network.adcr_link.vc
+        logger.info("调度器使用ADCR的节点信息管理器")
+    elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+        node_info_manager = network.path_info_collector.vc
+        logger.info("调度器使用PathCollector的节点信息管理器")
+    else:
+        # 如果没有信息管理器，创建一个独立的
+        from acdr.physical_center import NodeInfoManager
+        physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
+        if physical_center:
+            initial_pos = tuple(physical_center.position)
+        else:
+            nodes = network.nodes
+            initial_pos = (
+                sum(n.position[0] for n in nodes) / len(nodes),
+                sum(n.position[1] for n in nodes) / len(nodes)
+            )
+        node_info_manager = NodeInfoManager(initial_position=initial_pos, enable_logging=False)
+        node_info_manager.initialize_node_info(network.nodes, initial_time=0)
+        logger.info("调度器创建了独立的节点信息管理器")
+    
+    # 添加node_info_manager到参数中
+    scheduler_params['node_info_manager'] = node_info_manager
+    
     logger.info(f"创建调度器: {scheduler_type}")
     
+    # 创建调度器
     if scheduler_type == "LyapunovScheduler":
-        return LyapunovScheduler(**scheduler_params)
+        scheduler = LyapunovScheduler(**scheduler_params)
     elif scheduler_type == "ClusterScheduler":
-        return ClusterScheduler(**scheduler_params)
+        scheduler = ClusterScheduler(**scheduler_params)
     elif scheduler_type == "PredictionScheduler":
-        return PredictionScheduler(**scheduler_params)
+        scheduler = PredictionScheduler(**scheduler_params)
     elif scheduler_type == "PowerControlScheduler":
-        return PowerControlScheduler(**scheduler_params)
+        scheduler = PowerControlScheduler(**scheduler_params)
     elif scheduler_type == "BaselineHeuristic":
-        return BaselineHeuristic(**scheduler_params)
+        scheduler = BaselineHeuristic(**scheduler_params)
     else:
         raise ValueError(f"未知的调度器类型: {scheduler_type}")
+    
+    return scheduler
 
 
 def run_simulation(config_file: str = None):
@@ -99,9 +135,20 @@ def run_simulation(config_file: str = None):
             else:
                 # 创建独立的虚拟中心
                 from acdr.physical_center import VirtualCenter
-                vc = VirtualCenter(enable_logging=True)
+                # 获取物理中心节点位置（如果启用）
+                physical_center = network.get_physical_center()
+                if physical_center:
+                    initial_pos = tuple(physical_center.position)
+                else:
+                    # 如果没有物理中心，使用几何中心
+                    nodes = network.get_regular_nodes() if hasattr(network, 'get_regular_nodes') else network.nodes
+                    initial_pos = (
+                        sum(n.position[0] for n in nodes) / len(nodes),
+                        sum(n.position[1] for n in nodes) / len(nodes)
+                    )
+                vc = VirtualCenter(initial_position=initial_pos, enable_logging=True)
                 vc.initialize_node_info(network.nodes, initial_time=0)
-                logger.info("创建独立虚拟中心")
+                logger.info(f"创建独立虚拟中心，位置: ({initial_pos[0]:.3f}, {initial_pos[1]:.3f})")
             
             # 创建路径信息收集器，传递物理中心节点
             physical_center = network.get_physical_center()
@@ -114,7 +161,7 @@ def run_simulation(config_file: str = None):
     # 3. 创建调度器
     logger.info("创建调度器...")
     with handle_exceptions("调度器创建", recoverable=False):
-        scheduler = create_scheduler(config_manager)
+        scheduler = create_scheduler(config_manager, network)
         logger.info(f"调度器创建完成: {scheduler.get_name()}")
     
     # 4. 运行仿真

@@ -138,7 +138,7 @@ class ParallelSimulationExecutor:
                 network.adcr_link = None
             
             # 创建调度器
-            scheduler = self._create_scheduler(config_manager)
+            scheduler = self._create_scheduler(config_manager, network)
             
             # 创建仿真（使用统一的输出目录）
             simulation = config_manager.create_energy_simulation(network, scheduler)
@@ -210,20 +210,41 @@ class ParallelSimulationExecutor:
                 "duration": 0
             }
     
-    def _create_scheduler(self, config_manager: ConfigManager):
+    def _create_scheduler(self, config_manager: ConfigManager, network):
         """创建调度器"""
         scheduler_type = config_manager.scheduler_config.scheduler_type
         
+        # 获取节点信息管理器（从ADCR）
+        if hasattr(network, 'adcr_link') and network.adcr_link is not None:
+            node_info_manager = network.adcr_link.vc
+        else:
+            # 创建独立的节点信息管理器
+            from acdr.physical_center import NodeInfoManager
+            physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
+            if physical_center:
+                initial_pos = tuple(physical_center.position)
+            else:
+                nodes = network.nodes
+                initial_pos = (
+                    sum(n.position[0] for n in nodes) / len(nodes),
+                    sum(n.position[1] for n in nodes) / len(nodes)
+                )
+            node_info_manager = NodeInfoManager(initial_position=initial_pos, enable_logging=False)
+            node_info_manager.initialize_node_info(network.nodes, initial_time=0)
+        
+        # 创建调度器
         if scheduler_type == "LyapunovScheduler":
             from scheduling.schedulers import LyapunovScheduler
-            return LyapunovScheduler(
+            scheduler = LyapunovScheduler(
+                node_info_manager=node_info_manager,
                 V=config_manager.scheduler_config.lyapunov_v,
                 K=config_manager.scheduler_config.lyapunov_k,
                 max_hops=config_manager.network_config.max_hops
             )
         elif scheduler_type == "ClusterScheduler":
             from scheduling.schedulers import ClusterScheduler
-            return ClusterScheduler(
+            scheduler = ClusterScheduler(
+                node_info_manager=node_info_manager,
                 round_period=config_manager.scheduler_config.cluster_round_period,
                 K=config_manager.scheduler_config.lyapunov_k,
                 max_hops=config_manager.network_config.max_hops,
@@ -231,7 +252,8 @@ class ParallelSimulationExecutor:
             )
         elif scheduler_type == "PredictionScheduler":
             from scheduling.schedulers import PredictionScheduler
-            return PredictionScheduler(
+            scheduler = PredictionScheduler(
+                node_info_manager=node_info_manager,
                 alpha=config_manager.scheduler_config.prediction_alpha,
                 horizon_min=config_manager.scheduler_config.prediction_horizon,
                 K=config_manager.scheduler_config.lyapunov_k,
@@ -239,17 +261,21 @@ class ParallelSimulationExecutor:
             )
         elif scheduler_type == "PowerControlScheduler":
             from scheduling.schedulers import PowerControlScheduler
-            return PowerControlScheduler(
+            scheduler = PowerControlScheduler(
+                node_info_manager=node_info_manager,
                 target_eta=config_manager.scheduler_config.power_target_eta,
                 K=config_manager.scheduler_config.lyapunov_k,
                 max_hops=config_manager.network_config.max_hops
             )
         else:
             from scheduling.schedulers import BaselineHeuristic
-            return BaselineHeuristic(
+            scheduler = BaselineHeuristic(
+                node_info_manager=node_info_manager,
                 K=config_manager.scheduler_config.lyapunov_k,
                 max_hops=config_manager.network_config.max_hops
             )
+        
+        return scheduler
     
     def _save_individual_result(self, simulation, output_dir: str, run_id: int, custom_weights: Optional[Dict[str, float]] = None):
         """保存单次运行结果"""

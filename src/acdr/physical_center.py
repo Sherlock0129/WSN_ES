@@ -1,23 +1,23 @@
 # src/acdr/physical_center.py
 # -*- coding: utf-8 -*-
 """
-物理中心节点信息管理模块
+节点信息管理模块
 
 职责：
-1. 管理物理中心节点位置（网络几何中心）
-2. 维护全网节点信息表（三级缓存：内存 → 历史 → 归档）
-3. 提供节点信息查询和统计功能
-4. 支持可视化数据导出
+1. 维护全网节点信息表（三级缓存：内存 → 历史 → 归档）
+2. 提供节点信息查询和统计功能
+3. 支持可视化数据导出
+4. 管理物理中心的位置信息（固定不变）
 
 说明：
-本模块用于管理物理中心节点（ID=0）收集到的网络节点信息。
-物理中心节点是一个真实的SensorNode，位于网络几何中心，
-负责汇总和存储所有节点的状态信息（能量、位置、新鲜度等）。
+本模块为物理中心节点（ID=0）提供信息表管理功能。
+物理中心节点是一个真实的SensorNode（由Network类管理），
+位于网络几何中心，负责汇总和存储所有节点的状态信息（能量、位置、新鲜度等）。
 
 设计原则：
-- 单一职责：只负责信息表管理和位置计算
+- 单一职责：只负责信息表管理，不持有节点实体
 - 高性能：三级缓存架构（L1:字典 L2:deque L3:CSV）
-- 可扩展：支持不同的位置更新策略
+- 轻量级：与物理中心节点实体（SensorNode）解耦
 """
 
 from __future__ import annotations
@@ -29,42 +29,37 @@ from typing import List, Tuple, Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.SensorNode import SensorNode
+    from scheduling.info_node import InfoNode
 
 
-class VirtualCenter:
+class NodeInfoManager:
     """
-    物理中心节点信息管理类
+    节点信息管理类
     
     功能：
-    - 计算和维护物理中心节点的位置（通常为网络几何中心）
+    - 管理物理中心节点的位置信息（固定不变）
     - 管理全网节点信息表（能量、新鲜度、位置等）
     - 提供三级缓存架构的高效信息存储和查询
     
     注意：
-    本类不持有物理中心的SensorNode实例，仅管理信息表和位置计算。
+    本类不持有物理中心的SensorNode实例，仅管理信息表。
     物理中心节点实体由Network类管理（nodes列表中ID=0的节点）。
     """
     
     def __init__(self, 
                  initial_position: Tuple[float, float] = (0.0, 0.0),
-                 update_strategy: str = "geometric_center",
                  enable_logging: bool = True,
                  history_size: int = 1000,
                  archive_path: Optional[str] = None):
         """
         初始化物理中心信息管理器
         
-        :param initial_position: 初始位置 (x, y)
-        :param update_strategy: 位置更新策略
-            - "geometric_center": 几何中心（所有节点位置的算术平均）
-            - "energy_weighted_center": 能量加权中心（未来扩展）
-            - "fixed": 固定位置（未来扩展）
+        :param initial_position: 初始位置 (x, y) - 固定不变
         :param enable_logging: 是否启用日志输出
         :param history_size: 近期历史缓存大小
         :param archive_path: 归档文件路径（如果为None，需后续设置）
         """
         self.position: Tuple[float, float] = initial_position
-        self.update_strategy = update_strategy
         self.enable_logging = enable_logging
         self.last_update_time: int = -1  # 最后更新时间
         
@@ -93,8 +88,16 @@ class VirtualCenter:
         self.archive_batch_size = 100  # 批量写入大小
         self.archive_initialized = False  # 归档文件是否已初始化
         
-        self._log(f"[PhysicalCenter] 初始化信息管理器，位置: {self.position}, 策略: {update_strategy}")
-        self._log(f"[PhysicalCenter] 节点信息表已启用，历史缓存: {history_size} 条")
+        # ========== InfoNode常驻缓存 ==========
+        # 存储所有节点的InfoNode实例，key为node_id
+        # 在initialize_node_info时创建，在update_node_info时更新
+        self.info_nodes: Dict[int, 'InfoNode'] = {}
+        
+        # 能量传输参数缓存（从真实节点复制一次）
+        self.energy_params: Dict[int, Dict] = {}
+        
+        self._log(f"[NodeInfoManager] 初始化信息管理器，固定位置: {self.position}")
+        self._log(f"[NodeInfoManager] 节点信息表已启用，历史缓存: {history_size} 条")
     
     def _log(self, message: str):
         """内部日志方法"""
@@ -103,65 +106,9 @@ class VirtualCenter:
     
     # ==================== 位置管理 ====================
     
-    def update_position(self, nodes: List[SensorNode], current_time: int = None) -> Tuple[float, float]:
-        """
-        更新物理中心位置
-        
-        注意：此方法只计算位置，不更新实际的物理中心节点。
-        实际的物理中心节点位置由Network类的update_physical_center_position()方法更新。
-        
-        :param nodes: 网络中的所有节点（通常应传入普通节点，不包括物理中心）
-        :param current_time: 当前时间步（可选，用于记录）
-        :return: 更新后的位置 (x, y)
-        """
-        if not nodes:
-            self._log("[PhysicalCenter] 警告：没有节点，保持当前位置")
-            return self.position
-        
-        if self.update_strategy == "geometric_center":
-            self.position = self._calculate_geometric_center(nodes)
-        elif self.update_strategy == "energy_weighted_center":
-            self.position = self._calculate_energy_weighted_center(nodes)
-        elif self.update_strategy == "fixed":
-            pass  # 保持不变
-        else:
-            self._log(f"[PhysicalCenter] 警告：未知策略 '{self.update_strategy}'，使用几何中心")
-            self.position = self._calculate_geometric_center(nodes)
-        
-        if current_time is not None:
-            self.last_update_time = current_time
-        
-        self._log(f"[PhysicalCenter] 位置更新为: ({self.position[0]:.3f}, {self.position[1]:.3f})")
-        return self.position
-    
-    def _calculate_geometric_center(self, nodes: List[SensorNode]) -> Tuple[float, float]:
-        """计算几何中心（所有节点位置的算术平均）"""
-        xs = [n.position[0] for n in nodes]
-        ys = [n.position[1] for n in nodes]
-        return (sum(xs) / len(xs), sum(ys) / len(ys))
-    
-    def _calculate_energy_weighted_center(self, nodes: List[SensorNode]) -> Tuple[float, float]:
-        """
-        计算能量加权中心（能量越高的节点权重越大）
-        
-        未来扩展：可以让物理中心偏向能量充足的区域
-        """
-        total_energy = sum(n.current_energy for n in nodes)
-        if total_energy == 0:
-            return self._calculate_geometric_center(nodes)
-        
-        weighted_x = sum(n.position[0] * n.current_energy for n in nodes) / total_energy
-        weighted_y = sum(n.position[1] * n.current_energy for n in nodes) / total_energy
-        return (weighted_x, weighted_y)
-    
     def get_position(self) -> Tuple[float, float]:
-        """获取当前计算的物理中心位置"""
+        """获取物理中心位置（固定不变）"""
         return self.position
-    
-    def set_position(self, x: float, y: float):
-        """手动设置位置（用于固定位置模式）"""
-        self.position = (x, y)
-        self._log(f"[PhysicalCenter] 手动设置位置: ({x:.3f}, {y:.3f})")
     
     # ==================== 距离计算 ====================
     
@@ -236,7 +183,14 @@ class VirtualCenter:
         if len(self.archive_buffer) >= self.archive_batch_size:
             self._flush_archive()
         
-        self._log(f"[PhysicalCenter] 更新节点信息: Node {node_id}, "
+        # 同步更新InfoNode（如果已创建）
+        if node_id in self.info_nodes:
+            info_node = self.info_nodes[node_id]
+            info_node.current_energy = energy
+            if position is not None:
+                info_node.position = list(position)
+        
+        self._log(f"[NodeInfoManager] 更新节点信息: Node {node_id}, "
                  f"能量={energy:.1f}J, 新鲜度={freshness}, 到达时间={arrival_time}, "
                  f"信息年龄={info['age']}分钟")
     
@@ -266,19 +220,23 @@ class VirtualCenter:
                 data_size=data_size
             )
         
-        self._log(f"[PhysicalCenter] 批量更新 {len(nodes)} 个节点信息")
+        self._log(f"[NodeInfoManager] 批量更新 {len(nodes)} 个节点信息")
     
     def initialize_node_info(self, nodes: List[SensorNode], initial_time: int = 0):
         """
         初始化节点信息表（在网络创建后立即调用）
         
-        填充所有节点的初始状态信息到物理中心
+        填充所有节点的初始状态信息到物理中心，并创建InfoNode实例
         
         :param nodes: 节点列表
         :param initial_time: 初始时间（默认为0）
         """
-        self._log(f"[PhysicalCenter] 开始初始化节点信息表，节点数: {len(nodes)}")
+        self._log(f"[NodeInfoManager] 开始初始化节点信息表，节点数: {len(nodes)}")
         
+        # 先缓存所有节点的能量传输参数
+        self._cache_energy_params(nodes)
+        
+        # 更新信息表并创建InfoNode
         for node in nodes:
             self.update_node_info(
                 node_id=node.node_id,
@@ -291,11 +249,15 @@ class VirtualCenter:
                 data_size=None    # 初始时没有数据传输
             )
         
-        self._log(f"[PhysicalCenter] 节点信息表初始化完成，记录数: {len(self.latest_info)}")
+        # 创建所有InfoNode实例
+        self._create_info_nodes()
+        
+        self._log(f"[NodeInfoManager] 节点信息表初始化完成，记录数: {len(self.latest_info)}")
+        self._log(f"[NodeInfoManager] InfoNode实例创建完成，数量: {len(self.info_nodes)}")
         
         # 输出统计信息
         stats = self.get_statistics()
-        self._log(f"[PhysicalCenter] 初始统计 - 平均能量: {stats['avg_energy']:.1f}J, "
+        self._log(f"[NodeInfoManager] 初始统计 - 平均能量: {stats['avg_energy']:.1f}J, "
                  f"太阳能节点: {stats['solar_nodes']}/{stats['total_nodes']}")
     
     def get_node_info(self, node_id: int) -> Optional[Dict]:
@@ -363,7 +325,7 @@ class VirtualCenter:
             return
         
         if self.archive_path is None:
-            self._log("[PhysicalCenter] 警告：未设置归档路径，跳过归档")
+            self._log("[NodeInfoManager] 警告：未设置归档路径，跳过归档")
             self.archive_buffer.clear()
             return
         
@@ -379,7 +341,7 @@ class VirtualCenter:
                 ])
                 writer.writeheader()
             self.archive_initialized = True
-            self._log(f"[PhysicalCenter] 归档文件已初始化: {self.archive_path}")
+            self._log(f"[NodeInfoManager] 归档文件已初始化: {self.archive_path}")
         
         # 追加写入数据
         with open(self.archive_path, 'a', newline='', encoding='utf-8') as f:
@@ -389,7 +351,7 @@ class VirtualCenter:
             ])
             writer.writerows(self.archive_buffer)
         
-        self._log(f"[PhysicalCenter] 归档 {len(self.archive_buffer)} 条记录到 {self.archive_path}")
+        self._log(f"[NodeInfoManager] 归档 {len(self.archive_buffer)} 条记录到 {self.archive_path}")
         self.archive_buffer.clear()
     
     def force_flush_archive(self):
@@ -398,7 +360,7 @@ class VirtualCenter:
         """
         if self.archive_buffer:
             self._flush_archive()
-            self._log("[PhysicalCenter] 强制刷新归档完成")
+            self._log("[NodeInfoManager] 强制刷新归档完成")
     
     def get_statistics(self) -> Dict:
         """
@@ -449,10 +411,64 @@ class VirtualCenter:
             'x': self.position[0],
             'y': self.position[1],
             'last_update_time': self.last_update_time,
-            'update_strategy': self.update_strategy,
             'node_count': len(self.latest_info),
             'statistics': self.get_statistics()
         }
+    
+    # ==================== InfoNode管理 ====================
+    
+    def _cache_energy_params(self, nodes: List[SensorNode]):
+        """
+        缓存所有节点的能量传输参数（内部方法，在初始化时调用）
+        
+        :param nodes: 节点列表
+        """
+        for node in nodes:
+            self.energy_params[node.node_id] = {
+                'energy_char': getattr(node, 'energy_char', 300.0),
+                'energy_elec': getattr(node, 'energy_elec', 1e-4),
+                'epsilon_amp': getattr(node, 'epsilon_amp', 1e-5),
+                'bit_rate': getattr(node, 'bit_rate', 1000000.0),
+                'path_loss_exponent': getattr(node, 'path_loss_exponent', 2.0),
+                'sensor_energy': getattr(node, 'sensor_energy', 0.1),
+            }
+        self._log(f"[NodeInfoManager] 缓存 {len(self.energy_params)} 个节点的能量传输参数")
+    
+    def _create_info_nodes(self):
+        """
+        创建所有InfoNode实例（内部方法，在初始化时调用）
+        
+        基于latest_info和energy_params创建InfoNode实例，
+        存储在self.info_nodes字典中。
+        """
+        from scheduling.info_node import InfoNode
+        
+        for node_id, info in self.latest_info.items():
+            # 获取该节点的能量传输参数
+            params = self.energy_params.get(node_id, {})
+            
+            info_node = InfoNode(
+                node_id=node_id,
+                energy=info['energy'],
+                position=info['position'],
+                is_solar=info.get('is_solar', False),
+                is_physical_center=(node_id == 0),  # 物理中心ID固定为0
+                **params
+            )
+            self.info_nodes[node_id] = info_node
+        
+        self._log(f"[NodeInfoManager] 创建 {len(self.info_nodes)} 个InfoNode实例")
+    
+    def get_info_nodes(self) -> List['InfoNode']:
+        """
+        获取所有InfoNode实例的列表
+        
+        这些InfoNode实例会随着信息表的更新而自动同步更新。
+        调度器和路由算法可以直接使用这些实例。
+        
+        :return: InfoNode列表
+        """
+        return list(self.info_nodes.values())
     
     # ==================== 扩展接口 ====================
     
@@ -467,23 +483,29 @@ class VirtualCenter:
         # 强制刷新归档
         self.force_flush_archive()
         
-        self._log("[PhysicalCenter] 状态已重置，节点信息表已清空")
+        self._log("[NodeInfoManager] 状态已重置，节点信息表已清空")
     
     def __repr__(self):
-        return f"PhysicalCenter(pos={self.position}, nodes={len(self.latest_info)})"
+        return f"NodeInfoManager(pos={self.position}, nodes={len(self.latest_info)})"
     
     def __str__(self):
-        return f"物理中心 @ ({self.position[0]:.2f}, {self.position[1]:.2f})"
+        return f"节点信息管理器 @ ({self.position[0]:.2f}, {self.position[1]:.2f})"
 
 
 # ==================== 工厂方法 ====================
 
-def create_virtual_center(strategy: str = "geometric_center", **kwargs) -> VirtualCenter:
+def create_node_info_manager(**kwargs) -> NodeInfoManager:
     """
-    工厂方法：创建物理中心信息管理器实例
+    工厂方法：创建节点信息管理器实例
     
-    :param strategy: 位置更新策略
-    :param kwargs: 其他初始化参数
-    :return: VirtualCenter 实例
+    :param kwargs: 初始化参数
+    :return: NodeInfoManager 实例
     """
-    return VirtualCenter(update_strategy=strategy, **kwargs)
+    return NodeInfoManager(**kwargs)
+
+
+# ==================== 向后兼容 ====================
+
+# 为了兼容旧代码，保留别名
+VirtualCenter = NodeInfoManager
+create_virtual_center = create_node_info_manager

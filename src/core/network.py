@@ -171,23 +171,8 @@ class Network:
         return [n for n in self.nodes if not n.is_physical_center]
     
     def get_physical_center(self) -> SensorNode:
-        """获取物理中心节点"""
+        """获取物理中心节点（位置固定不变）"""
         return self.physical_center
-    
-    def update_physical_center_position(self):
-        """更新物理中心位置到当前网络的几何中心"""
-        if not self.physical_center:
-            return
-        
-        regular_nodes = self.get_regular_nodes()
-        if not regular_nodes:
-            return
-        
-        center_x = sum(n.position[0] for n in regular_nodes) / len(regular_nodes)
-        center_y = sum(n.position[1] for n in regular_nodes) / len(regular_nodes)
-        
-        self.physical_center.position = [center_x, center_y]
-        print(f"[Network] 物理中心位置更新为: ({center_x:.3f}, {center_y:.3f})")
 
 
 
