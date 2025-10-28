@@ -22,15 +22,26 @@ def _build_neighbors(nodes):
     return nmap, ndict
 
 def _build_neighbors_adaptive(nodes, target_neighbors=6):
-    """自适应邻居发现：动态调整通信范围，使每个节点有目标数量的邻居"""
+    """
+    自适应邻居发现：动态调整通信范围，使每个节点有目标数量的邻居
+    
+    注意：物理中心节点（ID=0）完全不参与能量传输，在邻居构建时直接排除
+    """
     nmap = {n.node_id: [] for n in nodes}
     ndict = {n.node_id: n for n in nodes}
     
     for ni in nodes:
+        # 排除物理中心节点（ID=0完全不参与WET）
+        if hasattr(ni, 'is_physical_center') and ni.is_physical_center:
+            continue
+        
         # 1. 计算到所有其他节点的距离
         distances = []
         for nj in nodes:
             if ni != nj:
+                # 排除物理中心节点作为邻居
+                if hasattr(nj, 'is_physical_center') and nj.is_physical_center:
+                    continue
                 d = ni.distance_to(nj)
                 distances.append((d, nj))
         
@@ -218,7 +229,11 @@ def eeor_find_path(nodes, source_node, dest_node, max_hops=5):
     return path
 
 def eeor_find_path_adaptive(nodes, source_node, dest_node, max_hops=5, target_neighbors=6):
-    """使用自适应邻居发现的EEOR路径查找"""
+    """
+    使用自适应邻居发现的EEOR路径查找
+    
+    注意：物理中心节点（ID=0）已在邻居构建阶段被排除，完全不参与能量传输
+    """
     C, FWD = eeor_compute_costs_adaptive(nodes, dest_node.node_id, target_neighbors=target_neighbors)
 
     path = [source_node]
@@ -229,11 +244,13 @@ def eeor_find_path_adaptive(nodes, source_node, dest_node, max_hops=5, target_ne
         fwd = FWD.get(cur, [])
         if not fwd:
             break
+        
         # 选其前缀中 C 最小者（已是升序，取第一个）
         nxt = fwd[0]
         # 避免环
         if nxt == cur or any(n.node_id == nxt for n in path):
             break
+        
         path.append(next(n for n in nodes if n.node_id == nxt))
         cur = nxt
         hops += 1

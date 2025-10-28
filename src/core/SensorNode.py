@@ -31,7 +31,9 @@ class SensorNode:
                  # 移动性参数
                  is_mobile: bool = False,
                  mobility_pattern: str = None,
-                 mobility_params: dict = None):
+                 mobility_params: dict = None,
+                 # 物理中心标识
+                 is_physical_center: bool = False):
         """
         初始化传感器节点
         
@@ -57,10 +59,12 @@ class SensorNode:
         :param is_mobile: 是否可移动
         :param mobility_pattern: 移动模式
         :param mobility_params: 移动参数
+        :param is_physical_center: 是否为物理中心节点（特殊节点，不参与WET）
         """
         self.node_id = node_id
         self.position = position  # [x, y] position of the node
         self.has_solar = has_solar
+        self.is_physical_center = is_physical_center  # 物理中心节点标识
 
         # Energy management parameters
         self.initial_energy = initial_energy
@@ -106,6 +110,12 @@ class SensorNode:
 
         # 在 __init__ 里：
         self.position_history = [tuple(self.position)]
+        
+        # 如果是物理中心节点，打印特殊信息
+        if self.is_physical_center:
+            print(f"[SensorNode] 创建物理中心节点 ID={self.node_id}, "
+                  f"位置=({self.position[0]:.3f}, {self.position[1]:.3f}), "
+                  f"初始能量={self.initial_energy:.1f}J")
 
     def record_transfer(self, received=0, transferred=0):
         """

@@ -22,25 +22,61 @@ from viz.plotter import plot_node_distribution, plot_energy_over_time
 from sim.parallel_executor import ParallelSimulationExecutor
 
 
-def create_scheduler(config_manager: ConfigManager):
-    """根据配置创建调度器"""
+def create_scheduler(config_manager: ConfigManager, network):
+    """
+    根据配置创建调度器
+    
+    :param config_manager: 配置管理器
+    :param network: 网络对象
+    :return: 调度器实例
+    """
     scheduler_type = config_manager.scheduler_config.scheduler_type
     scheduler_params = config_manager.get_scheduler_params()
     
+    # 获取节点信息管理器（从ADCR或PathCollector）
+    node_info_manager = None
+    if hasattr(network, 'adcr_link') and network.adcr_link is not None:
+        node_info_manager = network.adcr_link.vc
+        logger.info("调度器使用ADCR的节点信息管理器")
+    elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+        node_info_manager = network.path_info_collector.vc
+        logger.info("调度器使用PathCollector的节点信息管理器")
+    else:
+        # 如果没有信息管理器，创建一个独立的
+        from acdr.physical_center import NodeInfoManager
+        physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
+        if physical_center:
+            initial_pos = tuple(physical_center.position)
+        else:
+            nodes = network.nodes
+            initial_pos = (
+                sum(n.position[0] for n in nodes) / len(nodes),
+                sum(n.position[1] for n in nodes) / len(nodes)
+            )
+        node_info_manager = NodeInfoManager(initial_position=initial_pos, enable_logging=False)
+        node_info_manager.initialize_node_info(network.nodes, initial_time=0)
+        logger.info("调度器创建了独立的节点信息管理器")
+    
+    # 添加node_info_manager到参数中
+    scheduler_params['node_info_manager'] = node_info_manager
+    
     logger.info(f"创建调度器: {scheduler_type}")
     
+    # 创建调度器
     if scheduler_type == "LyapunovScheduler":
-        return LyapunovScheduler(**scheduler_params)
+        scheduler = LyapunovScheduler(**scheduler_params)
     elif scheduler_type == "ClusterScheduler":
-        return ClusterScheduler(**scheduler_params)
+        scheduler = ClusterScheduler(**scheduler_params)
     elif scheduler_type == "PredictionScheduler":
-        return PredictionScheduler(**scheduler_params)
+        scheduler = PredictionScheduler(**scheduler_params)
     elif scheduler_type == "PowerControlScheduler":
-        return PowerControlScheduler(**scheduler_params)
+        scheduler = PowerControlScheduler(**scheduler_params)
     elif scheduler_type == "BaselineHeuristic":
-        return BaselineHeuristic(**scheduler_params)
+        scheduler = BaselineHeuristic(**scheduler_params)
     else:
         raise ValueError(f"未知的调度器类型: {scheduler_type}")
+    
+    return scheduler
 
 
 def run_simulation(config_file: str = None):
@@ -87,18 +123,74 @@ def run_simulation(config_file: str = None):
         logger.info("ADCR链路层已禁用")
         network.adcr_link = None
     
+    # 2.6. 创建路径信息收集器（可选）
+    if config_manager.path_collector_config.enable_path_collector:
+        logger.info("创建路径信息收集器...")
+        with handle_exceptions("路径信息收集器创建", recoverable=True):
+            # 确保有虚拟中心（来自ADCR或独立创建）
+            if network.adcr_link is not None:
+                # 使用ADCR的虚拟中心
+                vc = network.adcr_link.vc
+                logger.info("使用ADCR的虚拟中心")
+            else:
+                # 创建独立的虚拟中心
+                from acdr.physical_center import VirtualCenter
+                # 获取物理中心节点位置（如果启用）
+                physical_center = network.get_physical_center()
+                if physical_center:
+                    initial_pos = tuple(physical_center.position)
+                else:
+                    # 如果没有物理中心，使用几何中心
+                    nodes = network.get_regular_nodes() if hasattr(network, 'get_regular_nodes') else network.nodes
+                    initial_pos = (
+                        sum(n.position[0] for n in nodes) / len(nodes),
+                        sum(n.position[1] for n in nodes) / len(nodes)
+                    )
+                vc = VirtualCenter(initial_position=initial_pos, enable_logging=True)
+                vc.initialize_node_info(network.nodes, initial_time=0)
+                logger.info(f"创建独立虚拟中心，位置: ({initial_pos[0]:.3f}, {initial_pos[1]:.3f})")
+            
+            # 创建路径信息收集器，传递物理中心节点
+            physical_center = network.get_physical_center()
+            network.path_info_collector = config_manager.create_path_collector(vc, physical_center)
+            logger.info(f"路径信息收集器创建完成 (物理中心: {'ID=' + str(physical_center.node_id) if physical_center else '未启用'})")
+    else:
+        logger.info("路径信息收集器已禁用")
+        network.path_info_collector = None
+    
     # 3. 创建调度器
     logger.info("创建调度器...")
     with handle_exceptions("调度器创建", recoverable=False):
-        scheduler = create_scheduler(config_manager)
+        scheduler = create_scheduler(config_manager, network)
         logger.info(f"调度器创建完成: {scheduler.get_name()}")
     
     # 4. 运行仿真
     logger.info("开始仿真...")
     with handle_exceptions("仿真运行", recoverable=False):
         simulation = config_manager.create_energy_simulation(network, scheduler)
+        
+        # 设置虚拟中心归档路径
+        if hasattr(network, 'adcr_link') and network.adcr_link is not None:
+            # ADCR的虚拟中心
+            network.adcr_link.set_archive_path(simulation.session_dir)
+            logger.info("虚拟中心归档路径已设置（ADCR）")
+        elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+            # PathCollector的独立虚拟中心
+            import os
+            archive_path = os.path.join(simulation.session_dir, "virtual_center_node_info.csv")
+            network.path_info_collector.vc.archive_path = archive_path
+            logger.info(f"虚拟中心归档路径已设置（PathCollector）: {archive_path}")
+        
         simulation.simulate()
         logger.info("仿真完成")
+        
+        # 强制刷新虚拟中心归档
+        if hasattr(network, 'adcr_link') and network.adcr_link is not None:
+            network.adcr_link.vc.force_flush_archive()
+            logger.info("虚拟中心归档已保存（ADCR）")
+        elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+            network.path_info_collector.vc.force_flush_archive()
+            logger.info("虚拟中心归档已保存（PathCollector）")
     
     # 5. 生成可视化
     logger.info("生成可视化图表...")
@@ -140,14 +232,21 @@ def run_simulation(config_file: str = None):
         plan_logger.save_simulation_plans(simulation)
         logger.info("详细计划日志保存完成")
     
-    # 9. 保存结果
+    # 9. 输出路径信息收集器统计（如果启用）
+    if network.path_info_collector is not None:
+        logger.info("=" * 60)
+        logger.info("路径信息收集器统计:")
+        logger.info("=" * 60)
+        network.path_info_collector.print_statistics()
+    
+    # 10. 保存结果
     logger.info("保存结果...")
     with handle_exceptions("结果保存", recoverable=True):
         # 使用EnergySimulation的默认路径（按日期组织）
         simulation.save_results()
         logger.info(f"结果已保存到: {simulation.session_dir}")
     
-    # 10. 输出错误摘要
+    # 11. 输出错误摘要
     error_summary = error_handler.get_error_summary()
     if error_summary['total_errors'] > 0:
         logger.warning(f"仿真过程中发生 {error_summary['total_errors']} 个错误")

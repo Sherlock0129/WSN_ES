@@ -97,6 +97,10 @@ class NetworkConfig:
     energy_hole_center_mode: str = "random"  # 空洞中心选择模式："random"（随机节点）、"corner"（左下角）、"center"（几何中心）
     energy_hole_mobile_ratio: float = 0.0    # 能量空洞区域中移动节点比例（0~1）
 
+    # 物理中心节点配置
+    enable_physical_center: bool = True  # 是否启用物理中心节点（ID=0）
+    center_initial_energy_multiplier: float = 10.0  # 物理中心初始能量倍数（相对普通节点）
+    
     # 能量分配模式配置
     energy_distribution_mode: str = "uniform"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
     center_energy: float = 40000.0      # 中心节点能量（最高，当energy_distribution_mode="center_decreasing"时使用）
@@ -247,6 +251,42 @@ class ADCRConfig:
 
 
 @dataclass
+class PathCollectorConfig:
+    """基于路径的信息收集器配置参数
+    
+    用于替代或补充ADCR的信息收集机制：
+    - 利用能量传输路径收集节点信息
+    - 路径节点：实时采集
+    - 非路径节点：基于历史 + 模型估算
+    
+    能量消耗模式：
+    - free: 零能耗（默认），信息完全搭载在传能路径上
+    - full: 完全真实，路径逐跳 + 虚拟跳都消耗能量
+    """
+    
+    # 基本开关
+    enable_path_collector: bool = True  # 是否启用路径信息收集器
+    replace_adcr: bool = True  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
+    
+    # 能量消耗模式
+    energy_mode: str = "full"  # 能量消耗模式："free"（零能耗，默认）
+                            # 或 "full"（完全真实，路径逐跳 + 虚拟跳都消耗能量）
+    
+    # 数据包大小配置（与ADCR保持一致）
+    base_data_size: int = 1000000  # 基础数据大小（bits），每个节点贡献的基础信息量
+    
+    # 估算参数
+    decay_rate: float = 5.0  # 自然衰减率（J/分钟，用于估算路径外节点能量）
+    use_solar_model: bool = True  # 是否使用太阳能模型进行估算
+    
+    # 优化选项
+    batch_update: bool = True  # 是否批量更新虚拟中心（减少开销）
+    
+    # 日志输出
+    enable_logging: bool = True  # 是否启用详细日志
+
+
+@dataclass
 class ParallelConfig:
     """并行仿真配置参数（批量实验与扫描）
 
@@ -287,6 +327,7 @@ class ConfigManager:
         self.simulation_config = SimulationConfig()
         self.scheduler_config = SchedulerConfig()
         self.adcr_config = ADCRConfig()
+        self.path_collector_config = PathCollectorConfig()
         self.parallel_config = ParallelConfig()
         
         print("使用默认配置（来自 dataclass 默认值）")
@@ -312,6 +353,8 @@ class ConfigManager:
                 self._update_dataclass(self.scheduler_config, config_data['scheduler'])
             if 'adcr' in config_data:
                 self._update_dataclass(self.adcr_config, config_data['adcr'])
+            if 'path_collector' in config_data:
+                self._update_dataclass(self.path_collector_config, config_data['path_collector'])
             if 'parallel' in config_data:
                 self._update_dataclass(self.parallel_config, config_data['parallel'])
                 
@@ -484,7 +527,10 @@ class ConfigManager:
             bit_rate=self.node_config.bit_rate,
             path_loss_exponent=self.node_config.path_loss_exponent,
             energy_decay_rate=self.node_config.energy_decay_rate,
-            sensor_energy=self.node_config.sensor_energy
+            sensor_energy=self.node_config.sensor_energy,
+            # 物理中心节点参数
+            enable_physical_center=self.network_config.enable_physical_center,
+            center_initial_energy_multiplier=self.network_config.center_initial_energy_multiplier
         )
     
     def create_sensor_node(self, node_id: int, position: list, 
@@ -592,6 +638,25 @@ class ConfigManager:
             vc_marker_size=self.adcr_config.vc_marker_size,
             line_width=self.adcr_config.line_width,
             path_line_width=self.adcr_config.path_line_width
+        )
+    
+    def create_path_collector(self, virtual_center, physical_center=None):
+        """
+        创建PathBasedInfoCollector对象
+        
+        :param virtual_center: 虚拟中心实例（用于节点信息表管理）
+        :param physical_center: 物理中心节点（ID=0，信息上报目标）
+        """
+        from info_collection.path_based_collector import PathBasedInfoCollector
+        return PathBasedInfoCollector(
+            virtual_center=virtual_center,
+            physical_center=physical_center,
+            energy_mode=self.path_collector_config.energy_mode,
+            base_data_size=self.path_collector_config.base_data_size,
+            enable_logging=self.path_collector_config.enable_logging,
+            decay_rate=self.path_collector_config.decay_rate,
+            use_solar_model=self.path_collector_config.use_solar_model,
+            batch_update=self.path_collector_config.batch_update
         )
     
     def __str__(self) -> str:

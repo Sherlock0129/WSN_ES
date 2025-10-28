@@ -120,17 +120,18 @@ class Logger:
 logger = Logger()
 
 
-@contextmanager
 def log_function_call(func):
     """函数调用日志装饰器"""
-    logger.debug(f"调用函数: {func.__name__}")
-    try:
-        result = func(*args, **kwargs)
-        logger.debug(f"函数 {func.__name__} 执行成功")
-        yield result
-    except Exception as e:
-        logger.error(f"函数 {func.__name__} 执行失败: {str(e)}")
-        raise
+    def wrapper(*args, **kwargs):
+        logger.debug(f"调用函数: {func.__name__}")
+        try:
+            result = func(*args, **kwargs)
+            logger.debug(f"函数 {func.__name__} 执行成功")
+            return result
+        except Exception as e:
+            logger.error(f"函数 {func.__name__} 执行失败: {str(e)}")
+            raise
+    return wrapper
 
 
 def log_execution_time(func):
@@ -412,6 +413,186 @@ class DetailedPlanLogger:
             raise
 
 
+class StatisticsLogger:
+    """仿真统计信息日志记录器"""
+    
+    def __init__(self, session_dir: str = None):
+        """
+        初始化统计信息日志记录器
+        
+        Args:
+            session_dir: 会话目录，如果为None则使用当前时间戳目录
+        """
+        if session_dir is None:
+            session_dir = OutputManager.get_session_dir("data")
+        
+        self.session_dir = session_dir
+        self.stats_file = OutputManager.get_file_path(session_dir, "simulation_statistics.txt")
+        self.stats_json_file = OutputManager.get_file_path(session_dir, "simulation_statistics.json")
+        
+        # 确保目录存在
+        OutputManager.ensure_dir_exists(session_dir)
+        
+        logger.info(f"统计信息日志将保存到: {self.stats_file}")
+    
+    def save_statistics(self, stats: dict, network=None, additional_info: dict = None):
+        """
+        保存统计信息到文件（文本格式和JSON格式）
+        
+        Args:
+            stats: 统计信息字典，包含以下键：
+                - avg_variance: 所有时间点方差的平均值
+                - total_loss_energy: 总体损失能量值
+                - total_sent_energy: 总发送能量
+                - total_received_energy: 总接收能量
+                - efficiency: 能量传输效率（可选）
+            network: Network实例（可选，用于获取额外信息）
+            additional_info: 额外的统计信息（可选）
+        """
+        try:
+            # 计算效率
+            efficiency = (stats['total_received_energy'] / stats['total_sent_energy'] * 100 
+                         if stats['total_sent_energy'] > 0 else 0)
+            stats['efficiency'] = efficiency
+            
+            # 保存为文本格式（易读）
+            with open(self.stats_file, 'w', encoding='utf-8') as f:
+                f.write("=" * 70 + "\n")
+                f.write("无线传感器网络能量传输仿真统计报告\n")
+                f.write("=" * 70 + "\n")
+                f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"会话目录: {self.session_dir}\n")
+                f.write("\n")
+                
+                # 基本统计信息
+                f.write("-" * 70 + "\n")
+                f.write("【能量传输统计】\n")
+                f.write("-" * 70 + "\n")
+                f.write(f"总发送能量:         {stats['total_sent_energy']:>15.4f} Joules\n")
+                f.write(f"总接收能量:         {stats['total_received_energy']:>15.4f} Joules\n")
+                f.write(f"总体损失能量:       {stats['total_loss_energy']:>15.4f} Joules\n")
+                f.write(f"能量传输效率:       {stats['efficiency']:>15.2f}%\n")
+                f.write("\n")
+                
+                f.write("-" * 70 + "\n")
+                f.write("【能量分布统计】\n")
+                f.write("-" * 70 + "\n")
+                f.write(f"所有时间点方差的平均值: {stats['avg_variance']:>11.4f}\n")
+                f.write("\n")
+                
+                # 网络节点信息
+                if network is not None:
+                    f.write("-" * 70 + "\n")
+                    f.write("【网络节点信息】\n")
+                    f.write("-" * 70 + "\n")
+                    f.write(f"节点总数:           {len(network.nodes):>15d}\n")
+                    
+                    # 计算节点能量统计
+                    node_energies = [node.current_energy for node in network.nodes]
+                    f.write(f"节点平均能量:       {sum(node_energies)/len(node_energies):>15.4f} Joules\n")
+                    f.write(f"节点最大能量:       {max(node_energies):>15.4f} Joules\n")
+                    f.write(f"节点最小能量:       {min(node_energies):>15.4f} Joules\n")
+                    
+                    # 计算存活节点数（能量>0）
+                    alive_nodes = sum(1 for e in node_energies if e > 0)
+                    f.write(f"存活节点数:         {alive_nodes:>15d}\n")
+                    f.write(f"死亡节点数:         {len(node_energies) - alive_nodes:>15d}\n")
+                    f.write("\n")
+                    
+                    # 节点传输历史统计
+                    total_transfers = sum(len(node.transferred_history) for node in network.nodes)
+                    total_receptions = sum(len(node.received_history) for node in network.nodes)
+                    f.write(f"总传输次数:         {total_transfers:>15d}\n")
+                    f.write(f"总接收次数:         {total_receptions:>15d}\n")
+                    f.write("\n")
+                
+                # 额外信息
+                if additional_info:
+                    f.write("-" * 70 + "\n")
+                    f.write("【额外信息】\n")
+                    f.write("-" * 70 + "\n")
+                    for key, value in additional_info.items():
+                        if isinstance(value, float):
+                            f.write(f"{key}: {value:>15.4f}\n")
+                        else:
+                            f.write(f"{key}: {value}\n")
+                    f.write("\n")
+                
+                f.write("=" * 70 + "\n")
+                f.write("报告结束\n")
+                f.write("=" * 70 + "\n")
+            
+            # 保存为JSON格式（便于程序处理）
+            import json
+            json_data = {
+                'timestamp': datetime.now().isoformat(),
+                'session_dir': self.session_dir,
+                'statistics': stats
+            }
+            
+            if network is not None:
+                node_energies = [node.current_energy for node in network.nodes]
+                json_data['network_info'] = {
+                    'total_nodes': len(network.nodes),
+                    'avg_energy': sum(node_energies) / len(node_energies),
+                    'max_energy': max(node_energies),
+                    'min_energy': min(node_energies),
+                    'alive_nodes': sum(1 for e in node_energies if e > 0),
+                    'dead_nodes': len(node_energies) - sum(1 for e in node_energies if e > 0),
+                    'total_transfers': sum(len(node.transferred_history) for node in network.nodes),
+                    'total_receptions': sum(len(node.received_history) for node in network.nodes)
+                }
+            
+            if additional_info:
+                json_data['additional_info'] = additional_info
+            
+            with open(self.stats_json_file, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, indent=4, ensure_ascii=False)
+            
+            logger.info(f"统计信息已保存到文本文件: {self.stats_file}")
+            logger.info(f"统计信息已保存到JSON文件: {self.stats_json_file}")
+            
+        except Exception as e:
+            logger.error(f"保存统计信息失败: {str(e)}")
+            raise
+    
+    def print_and_save_statistics(self, stats: dict, network=None, additional_info: dict = None):
+        """
+        打印并保存统计信息
+        
+        Args:
+            stats: 统计信息字典
+            network: Network实例（可选）
+            additional_info: 额外的统计信息（可选）
+        """
+        # 计算效率
+        efficiency = (stats['total_received_energy'] / stats['total_sent_energy'] * 100 
+                     if stats['total_sent_energy'] > 0 else 0)
+        
+        # 打印到控制台
+        print("\n" + "=" * 70)
+        print("【能量传输统计】")
+        print("=" * 70)
+        print(f"所有时间点方差的平均值: {stats['avg_variance']:.4f}")
+        print(f"总体损失能量值: {stats['total_loss_energy']:.4f} Joules")
+        print(f"总发送能量: {stats['total_sent_energy']:.4f} Joules")
+        print(f"总接收能量: {stats['total_received_energy']:.4f} Joules")
+        print(f"能量传输效率: {efficiency:.2f}%")
+        
+        if network is not None:
+            node_energies = [node.current_energy for node in network.nodes]
+            alive_nodes = sum(1 for e in node_energies if e > 0)
+            print(f"\n【网络状态】")
+            print(f"节点总数: {len(network.nodes)}")
+            print(f"存活节点: {alive_nodes}")
+            print(f"死亡节点: {len(network.nodes) - alive_nodes}")
+        
+        print("=" * 70 + "\n")
+        
+        # 保存到文件
+        self.save_statistics(stats, network, additional_info)
+
+
 # 全局详细计划日志记录器实例
 detailed_plan_logger = None
 
@@ -419,4 +600,10 @@ def get_detailed_plan_logger(session_dir: str = None) -> DetailedPlanLogger:
     """获取详细计划日志记录器实例"""
     # 每次都创建新的实例，确保使用正确的session_dir
     return DetailedPlanLogger(session_dir)
+
+
+def get_statistics_logger(session_dir: str = None) -> StatisticsLogger:
+    """获取统计信息日志记录器实例"""
+    # 每次都创建新的实例，确保使用正确的session_dir
+    return StatisticsLogger(session_dir)
 

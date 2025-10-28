@@ -128,6 +128,14 @@ class EnergySimulation:
                 if self.enable_energy_sharing:
                     # ★ 优先使用外部调度器（若提供）
                     if self.scheduler is not None:
+                        # 【关键】更新NodeInfoManager中的节点能量信息
+                        # 在每次调度之前，必须同步真实节点的当前能量到InfoNode
+                        if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                            self.scheduler.nim.batch_update_node_info(
+                                nodes=self.network.nodes,
+                                current_time=t
+                            )
+                        
                         # 同步自适应K给调度器（若其带 K）
                         if hasattr(self.scheduler, "K"):
                             try:
@@ -146,11 +154,11 @@ class EnergySimulation:
                         if (PowerControlScheduler is not None) and isinstance(self.scheduler, PowerControlScheduler):
                             self.scheduler.execute_plans(self.network, plans)
                         else:
-                            self.network.execute_energy_transfer(plans)
+                            self.network.execute_energy_transfer(plans, current_time=t)
                     else:
                         # 兼容旧逻辑：使用 network.run_routing()
                         plans = self.network.run_routing(t, max_donors_per_receiver=self.K)
-                        self.network.execute_energy_transfer(plans)
+                        self.network.execute_energy_transfer(plans, current_time=t)
                 else:
                     # 能量传输被禁用，创建空的计划
                     plans = []
