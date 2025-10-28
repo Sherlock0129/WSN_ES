@@ -6,7 +6,7 @@ import random
 import os
 from collections import defaultdict
 from utils.output_manager import OutputManager
-from acdr.virtual_center import VirtualCenter
+from acdr.physical_center import VirtualCenter
 
 try:
     from routing.opportunistic_routing import opportunistic_routing
@@ -27,14 +27,15 @@ class ADCRLinkLayerVirtual(object):
     - 估计最优簇数 K*（近邻统计启发式）
     - 能量感知 + 空间抑制 选择簇头
     - 成簇与一次性细化
-    - 委托 VirtualCenter 管理虚拟中心逻辑（位置更新、锚点选择、路径规划）
-    - 按通信能耗模型为真实节点扣除能量；虚拟中心不扣
-    - 提供 Plotly 可视化：节点/簇/路径/虚拟中心
+    - 簇头向物理中心节点（ID=0）报告信息
+    - 按通信能耗模型为真实节点扣除能量
+    - 提供 Plotly 可视化：节点/簇/路径/物理中心
     
-    架构改进：
-    - 虚拟中心逻辑解耦到独立的 VirtualCenter 类
-    - 职责清晰：ADCR 负责聚类，VirtualCenter 负责汇聚点管理
-    - 易于扩展：可以轻松支持多虚拟中心、移动虚拟中心等场景
+    架构更新（物理中心节点）：
+    - 不再使用"虚拟中心"和"锚点"概念
+    - 所有通信都是真实节点之间的通信
+    - 物理中心节点（ID=0）是固定的特殊节点，位于几何中心
+    - VirtualCenter 类保留，仅用于节点信息表管理（未来将重构为 PhysicalCenterHelper）
     """
     def __init__(self, network,
                  round_period: int = 1440,
@@ -312,19 +313,25 @@ class ADCRLinkLayerVirtual(object):
         print(f"[ADCR-DEBUG] Cluster {ch_id}: {cluster_size} members, data size: {aggregated_data_size} bits")
         return aggregated_data_size
 
-    # 注意：能耗计算和直接传输判断逻辑已迁移到 VirtualCenter 类中
+    # 注意：部分计算逻辑在 VirtualCenter 类中（将来会重构为 PhysicalCenterHelper）
 
-    # ---------------- 路径规划到"虚拟中心" + 通信能耗结算 ----------------
+    # ---------------- 路径规划到物理中心 + 通信能耗结算 ----------------
 
-    def _plan_paths_to_virtual(self):
+    def _plan_paths_to_physical_center(self):
         """
-        为每个簇头规划一条真实节点路径（CH -> … -> "靠近几何中心的真实节点"），
-        最后一跳视为"到虚拟中心"的逻辑汇报（不需要接收方能量）。
+        为每个簇头规划一条真实节点路径：CH -> … -> 物理中心节点（ID=0）
         
-        委托给 VirtualCenter 执行路径规划
+        所有路径都是真实节点之间的通信，不再有"虚拟跳"的概念
         """
         if not self.plan_paths or opportunistic_routing is None:
             print(f"[ADCR-DEBUG] Path planning disabled or routing function unavailable")
+            self.upstream_paths = {}
+            return {}
+        
+        # 获取物理中心节点
+        physical_center = self.net.get_physical_center()
+        if physical_center is None:
+            print(f"[ADCR-DEBUG] No physical center found, skipping path planning")
             self.upstream_paths = {}
             return {}
         
@@ -332,15 +339,27 @@ class ADCRLinkLayerVirtual(object):
         id2node = {n.node_id: n for n in self.net.nodes}
         cluster_heads = [id2node[ch_id] for ch_id in self.ch_set if ch_id in id2node]
         
-        # 使用 VirtualCenter 进行路径规划
-        self.upstream_paths = self.vc.plan_paths_from_cluster_heads(
-            cluster_heads=cluster_heads,
-            all_nodes=self.net.nodes,
-            routing_function=opportunistic_routing,
-            max_hops=self.max_hops,
-            enable_direct_transmission=self.enable_direct_transmission_optimization,
-            direct_transmission_threshold=self.direct_transmission_threshold
-        )
+        # 为每个簇头规划到物理中心的路径
+        self.upstream_paths = {}
+        for ch in cluster_heads:
+            if ch.node_id == physical_center.node_id:
+                # 簇头就是物理中心（不应该发生，因为调度器已排除）
+                self.upstream_paths[ch.node_id] = [ch]
+                continue
+            
+            # 使用机会路由规划路径
+            path = opportunistic_routing(
+                nodes=self.net.nodes,
+                source_node=ch,
+                dest_node=physical_center,
+                max_hops=self.max_hops
+            )
+            
+            if path is None or len(path) == 0:
+                print(f"[ADCR-DEBUG] No path found from CH {ch.node_id} to physical center")
+                path = [ch, physical_center]  # 回退：直接通信
+            
+            self.upstream_paths[ch.node_id] = path
         
         return self.upstream_paths
 
@@ -359,8 +378,12 @@ class ADCRLinkLayerVirtual(object):
     def _settle_comm_energy(self):
         """
         为所有簇头上报路径结算通信能耗。
-        - 对每条真实节点路径：逐跳扣费 (u<->v)
-        - 最后一跳到虚拟中心：委托给 VirtualCenter 处理
+        
+        所有通信都是真实节点之间的通信，包括：
+        1. 簇内通信：成员 → 簇头
+        2. 簇间通信：簇头 → … → 物理中心节点（ID=0）
+        
+        所有跳都使用相同的能耗模型，不再有"虚拟跳"概念
         """
         print(f"[ADCR-DEBUG] _settle_comm_energy() called, consume_energy={self.consume_energy}")
         self.last_comms = []
@@ -379,7 +402,6 @@ class ADCRLinkLayerVirtual(object):
                 continue
 
             # 阶段1：簇内通信（成员 → 簇头）
-            # 计算该簇的成员数量
             cluster_members = [nid for nid, cid in self.cluster_of.items() if cid == ch_id]
             id2node = {n.node_id: n for n in self.net.nodes}
             
@@ -397,36 +419,23 @@ class ADCRLinkLayerVirtual(object):
                             "type": "intra_cluster"
                         })
 
-            # 阶段2：簇间通信（真实节点逐跳：簇头 → 锚点）
+            # 阶段2：簇间通信（簇头 → 物理中心节点）
+            # 所有跳都是真实节点之间的通信，包括最后一跳到物理中心
             for i in range(len(path) - 1):
                 u, v = path[i], path[i+1]
                 Eu, Ev = self._energy_consume_one_hop(u, v, transfer_WET=False)
+                
+                # 标记是否是最后一跳（到物理中心）
+                is_final_hop = (i == len(path) - 2)
+                hop_type = "to_physical_center" if is_final_hop else "inter_cluster"
+                
                 self.last_comms.append({
                     "hop": (u.node_id, v.node_id),
                     "E_tx": Eu,
                     "E_rx": Ev,
-                    "type": "inter_cluster"
+                    "type": hop_type,
+                    "cluster_id": ch_id
                 })
-
-            # 阶段3：虚拟跳（锚点 → 虚拟中心）
-            last_real = path[-1]
-            aggregated_data_size = self._calculate_cluster_data_size(ch_id)
-            
-            # 使用 VirtualCenter 结算虚拟跳能耗
-            E_virtual = self.vc.settle_virtual_hop_energy(
-                sender=last_real,
-                data_size=aggregated_data_size,
-                tx_rx_ratio=self.tx_rx_ratio,
-                sensor_energy=self.sensor_energy
-            )
-            
-            self.last_comms.append({
-                "hop": (last_real.node_id, "VIRTUAL"), 
-                "E_tx_only": E_virtual,
-                "data_size": aggregated_data_size,
-                "cluster_size": len(cluster_members),
-                "type": "virtual_hop"
-            })
     
     def _update_virtual_center_info(self, t: int):
         """
@@ -457,9 +466,9 @@ class ADCRLinkLayerVirtual(object):
 
     # ---------------- Plotly 可视化 ----------------
 
-    def plot_clusters_and_paths(self, output_dir=None, title="ADCR clustering & info paths to virtual center", filename=None):
+    def plot_clusters_and_paths(self, output_dir=None, title="ADCR clustering & info paths to physical center", filename=None):
         """
-        画：所有节点、簇头（强调）、簇内连线、簇头到锚点路径、虚拟中心位置。
+        画：所有节点、簇头（强调）、簇内连线、簇头到物理中心路径、物理中心节点（ID=0）。
         保存为 PNG（需要 kaleido）。
         """
         if go is None:
@@ -476,7 +485,14 @@ class ADCRLinkLayerVirtual(object):
 
         nodes = self.net.nodes
         id2node = {n.node_id: n for n in nodes}
-        cx, cy = self.vc.get_position()
+        
+        # 获取物理中心节点位置
+        physical_center = self.net.get_physical_center()
+        if physical_center is not None:
+            cx, cy = physical_center.position[0], physical_center.position[1]
+        else:
+            # 回退：使用几何中心
+            cx, cy = self.vc.get_position()
 
         # 基础散点：所有节点
         x_all = [n.position[0] for n in nodes]
@@ -501,11 +517,11 @@ class ADCRLinkLayerVirtual(object):
             hovertemplate='CH %{x}, %{y}<extra></extra>'
         ))
 
-        # 虚拟中心
+        # 物理中心节点（ID=0）
         fig.add_trace(go.Scatter(
-            x=[cx], y=[cy], mode='markers', name='Virtual Center',
-            marker=dict(color='#1f77b4', size=self.vc_marker_size, symbol='x'),
-            hovertemplate='Virtual center<br>(%{x}, %{y})<extra></extra>'
+            x=[cx], y=[cy], mode='markers', name='Physical Center (ID=0)',
+            marker=dict(color='#1f77b4', size=self.vc_marker_size, symbol='star'),
+            hovertemplate='Physical Center (ID=0)<br>(%{x}, %{y})<extra></extra>'
         ))
 
         # 簇内连线（成员→CH）
@@ -520,31 +536,26 @@ class ADCRLinkLayerVirtual(object):
                 showlegend=False, hoverinfo='skip'
             ))
 
-        # 路径：CH → 锚点（真实节点路径）
+        # 路径：CH → 物理中心节点（ID=0）
         for ch_id, path in self.upstream_paths.items():
             if not path or len(path) == 1:
-                # 只有“虚拟跳”，画一条到虚拟中心
+                # 直接连接到物理中心
                 p = id2node[ch_id].position
                 fig.add_trace(go.Scatter(
                     x=[p[0], cx], y=[p[1], cy], mode='lines',
                     line=dict(width=self.path_line_width, color='rgba(31,119,180,0.6)'),
-                    name=f'CH {ch_id} → VC', showlegend=False
+                    name=f'CH {ch_id} → PC', showlegend=False
                 ))
                 continue
+            
+            # 绘制完整路径（包括到物理中心的最后一跳）
             xs = [n.position[0] for n in path]
             ys = [n.position[1] for n in path]
             fig.add_trace(go.Scatter(
                 x=xs, y=ys, mode='lines+markers',
                 line=dict(width=self.path_line_width, color='rgba(31,119,180,0.6)'),
                 marker=dict(size=6),
-                name=f'Path CH {ch_id}', showlegend=False
-            ))
-            # 最后一段到虚拟中心
-            last = path[-1].position
-            fig.add_trace(go.Scatter(
-                x=[last[0], cx], y=[last[1], cy], mode='lines',
-                line=dict(width=self.path_line_width, dash='dot', color='rgba(31,119,180,0.6)'),
-                showlegend=False
+                name=f'Path CH {ch_id} → PC', showlegend=False
             ))
 
         fig.update_layout(
@@ -590,9 +601,14 @@ class ADCRLinkLayerVirtual(object):
 
         print("[ADCR-DEBUG] Starting ADCR clustering process...")
 
-        # 1) 更新虚拟几何中心
+        # 1) 更新虚拟中心位置（用于节点信息表的几何中心计算）
         self.vc.update_position(self.net.nodes, current_time=t)
-        print(f"[ADCR-DEBUG] Virtual center updated: {self.vc.get_position()}")
+        
+        # 同时更新物理中心节点的位置（保持在几何中心）
+        self.net.update_physical_center_position()
+        physical_center = self.net.get_physical_center()
+        if physical_center:
+            print(f"[ADCR-DEBUG] Physical center (ID=0) at: ({physical_center.position[0]:.3f}, {physical_center.position[1]:.3f})")
 
         # 2) 估计 K* 、选择簇头、成簇
         try:
@@ -619,8 +635,8 @@ class ADCRLinkLayerVirtual(object):
         self._summarize_clusters()
         print(f"[ADCR-DEBUG] Cluster summary: {len(self.cluster_stats)} clusters")
 
-        # 3) 规划 CH→锚点（真实节点）的上报路径；最后对虚拟中心做"虚拟跳"
-        self._plan_paths_to_virtual()
+        # 3) 规划 CH→物理中心节点（ID=0）的上报路径
+        self._plan_paths_to_physical_center()
         print(f"[ADCR-DEBUG] Path planning completed, {len(self.upstream_paths)} paths planned")
         
         # 详细输出路径信息
@@ -639,10 +655,14 @@ class ADCRLinkLayerVirtual(object):
         # 4.5) 更新虚拟中心节点信息表
         self._update_virtual_center_info(t)
 
-        vc_pos = self.vc.get_position()
-        print("[ADCR-Link-Virtual] t={} | VC=({:.3f},{:.3f}) | K*={} | CHs={}".format(
-            t, vc_pos[0], vc_pos[1], K_star, sorted(list(self.ch_set))
-        ))
+        physical_center = self.net.get_physical_center()
+        if physical_center:
+            pc_pos = (physical_center.position[0], physical_center.position[1])
+            print("[ADCR-Link] t={} | PC(ID=0)=({:.3f},{:.3f}) | K*={} | CHs={}".format(
+                t, pc_pos[0], pc_pos[1], K_star, sorted(list(self.ch_set))
+            ))
+        else:
+            print("[ADCR-Link] t={} | K*={} | CHs={}".format(t, K_star, sorted(list(self.ch_set))))
         
         # 5) 自动画图（如果启用）
         if self.auto_plot:

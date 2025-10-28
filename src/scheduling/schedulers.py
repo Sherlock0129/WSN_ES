@@ -18,6 +18,20 @@ class BaseScheduler(object):
     def get_name(self):
         """获取调度器名称"""
         return self.__class__.__name__
+    
+    def _filter_regular_nodes(self, nodes):
+        """
+        过滤出普通节点（排除物理中心节点）
+        
+        物理中心节点不参与能量传输（WET），包括：
+        - 不能作为donor（捐能者）
+        - 不能作为receiver（接收者）
+        - 不能作为relay（中继节点，由EEOR处理）
+        
+        :param nodes: 节点列表
+        :return: 过滤后的普通节点列表
+        """
+        return [n for n in nodes if not n.is_physical_center]
 
     def plan(self, network, t):
         """返回路由/传能计划列表：[{receiver, donor, path, distance, (可选)energy_sent}, ...]"""
@@ -31,7 +45,8 @@ class BaseScheduler(object):
 # ------------------ Baseline：与你 run_routing 类似的启发式 ------------------
 class BaselineHeuristic(BaseScheduler):
     def plan(self, network, t):
-        nodes = network.nodes
+        # 排除物理中心节点
+        nodes = self._filter_regular_nodes(network.nodes)
         plans = []
         used = set()
 
@@ -76,7 +91,8 @@ class LyapunovScheduler(BaseScheduler):
         return eta
 
     def plan(self, network, t):
-        nodes = network.nodes
+        # 排除物理中心节点
+        nodes = self._filter_regular_nodes(network.nodes)
         E = np.array([n.current_energy for n in nodes], dtype=float)
         E_bar = float(E.mean())
         Q = dict((n, max(0.0, E_bar - n.current_energy)) for n in nodes)
@@ -158,7 +174,8 @@ class ClusterScheduler(BaseScheduler):
             self.cluster_of[n.node_id] = best.node_id
 
     def plan(self, network, t):
-        nodes = network.nodes
+        # 排除物理中心节点
+        nodes = self._filter_regular_nodes(network.nodes)
         if (t % self.round_period == 0) or (not self.cluster_of):
             self._recluster(nodes, t)
 
@@ -221,7 +238,8 @@ class PredictionScheduler(BaseScheduler):
         return est * (self.horizon / 60.0)
 
     def plan(self, network, t):
-        nodes = network.nodes
+        # 排除物理中心节点
+        nodes = self._filter_regular_nodes(network.nodes)
         avgE = float(np.mean([n.current_energy for n in nodes]))
         pred_surplus = dict((n, (n.current_energy + self._predict_harvest(n, t))) for n in nodes)
 
@@ -267,7 +285,8 @@ class PowerControlScheduler(BaseScheduler):
         return eta
 
     def plan(self, network, t):
-        nodes = network.nodes
+        # 排除物理中心节点
+        nodes = self._filter_regular_nodes(network.nodes)
         avgE = float(np.mean([n.current_energy for n in nodes]))
         receivers = sorted([n for n in nodes if n.current_energy < avgE],
                            key=lambda n: (avgE - n.current_energy), reverse=True)

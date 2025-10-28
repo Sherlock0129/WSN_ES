@@ -97,6 +97,10 @@ class NetworkConfig:
     energy_hole_center_mode: str = "random"  # 空洞中心选择模式："random"（随机节点）、"corner"（左下角）、"center"（几何中心）
     energy_hole_mobile_ratio: float = 0.0    # 能量空洞区域中移动节点比例（0~1）
 
+    # 物理中心节点配置
+    enable_physical_center: bool = True  # 是否启用物理中心节点（ID=0）
+    center_initial_energy_multiplier: float = 10.0  # 物理中心初始能量倍数（相对普通节点）
+    
     # 能量分配模式配置
     energy_distribution_mode: str = "uniform"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
     center_energy: float = 40000.0      # 中心节点能量（最高，当energy_distribution_mode="center_decreasing"时使用）
@@ -523,7 +527,10 @@ class ConfigManager:
             bit_rate=self.node_config.bit_rate,
             path_loss_exponent=self.node_config.path_loss_exponent,
             energy_decay_rate=self.node_config.energy_decay_rate,
-            sensor_energy=self.node_config.sensor_energy
+            sensor_energy=self.node_config.sensor_energy,
+            # 物理中心节点参数
+            enable_physical_center=self.network_config.enable_physical_center,
+            center_initial_energy_multiplier=self.network_config.center_initial_energy_multiplier
         )
     
     def create_sensor_node(self, node_id: int, position: list, 
@@ -633,11 +640,17 @@ class ConfigManager:
             path_line_width=self.adcr_config.path_line_width
         )
     
-    def create_path_collector(self, virtual_center):
-        """创建PathBasedInfoCollector对象"""
+    def create_path_collector(self, virtual_center, physical_center=None):
+        """
+        创建PathBasedInfoCollector对象
+        
+        :param virtual_center: 虚拟中心实例（用于节点信息表管理）
+        :param physical_center: 物理中心节点（ID=0，信息上报目标）
+        """
         from info_collection.path_based_collector import PathBasedInfoCollector
         return PathBasedInfoCollector(
             virtual_center=virtual_center,
+            physical_center=physical_center,
             energy_mode=self.path_collector_config.energy_mode,
             base_data_size=self.path_collector_config.base_data_size,
             enable_logging=self.path_collector_config.enable_logging,

@@ -1,19 +1,24 @@
 # src/info_collection/path_based_collector.py
 # -*- coding: utf-8 -*-
 """
-基于路径的机会主义信息收集器
+基于路径的机会主义信息收集器（物理中心架构）
 
 设计理念：
 - 利用能量传输路径收集节点信息（piggyback，搭载）
 - 路径内节点：实时采集最新信息
-- 路径外节点：基于历史信息 + 自然损耗模型估算
-- Receiver（路径最后一个节点）作为信息汇聚点上报虚拟中心
+- 路径外节点：不处理（不收集、不估算、不更新）
+- Receiver（路径最后一个节点）作为信息汇聚点上报到物理中心节点（ID=0）
 
 优势：
 - 无需额外通信开销（信息搭载在传能路径上）
 - 更新频率高（每次传能都更新）
 - 信息新鲜度高（路径节点为实时采集）
-- 能量消耗低（无专门的上报通信）
+- 能量消耗可配置（free/full模式）
+
+架构更新（物理中心）：
+- 不再有"虚拟跳"概念，所有通信都是真实节点之间的通信
+- 信息上报目标从"虚拟中心"改为"物理中心节点（ID=0）"
+- VirtualCenter 保留，仅用于节点信息表管理
 
 """
 
@@ -23,7 +28,7 @@ import math
 
 if TYPE_CHECKING:
     from core.SensorNode import SensorNode
-    from acdr.virtual_center import VirtualCenter
+    from acdr.physical_center import VirtualCenter
 
 
 class PathBasedInfoCollector:
@@ -32,17 +37,19 @@ class PathBasedInfoCollector:
     
     工作流程（以路径 a→b→c 为例）：
     1. 路径节点（a、b、c）各自收集信息，沿路径聚合到终点c
-    2. 终点c将路径节点的聚合信息（固定1B）上报到虚拟中心
-    3. 虚拟中心只更新路径节点（a、b、c）的信息
+    2. 终点c将路径节点的聚合信息（固定1B）上报到物理中心节点（ID=0）
+    3. 虚拟中心（节点信息表管理器）只更新路径节点（a、b、c）的信息
     4. 非路径节点不做任何处理（不收集、不估算、不更新）
     
-    能量模型：
+    能量模型（物理中心架构）：
     - free模式：零能耗（信息完全搭载）
-    - full模式：路径逐跳 + 虚拟跳都消耗能量（与ADCR一致）
+    - full模式：路径逐跳 + 上报跳（→物理中心节点）都消耗能量（与ADCR一致）
+                所有跳都是真实节点之间的通信，不再有"虚拟跳"概念
     """
     
     def __init__(self, 
                  virtual_center: VirtualCenter,
+                 physical_center: SensorNode = None,
                  energy_mode: str = "free",
                  base_data_size: int = 1000000,
                  enable_logging: bool = True,
@@ -54,7 +61,8 @@ class PathBasedInfoCollector:
         """
         初始化路径信息收集器
         
-        :param virtual_center: 虚拟中心实例
+        :param virtual_center: 虚拟中心实例（用于节点信息表管理）
+        :param physical_center: 物理中心节点（ID=0，信息上报目标）
         :param energy_mode: 能量消耗模式 ("free": 零能耗, "full": 完全真实)
         :param base_data_size: 基础数据大小（bits），每个节点的基础信息量（与ADCR一致）
         :param enable_logging: 是否启用日志
@@ -63,6 +71,7 @@ class PathBasedInfoCollector:
         :param batch_update: 是否批量更新虚拟中心
         """
         self.vc = virtual_center
+        self.physical_center = physical_center
         self.energy_mode = energy_mode
         self.base_data_size = base_data_size
         self.enable_logging = enable_logging
@@ -381,7 +390,7 @@ class PathBasedInfoCollector:
         
         能量消耗包括：
         1. 路径逐跳信息传递：路径节点信息沿路径聚合传递，每跳消耗能量
-        2. 虚拟跳上报：Receiver → 虚拟中心的上报能量
+        2. 上报跳：Receiver → 物理中心节点（ID=0）的真实通信能耗
         
         :param path: 传能路径 [donor, relay..., receiver]
         :return: 总能量消耗（J）
@@ -392,14 +401,14 @@ class PathBasedInfoCollector:
         # 1. 计算路径逐跳能耗（信息沿路径传递）
         path_energy = self._calculate_path_hop_energy(path)
         
-        # 2. 计算虚拟跳能耗（Receiver → 虚拟中心）
+        # 2. 计算上报跳能耗（Receiver → 物理中心节点）
         receiver = path[-1]
-        virtual_energy = self._calculate_virtual_hop_energy(receiver)
+        report_energy = self._calculate_report_hop_energy(receiver)
         
-        total_energy = path_energy + virtual_energy
+        total_energy = path_energy + report_energy
         
         self._log(f"[PathCollector] 能量消耗 - 路径逐跳={path_energy:.2f}J, "
-                 f"虚拟跳={virtual_energy:.2f}J, 总计={total_energy:.2f}J")
+                 f"上报跳(→PC)={report_energy:.2f}J, 总计={total_energy:.2f}J")
         
         return total_energy
     
@@ -454,31 +463,55 @@ class PathBasedInfoCollector:
         
         return total_energy
     
-    def _calculate_virtual_hop_energy(self, receiver: SensorNode) -> float:
+    def _calculate_report_hop_energy(self, receiver: SensorNode) -> float:
         """
-        计算虚拟跳能耗（Receiver → 虚拟中心）
+        计算上报跳能耗（Receiver → 物理中心节点）
         
-        使用虚拟中心的 settle_virtual_hop_energy 方法（与ADCR相同）
+        这是真实节点之间的通信，不再有"虚拟跳"概念。
+        使用与ADCR相同的能耗模型计算双向通信能量消耗。
         数据大小固定为 base_data_size（路径节点信息已聚合/压缩到固定大小）
         
         :param receiver: 路径终点节点（路径信息汇聚点）
-        :return: 虚拟跳能量消耗（J）
+        :return: 上报跳能量消耗（J）
         
-        注意：虚拟跳传输的是路径节点的聚合信息，数据包大小固定为base_data_size，
+        注意：上报传输的是路径节点的聚合信息，数据包大小固定为base_data_size，
               不随路径长度或网络节点数增长。这是基于信息可以被充分压缩的假设。
         """
+        # 如果没有物理中心节点，返回0
+        if self.physical_center is None:
+            self._log("[PathCollector] 警告：物理中心节点未设置，跳过上报跳能耗计算")
+            return 0.0
+        
+        # 如果receiver就是物理中心（不应该发生），返回0
+        if receiver.node_id == self.physical_center.node_id:
+            return 0.0
+        
         # 固定数据包大小（路径节点信息聚合/压缩，不随节点数增长）
         data_size = self.base_data_size
         
-        # 使用虚拟中心的能量结算方法（与ADCR相同）
-        E_virtual = self.vc.settle_virtual_hop_energy(
-            sender=receiver,
-            data_size=data_size,
-            tx_rx_ratio=0.5,  # 默认值，与ADCR一致
-            sensor_energy=0.1  # 默认值，与ADCR一致
-        )
+        # 使用与ADCR._energy_consume_one_hop相同的能耗模型
+        # 临时修改B参数
+        original_B_receiver = receiver.B
+        original_B_pc = self.physical_center.B
         
-        return E_virtual
+        receiver.B = data_size
+        self.physical_center.B = data_size
+        
+        # 计算双向通信能耗
+        Eu = receiver.energy_consumption(target_node=self.physical_center, transfer_WET=False)
+        Ev = self.physical_center.energy_consumption(target_node=receiver, transfer_WET=False)
+        
+        # 恢复原始B值
+        receiver.B = original_B_receiver
+        self.physical_center.B = original_B_pc
+        
+        # 扣除能量
+        receiver.current_energy = max(0.0, receiver.current_energy - Eu)
+        self.physical_center.current_energy = max(0.0, self.physical_center.current_energy - Ev)
+        
+        total_energy = Eu + Ev
+        
+        return total_energy
 
 
 # ==================== 工厂方法 ====================

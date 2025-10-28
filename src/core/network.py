@@ -52,11 +52,14 @@ class Network:
                  bit_rate: float = 1000000.0,
                  path_loss_exponent: float = 2.0,
                  energy_decay_rate: float = 5.0,
-                 sensor_energy: float = 0.1):
+                 sensor_energy: float = 0.1,
+                 # 物理中心节点参数
+                 enable_physical_center: bool = True,
+                 center_initial_energy_multiplier: float = 10.0):
         """
         初始化网络
         
-        :param num_nodes: 节点数量
+        :param num_nodes: 普通节点数量（不包括物理中心）
         :param low_threshold: 低能量阈值
         :param high_threshold: 高能量阈值
         :param node_initial_energy: 节点初始能量
@@ -73,11 +76,18 @@ class Network:
         :param enable_energy_hole: 是否启用能量空洞模式（非太阳能节点聚集分布）
         :param energy_hole_center_mode: 空洞中心选择模式
         :param energy_hole_mobile_ratio: 能量空洞区域中移动节点比例
+        :param enable_physical_center: 是否启用物理中心节点
+        :param center_initial_energy_multiplier: 物理中心初始能量倍数
         """
         self.num_nodes = num_nodes
         self.nodes = []
         self.use_gpu = use_gpu
         self.gpu_manager = get_gpu_manager(use_gpu)
+        
+        # 物理中心节点参数
+        self.enable_physical_center = enable_physical_center
+        self.center_initial_energy_multiplier = center_initial_energy_multiplier
+        self.physical_center = None  # 物理中心节点引用
         
         # 能量空洞模式参数
         self.enable_energy_hole = enable_energy_hole
@@ -155,6 +165,29 @@ class Network:
         idx1 = self.nodes.index(node1)
         idx2 = self.nodes.index(node2)
         return self._distance_matrix[idx1, idx2]
+    
+    def get_regular_nodes(self) -> list:
+        """获取所有普通节点（排除物理中心）"""
+        return [n for n in self.nodes if not n.is_physical_center]
+    
+    def get_physical_center(self) -> SensorNode:
+        """获取物理中心节点"""
+        return self.physical_center
+    
+    def update_physical_center_position(self):
+        """更新物理中心位置到当前网络的几何中心"""
+        if not self.physical_center:
+            return
+        
+        regular_nodes = self.get_regular_nodes()
+        if not regular_nodes:
+            return
+        
+        center_x = sum(n.position[0] for n in regular_nodes) / len(regular_nodes)
+        center_y = sum(n.position[1] for n in regular_nodes) / len(regular_nodes)
+        
+        self.physical_center.position = [center_x, center_y]
+        print(f"[Network] 物理中心位置更新为: ({center_x:.3f}, {center_y:.3f})")
 
 
 
@@ -382,22 +415,77 @@ class Network:
         
         return no_solar_nodes, mobile_nodes
     
+    def _create_physical_center_node(self, regular_nodes: list) -> SensorNode:
+        """
+        创建物理中心节点
+        
+        特性：
+        - node_id = 0（固定）
+        - 位置 = 普通节点的几何中心
+        - 初始能量 = 普通节点初始能量 × 倍数
+        - is_physical_center = True
+        - has_solar = False（物理中心不需要太阳能）
+        - is_mobile = False（物理中心不移动）
+        
+        :param regular_nodes: 普通节点列表（用于计算几何中心）
+        :return: 物理中心节点
+        """
+        # 1. 计算几何中心
+        center_x = sum(n.position[0] for n in regular_nodes) / len(regular_nodes)
+        center_y = sum(n.position[1] for n in regular_nodes) / len(regular_nodes)
+        
+        # 2. 计算物理中心初始能量
+        center_energy = self.node_initial_energy * self.center_initial_energy_multiplier
+        
+        # 3. 创建物理中心节点
+        physical_center = SensorNode(
+            node_id=0,  # 固定ID为0
+            position=[center_x, center_y],
+            initial_energy=center_energy,
+            low_threshold=self.low_threshold,
+            high_threshold=self.high_threshold,
+            has_solar=False,  # 物理中心不需要太阳能
+            is_mobile=False,  # 物理中心不移动
+            is_physical_center=True,  # 标记为物理中心
+            # 使用与普通节点相同的通信参数
+            capacity=self.node_capacity,
+            voltage=self.node_voltage,
+            enable_energy_harvesting=False,  # 物理中心不采集能量
+            solar_efficiency=self.node_solar_efficiency,
+            solar_area=self.node_solar_area,
+            max_solar_irradiance=self.node_max_solar_irradiance,
+            env_correction_factor=self.node_env_correction_factor,
+            energy_char=self.node_energy_char,
+            energy_elec=self.node_energy_elec,
+            epsilon_amp=self.node_epsilon_amp,
+            bit_rate=self.node_bit_rate,
+            path_loss_exponent=self.node_path_loss_exponent,
+            energy_decay_rate=self.node_energy_decay_rate,
+            sensor_energy=self.node_sensor_energy
+        )
+        
+        return physical_center
+    
     def _create_nodes_from_positions_and_properties(
         self, positions: np.ndarray, no_solar_nodes: set, mobile_nodes: set):
         """
-        根据位置和属性创建所有节点对象（统一创建方法）
+        根据位置和属性创建所有普通节点对象（ID从1开始）
         
         Args:
             positions: (N, 2) 节点位置数组
-            no_solar_nodes: 非太阳能节点的ID集合
-            mobile_nodes: 移动节点的ID集合
+            no_solar_nodes: 非太阳能节点的ID集合（基于0索引）
+            mobile_nodes: 移动节点的ID集合（基于0索引）
         """
-        for node_id in range(self.num_nodes):
-            x, y = positions[node_id]
+        regular_nodes = []
+        for idx in range(self.num_nodes):
+            x, y = positions[idx]
             
-            # 确定节点属性
-            has_solar = node_id not in no_solar_nodes
-            is_mobile = node_id in mobile_nodes
+            # 普通节点ID从1开始
+            node_id = idx + 1
+            
+            # 确定节点属性（使用idx作为索引）
+            has_solar = idx not in no_solar_nodes
+            is_mobile = idx in mobile_nodes
             
             mobility_pattern = "circle" if is_mobile else None
             mobility_params = {
@@ -406,7 +494,7 @@ class Network:
                 "center": [float(x), float(y)]
             } if is_mobile else {}
             
-            # 创建节点
+            # 创建普通节点
             node = SensorNode(
                 node_id=node_id,
                 initial_energy=self.node_initial_energy,
@@ -417,6 +505,7 @@ class Network:
                 is_mobile=is_mobile,
                 mobility_pattern=mobility_pattern,
                 mobility_params=mobility_params,
+                is_physical_center=False,  # 普通节点
                 # NodeConfig参数
                 capacity=self.node_capacity,
                 voltage=self.node_voltage,
@@ -434,9 +523,20 @@ class Network:
                 sensor_energy=self.node_sensor_energy
             )
             
-            self.nodes.append(node)
+            regular_nodes.append(node)
         
-        print(f"[OK] 创建 {len(self.nodes)} 个节点对象完成")
+        print(f"[OK] 创建 {len(regular_nodes)} 个普通节点对象完成")
+        
+        # 创建物理中心节点（如果启用）
+        if self.enable_physical_center:
+            self.physical_center = self._create_physical_center_node(regular_nodes)
+            # 物理中心节点ID=0，放在列表开头
+            self.nodes = [self.physical_center] + regular_nodes
+            print(f"[OK] 网络初始化完成: 物理中心(ID=0) + {len(regular_nodes)}个普通节点(ID=1-{len(regular_nodes)})")
+        else:
+            self.nodes = regular_nodes
+            self.physical_center = None
+            print(f"[OK] 网络初始化完成: {len(regular_nodes)}个普通节点(ID=1-{len(regular_nodes)})，无物理中心")
 
     def _assign_energy_by_virtual_center(self):
         """基于虚拟中心（几何中心）分配能量，实现从中心到边缘的线性递减"""

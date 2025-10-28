@@ -22,7 +22,7 @@ def test_imports():
     print("=" * 60)
     
     try:
-        from acdr.virtual_center import VirtualCenter, create_virtual_center
+        from acdr.physical_center import VirtualCenter, create_virtual_center
         print("✓ VirtualCenter 导入成功")
     except ImportError as e:
         print(f"✗ VirtualCenter 导入失败: {e}")
@@ -44,7 +44,7 @@ def test_virtual_center_basic():
     print("测试 2: VirtualCenter 基本功能")
     print("=" * 60)
     
-    from acdr.virtual_center import VirtualCenter
+    from acdr.physical_center import VirtualCenter
     
     # 测试创建
     vc = VirtualCenter(initial_position=(5.0, 5.0), enable_logging=False)
@@ -75,7 +75,7 @@ def test_virtual_center_with_nodes():
     print("测试 3: VirtualCenter 与节点交互")
     print("=" * 60)
     
-    from acdr.virtual_center import VirtualCenter
+    from acdr.physical_center import VirtualCenter
     from core.SensorNode import SensorNode
     
     # 创建虚拟中心

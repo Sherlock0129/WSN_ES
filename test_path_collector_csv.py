@@ -35,7 +35,7 @@ def test_path_collector_csv_generation():
     
     # 3. 创建PathCollector（独立虚拟中心）
     print("\n[创建PathCollector]")
-    from acdr.virtual_center import VirtualCenter
+    from acdr.physical_center import VirtualCenter
     vc = VirtualCenter(enable_logging=False)
     vc.initialize_node_info(network.nodes, initial_time=0)
     network.path_info_collector = config_manager.create_path_collector(vc)

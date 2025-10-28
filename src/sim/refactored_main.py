@@ -98,14 +98,15 @@ def run_simulation(config_file: str = None):
                 logger.info("使用ADCR的虚拟中心")
             else:
                 # 创建独立的虚拟中心
-                from acdr.virtual_center import VirtualCenter
+                from acdr.physical_center import VirtualCenter
                 vc = VirtualCenter(enable_logging=True)
                 vc.initialize_node_info(network.nodes, initial_time=0)
                 logger.info("创建独立虚拟中心")
             
-            # 创建路径信息收集器
-            network.path_info_collector = config_manager.create_path_collector(vc)
-            logger.info("路径信息收集器创建完成")
+            # 创建路径信息收集器，传递物理中心节点
+            physical_center = network.get_physical_center()
+            network.path_info_collector = config_manager.create_path_collector(vc, physical_center)
+            logger.info(f"路径信息收集器创建完成 (物理中心: {'ID=' + str(physical_center.node_id) if physical_center else '未启用'})")
     else:
         logger.info("路径信息收集器已禁用")
         network.path_info_collector = None

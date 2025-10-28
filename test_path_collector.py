@@ -8,7 +8,7 @@ sys.path.insert(0, 'src')
 
 from config.simulation_config import ConfigManager
 from info_collection.path_based_collector import PathBasedInfoCollector
-from acdr.virtual_center import VirtualCenter
+from acdr.physical_center import VirtualCenter
 from core.SensorNode import SensorNode
 import random
 
