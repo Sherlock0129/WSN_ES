@@ -146,11 +146,11 @@ class EnergySimulation:
                         if (PowerControlScheduler is not None) and isinstance(self.scheduler, PowerControlScheduler):
                             self.scheduler.execute_plans(self.network, plans)
                         else:
-                            self.network.execute_energy_transfer(plans)
+                            self.network.execute_energy_transfer(plans, current_time=t)
                     else:
                         # 兼容旧逻辑：使用 network.run_routing()
                         plans = self.network.run_routing(t, max_donors_per_receiver=self.K)
-                        self.network.execute_energy_transfer(plans)
+                        self.network.execute_energy_transfer(plans, current_time=t)
                 else:
                     # 能量传输被禁用，创建空的计划
                     plans = []

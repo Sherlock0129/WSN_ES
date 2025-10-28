@@ -87,6 +87,29 @@ def run_simulation(config_file: str = None):
         logger.info("ADCR链路层已禁用")
         network.adcr_link = None
     
+    # 2.6. 创建路径信息收集器（可选）
+    if config_manager.path_collector_config.enable_path_collector:
+        logger.info("创建路径信息收集器...")
+        with handle_exceptions("路径信息收集器创建", recoverable=True):
+            # 确保有虚拟中心（来自ADCR或独立创建）
+            if network.adcr_link is not None:
+                # 使用ADCR的虚拟中心
+                vc = network.adcr_link.vc
+                logger.info("使用ADCR的虚拟中心")
+            else:
+                # 创建独立的虚拟中心
+                from acdr.virtual_center import VirtualCenter
+                vc = VirtualCenter(enable_logging=True)
+                vc.initialize_node_info(network.nodes, initial_time=0)
+                logger.info("创建独立虚拟中心")
+            
+            # 创建路径信息收集器
+            network.path_info_collector = config_manager.create_path_collector(vc)
+            logger.info("路径信息收集器创建完成")
+    else:
+        logger.info("路径信息收集器已禁用")
+        network.path_info_collector = None
+    
     # 3. 创建调度器
     logger.info("创建调度器...")
     with handle_exceptions("调度器创建", recoverable=False):
@@ -98,18 +121,28 @@ def run_simulation(config_file: str = None):
     with handle_exceptions("仿真运行", recoverable=False):
         simulation = config_manager.create_energy_simulation(network, scheduler)
         
-        # 设置虚拟中心归档路径（如果启用了ADCR）
-        if network.adcr_link is not None:
+        # 设置虚拟中心归档路径
+        if hasattr(network, 'adcr_link') and network.adcr_link is not None:
+            # ADCR的虚拟中心
             network.adcr_link.set_archive_path(simulation.session_dir)
-            logger.info("虚拟中心归档路径已设置")
+            logger.info("虚拟中心归档路径已设置（ADCR）")
+        elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+            # PathCollector的独立虚拟中心
+            import os
+            archive_path = os.path.join(simulation.session_dir, "virtual_center_node_info.csv")
+            network.path_info_collector.vc.archive_path = archive_path
+            logger.info(f"虚拟中心归档路径已设置（PathCollector）: {archive_path}")
         
         simulation.simulate()
         logger.info("仿真完成")
         
-        # 强制刷新虚拟中心归档（如果启用了ADCR）
-        if network.adcr_link is not None:
+        # 强制刷新虚拟中心归档
+        if hasattr(network, 'adcr_link') and network.adcr_link is not None:
             network.adcr_link.vc.force_flush_archive()
-            logger.info("虚拟中心归档已保存")
+            logger.info("虚拟中心归档已保存（ADCR）")
+        elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+            network.path_info_collector.vc.force_flush_archive()
+            logger.info("虚拟中心归档已保存（PathCollector）")
     
     # 5. 生成可视化
     logger.info("生成可视化图表...")
@@ -151,14 +184,21 @@ def run_simulation(config_file: str = None):
         plan_logger.save_simulation_plans(simulation)
         logger.info("详细计划日志保存完成")
     
-    # 9. 保存结果
+    # 9. 输出路径信息收集器统计（如果启用）
+    if network.path_info_collector is not None:
+        logger.info("=" * 60)
+        logger.info("路径信息收集器统计:")
+        logger.info("=" * 60)
+        network.path_info_collector.print_statistics()
+    
+    # 10. 保存结果
     logger.info("保存结果...")
     with handle_exceptions("结果保存", recoverable=True):
         # 使用EnergySimulation的默认路径（按日期组织）
         simulation.save_results()
         logger.info(f"结果已保存到: {simulation.session_dir}")
     
-    # 10. 输出错误摘要
+    # 11. 输出错误摘要
     error_summary = error_handler.get_error_summary()
     if error_summary['total_errors'] > 0:
         logger.warning(f"仿真过程中发生 {error_summary['total_errors']} 个错误")

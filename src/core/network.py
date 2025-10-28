@@ -129,6 +129,9 @@ class Network:
         # 预计算距离矩阵（GPU加速）
         self._distance_matrix = None
         self._distance_matrix_valid = False
+        
+        # 路径信息收集器（稍后由外部设置）
+        self.path_info_collector = None
     
     def _update_distance_matrix(self):
         """更新距离矩阵（GPU加速）"""
@@ -213,7 +216,7 @@ class Network:
                 positions.append([x, y])
                 node_id += 1
         
-        print(f"✓ 生成 {len(positions)} 个均匀网格位置")
+        print(f"[OK] 生成 {len(positions)} 个均匀网格位置")
         return np.array(positions)
     
     def _generate_random_positions(self) -> np.ndarray:
@@ -278,7 +281,7 @@ class Network:
                 y = random.uniform(0, height)
                 positions.append([x, y])
         
-        print(f"✓ 生成 {len(positions)} 个随机位置")
+        print(f"[OK] 生成 {len(positions)} 个随机位置")
         return np.array(positions)
     
     def _assign_solar_properties(self, positions: np.ndarray) -> tuple:
@@ -322,7 +325,7 @@ class Network:
         mobile_pool = list(no_solar_nodes) if no_solar_nodes else all_node_ids
         mobile_nodes = set(random.sample(mobile_pool, min(num_mobile, len(mobile_pool))))
         
-        print(f"✓ 随机分配属性：{len(no_solar_nodes)} 个非太阳能节点，{len(mobile_nodes)} 个移动节点")
+        print(f"[OK] 随机分配属性：{len(no_solar_nodes)} 个非太阳能节点，{len(mobile_nodes)} 个移动节点")
         return no_solar_nodes, mobile_nodes
     
     def _assign_solar_clustered(self, positions: np.ndarray) -> tuple:
@@ -371,7 +374,7 @@ class Network:
         # 计算能量空洞半径
         max_distance = max([math.sqrt(distances_squared[i]) for i in no_solar_nodes])
         
-        print(f"\n✓ 能量空洞模式配置：")
+        print(f"\n[OK] 能量空洞模式配置：")
         print(f"  - 能量空洞中心：({center[0]:.2f}, {center[1]:.2f}) [{self.energy_hole_center_mode}]")
         print(f"  - 非太阳能节点：{num_without_solar}/{self.num_nodes} ({(1-self.solar_node_ratio)*100:.1f}%)")
         print(f"  - 移动节点数：{len(mobile_nodes)}/{self.num_nodes} ({self.energy_hole_mobile_ratio*100:.1f}%)")
@@ -433,7 +436,7 @@ class Network:
             
             self.nodes.append(node)
         
-        print(f"✓ 创建 {len(self.nodes)} 个节点对象完成")
+        print(f"[OK] 创建 {len(self.nodes)} 个节点对象完成")
 
     def _assign_energy_by_virtual_center(self):
         """基于虚拟中心（几何中心）分配能量，实现从中心到边缘的线性递减"""
@@ -770,10 +773,13 @@ class Network:
 
         return routing_plans
 
-    def execute_energy_transfer(self, plans):
+    def execute_energy_transfer(self, plans, current_time: int = None):
         """
         Execute energy transfers based on the routing plans returned by run_routing().
         Updates donor and receiver energies and histories.
+        
+        :param plans: 传能计划列表
+        :param current_time: 当前时间步（用于路径信息收集）
         """
         for plan in plans:
             donor = plan["donor"]
@@ -829,6 +835,17 @@ class Network:
 
                     # 准备下一跳
                     energy_left = energy_delivered
+            
+            # ✨ 新增：路径信息收集（如果启用）
+            if self.path_info_collector is not None and current_time is not None:
+                try:
+                    self.path_info_collector.collect_and_report(
+                        path=path,
+                        all_nodes=self.nodes,
+                        current_time=current_time
+                    )
+                except Exception as e:
+                    print(f"[PathCollector] 警告：信息收集失败 - {e}")
 
     def update_network_energy(self, t):
         """Update the energy of all nodes considering only harvesting and decay."""

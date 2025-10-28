@@ -13,6 +13,7 @@ from datetime import datetime
 
 from utils.output_manager import OutputManager
 from utils.gpu_compute import get_gpu_manager, compute_statistics_gpu
+from utils.logger import get_statistics_logger
 
 
 class SimulationStats:
@@ -89,7 +90,7 @@ class SimulationStats:
     
     def print_statistics(self, network) -> Dict[str, float]:
         """
-        打印仿真统计信息
+        打印仿真统计信息并保存到文件
         
         Args:
             network: 网络对象
@@ -99,7 +100,6 @@ class SimulationStats:
         """
         # 计算所有时间点方差的平均值
         avg_variance = np.mean(self.energy_standards) if self.energy_standards else 0
-        print(f"\n所有时间点方差的平均值: {avg_variance:.4f}")
 
         # 计算总体的损失能量值
         # 总发送能量 = 所有节点传输的能量总和
@@ -111,18 +111,20 @@ class SimulationStats:
         # 总损失能量 = 总发送能量 - 总接收能量
         total_loss_energy = total_sent_energy - total_received_energy
 
-        print(f"总体损失能量值: {total_loss_energy:.4f} Joules")
-        print(f"总发送能量: {total_sent_energy:.4f} Joules")
-        print(f"总接收能量: {total_received_energy:.4f} Joules")
-        print(f"能量传输效率: {(total_received_energy / total_sent_energy * 100 if total_sent_energy > 0 else 0):.2f}%")
-
-        # 返回这些统计值，以便在其他地方使用
-        return {
+        # 构建统计信息字典
+        stats = {
             'avg_variance': avg_variance,
             'total_loss_energy': total_loss_energy,
             'total_sent_energy': total_sent_energy,
             'total_received_energy': total_received_energy
         }
+
+        # 使用 StatisticsLogger 打印并保存统计信息
+        stats_logger = get_statistics_logger(self.session_dir)
+        stats_logger.print_and_save_statistics(stats, network)
+
+        # 返回这些统计值，以便在其他地方使用
+        return stats
     
     def plot_K_history(self, K_history: List[int], K_timestamps: List[datetime]) -> None:
         """

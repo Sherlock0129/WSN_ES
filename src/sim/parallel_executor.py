@@ -146,9 +146,13 @@ class ParallelSimulationExecutor:
             simulation.output_dir = output_dir
             simulation.session_dir = output_dir
             
-            # 设置虚拟中心归档路径（如果启用了ADCR）
-            if network.adcr_link is not None:
+            # 设置虚拟中心归档路径
+            if hasattr(network, 'adcr_link') and network.adcr_link is not None:
                 network.adcr_link.set_archive_path(output_dir)
+            elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+                import os
+                archive_path = os.path.join(output_dir, "virtual_center_node_info.csv")
+                network.path_info_collector.vc.archive_path = archive_path
             
             # 应用自定义权重
             if custom_weights:
@@ -161,9 +165,11 @@ class ParallelSimulationExecutor:
             simulation.simulate()
             end_time = time.time()
             
-            # 强制刷新虚拟中心归档（如果启用了ADCR）
-            if network.adcr_link is not None:
+            # 强制刷新虚拟中心归档
+            if hasattr(network, 'adcr_link') and network.adcr_link is not None:
                 network.adcr_link.vc.force_flush_archive()
+            elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+                network.path_info_collector.vc.force_flush_archive()
             
             # 计算统计信息
             final_energies = [node.current_energy for node in network.nodes]
