@@ -164,6 +164,10 @@ class EnergySimulation:
                     plans = []
                     cand = []
             
+                # 能量传输执行完成后，估算未上报节点的能量
+                if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                    self.scheduler.nim.estimate_all_nodes(current_time=t)
+            
                 # 计算统计信息
                 stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, self.network)
             
