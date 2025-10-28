@@ -367,7 +367,7 @@ class ADCRLinkLayerVirtual(object):
             path = opportunistic_routing(
                 nodes=self.net.nodes,
                 source_node=ch,
-                dest_node=physical_center,
+                destination_node=physical_center,
                 max_hops=self.max_hops
             )
 
@@ -471,13 +471,9 @@ class ADCRLinkLayerVirtual(object):
         
         print(f"[ADCR-DEBUG] Processing {len(self.upstream_paths)} upstream paths")
 
-        cx, cy = self.virtual_center
-
         # 统计簇间路径通信
         inter_cluster_hops = 0
         inter_cluster_energy = 0.0
-        virtual_hops = 0
-        virtual_energy = 0.0
 
         for ch_id, path in self.upstream_paths.items():
             if (path is None) or (len(path) == 0):
@@ -503,54 +499,15 @@ class ADCRLinkLayerVirtual(object):
 
             # 阶段2：簇间通信（簇头 → 物理中心节点）
             # 所有跳都是真实节点之间的通信，包括最后一跳到物理中心
+            # 路径格式：[ch, relay1, relay2, ..., physical_center(ID=0)]
             for i in range(len(path) - 1):
                 u, v = path[i], path[i+1]
                 Eu, Ev = self._energy_consume_one_hop(u, v, transfer_WET=False)
-                self.last_comms.append({
-                    "type": "inter_cluster",
-                    "hop": (u.node_id, v.node_id),
-                    "E_tx": Eu,
-                    "E_rx": Ev
-                })
-                inter_cluster_hops += 1
-                inter_cluster_energy += (Eu + Ev)
-
-            # 最后一跳到虚拟中心（只有发送端计费）
-            last_real = path[-1]
-            # 计算到虚拟中心的欧式距离
-            d = self._dist_xy(last_real.position, (cx, cy))
-
-            # 计算该簇的聚合数据量
-            aggregated_data_size = self._calculate_cluster_data_size(ch_id)
-
-            # 使用聚合数据量计算能耗
-            E_elec = last_real.E_elec
-            eps = last_real.epsilon_amp
-            tau = last_real.tau
-            # 使用聚合数据量B_aggregated替代固定的B
-            E_tx_virtual = E_elec * aggregated_data_size + eps * aggregated_data_size * (d ** tau)
-            E_rx_virtual = E_elec * aggregated_data_size
-            E_com = self.tx_rx_ratio * (E_tx_virtual + E_rx_virtual) + self.sensor_energy
-            last_real.current_energy = max(0.0, last_real.current_energy - E_com)
-            self.last_comms.append({
-                "type": "virtual_hop",
-                "hop": (last_real.node_id, "VIRTUAL"),
-                "E_tx_only": E_com,
-                "data_size": aggregated_data_size,
-                "cluster_size": len([nid for nid, cid in self.cluster_of.items() if cid == ch_id])
-            })
-            virtual_hops += 1
-            virtual_energy += E_com
-
-        print(f"[ADCR-DEBUG] Inter-cluster paths: {inter_cluster_hops} hops, total energy: {inter_cluster_energy:.2f}J")
-        print(f"[ADCR-DEBUG] Virtual hops: {virtual_hops} hops, total energy: {virtual_energy:.2f}J")
-        print(f"[ADCR-DEBUG] Total energy consumption: {intra_cluster_energy + inter_cluster_energy + virtual_energy:.2f}J")
-        print(f"[ADCR-DEBUG] Total communication records: {len(self.last_comms)}")
-
+                
                 # 标记是否是最后一跳（到物理中心）
                 is_final_hop = (i == len(path) - 2)
                 hop_type = "to_physical_center" if is_final_hop else "inter_cluster"
-
+                
                 self.last_comms.append({
                     "hop": (u.node_id, v.node_id),
                     "E_tx": Eu,
@@ -558,6 +515,12 @@ class ADCRLinkLayerVirtual(object):
                     "type": hop_type,
                     "cluster_id": ch_id
                 })
+                inter_cluster_hops += 1
+                inter_cluster_energy += (Eu + Ev)
+
+        print(f"[ADCR-DEBUG] Inter-cluster communication: {inter_cluster_hops} hops, total energy: {inter_cluster_energy:.2f}J")
+        print(f"[ADCR-DEBUG] Total energy consumption: {intra_cluster_energy + inter_cluster_energy:.2f}J")
+        print(f"[ADCR-DEBUG] Total communication records: {len(self.last_comms)}")
 
     def _update_virtual_center_info(self, t: int):
         """

@@ -208,10 +208,6 @@ class NodeInfoManager:
             info_node.current_energy = energy  # 从上报的能量值更新
             if position is not None:
                 info_node.position = list(position)  # 从上报的位置更新
-        
-        self._log(f"[NodeInfoManager] 更新节点信息: Node {node_id}, "
-                 f"能量={energy:.1f}J, 记录时间={record_time}, 到达时间={arrival_time}, "
-                 f"AoI={info['aoi']}分钟")
     
     def batch_update_node_info(self, nodes: List[SensorNode], current_time: int,
                                cluster_mapping: Dict[int, int] = None,
@@ -249,8 +245,6 @@ class NodeInfoManager:
                 cluster_id=cluster_id,
                 data_size=data_size
             )
-        
-        self._log(f"[NodeInfoManager] 批量更新 {len(nodes)} 个节点信息")
     
     def sync_info_nodes_from_table(self):
         """
