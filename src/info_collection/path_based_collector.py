@@ -151,129 +151,12 @@ class PathBasedInfoCollector:
                 'energy': node.current_energy,
                 'position': tuple(node.position),
                 'is_solar': node.has_solar,
-                'freshness': current_time,  # 实时采集，新鲜度为当前时间
+                'record_time': current_time,  # 实时采集，记录时间为当前时间
                 'arrival_time': current_time,  # 立即到达
-                'is_estimated': False,
-                'confidence': 1.0  # 实时信息，100%置信度
+                'is_estimated': False
             }
         
         return info
-    
-    def _estimate_other_nodes(self, other_nodes: List[SensorNode], 
-                              current_time: int) -> Dict[int, Dict]:
-        """
-        估算路径外节点的信息
-        
-        估算策略：
-        1. 从虚拟中心获取节点的历史信息
-        2. 计算时间差
-        3. 基于自然衰减和太阳能采集模型估算当前能量
-        
-        :param other_nodes: 路径外的节点列表
-        :param current_time: 当前时间
-        :return: {node_id: estimated_info_dict}
-        """
-        estimated = {}
-        
-        for node in other_nodes:
-            # 从虚拟中心获取历史信息
-            old_info = self.vc.get_node_info(node.node_id)
-            
-            if old_info is None:
-                # 如果虚拟中心没有历史信息，使用节点当前实际值
-                # 注意：这里获取的是节点对象的真实值，但标记为"估算"
-                # 因为在实际应用中，虚拟中心无法直接访问路径外节点
-                estimated_energy = node.current_energy
-                freshness = current_time
-                confidence = 0.5  # 中等置信度（无历史基准）
-            else:
-                # 基于历史信息估算
-                time_elapsed = current_time - old_info['freshness']
-                
-                if time_elapsed == 0:
-                    # 刚刚更新过，直接使用历史值
-                    estimated_energy = old_info['energy']
-                    confidence = 1.0
-                else:
-                    # 估算能量变化
-                    estimated_energy, confidence = self._estimate_energy(
-                        node=node,
-                        old_energy=old_info['energy'],
-                        time_elapsed=time_elapsed,
-                        current_time=current_time
-                    )
-                
-                freshness = old_info['freshness']  # 保持原有新鲜度
-            
-            estimated[node.node_id] = {
-                'energy': estimated_energy,
-                'position': tuple(node.position),
-                'is_solar': node.has_solar,
-                'freshness': freshness,
-                'arrival_time': current_time,
-                'is_estimated': True,
-                'confidence': confidence
-            }
-        
-        return estimated
-    
-    def _estimate_energy(self, node: SensorNode, old_energy: float, 
-                        time_elapsed: int, current_time: int) -> tuple:
-        """
-        估算节点能量（基于物理模型）
-        
-        模型：E_new = E_old + 采集 - 损耗
-        
-        :param node: 节点对象（用于获取参数）
-        :param old_energy: 历史能量值
-        :param time_elapsed: 经过的时间（分钟）
-        :param current_time: 当前时间
-        :return: (estimated_energy, confidence)
-        """
-        # 1. 自然衰减（固定速率，从节点配置获取）
-        decay_per_minute = getattr(node, 'energy_decay_rate', self.decay_rate)
-        total_decay = decay_per_minute * time_elapsed
-        
-        # 2. 太阳能采集（如果启用且节点有太阳能）
-        total_harvest = 0.0
-        if self.use_solar_model and node.has_solar:
-            # 使用节点的实际太阳能采集方法估算
-            total_harvest = self._estimate_solar_harvest(node, time_elapsed, current_time)
-        
-        # 3. 计算估算能量
-        estimated = old_energy + total_harvest - total_decay
-        estimated = max(0.0, estimated)  # 确保非负
-        estimated = min(estimated, node.capacity * node.V * 3600)  # 不超过容量
-        
-        # 4. 计算置信度（时间越长，置信度越低）
-        # 置信度衰减模型：confidence = exp(-lambda * t)
-        # 假设30分钟后置信度降至50%
-        decay_factor = math.log(2) / 30.0  # ln(2)/30 ≈ 0.023
-        confidence = math.exp(-decay_factor * time_elapsed)
-        confidence = max(0.1, min(1.0, confidence))  # 限制在[0.1, 1.0]
-        
-        return estimated, confidence
-    
-    def _estimate_solar_harvest(self, node: SensorNode, time_elapsed: int, 
-                                current_time: int) -> float:
-        """
-        估算太阳能采集量（简化模型）
-        
-        策略：
-        - 计算time_elapsed期间的平均采集量
-        - 考虑昼夜周期（简化为余弦函数）
-        
-        :param node: 节点对象
-        :param time_elapsed: 时间跨度（分钟）
-        :param current_time: 当前时间（分钟）
-        :return: 估算的采集总量（J）
-        """
-        # 简化策略：使用当前时刻的采集率作为平均值
-        # 注意：这是一个近似，更准确的方法需要积分
-        avg_harvest = node.energy_harvest(current_time)
-        total = avg_harvest * time_elapsed
-        
-        return total
     
     def _update_virtual_center(self, all_info: Dict[int, Dict], current_time: int):
         """
@@ -287,7 +170,7 @@ class PathBasedInfoCollector:
             self.vc.update_node_info(
                 node_id=node_id,
                 energy=info['energy'],
-                freshness=info['freshness'],
+                record_time=info['record_time'],
                 arrival_time=info['arrival_time'],
                 position=info['position'],
                 is_solar=info['is_solar'],

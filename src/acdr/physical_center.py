@@ -50,7 +50,11 @@ class NodeInfoManager:
                  initial_position: Tuple[float, float] = (0.0, 0.0),
                  enable_logging: bool = True,
                  history_size: int = 1000,
-                 archive_path: Optional[str] = None):
+                 archive_path: Optional[str] = None,
+                 # 能量估算参数
+                 enable_energy_estimation: bool = True,
+                 decay_rate_default: float = 5.0,
+                 use_solar_model: bool = True):
         """
         初始化物理中心信息管理器
         
@@ -58,6 +62,9 @@ class NodeInfoManager:
         :param enable_logging: 是否启用日志输出
         :param history_size: 近期历史缓存大小
         :param archive_path: 归档文件路径（如果为None，需后续设置）
+        :param enable_energy_estimation: 是否启用能量估算（未上报节点）
+        :param decay_rate_default: 默认能量衰减率（J/分钟）
+        :param use_solar_model: 是否使用太阳能模型进行估算
         """
         self.position: Tuple[float, float] = initial_position
         self.enable_logging = enable_logging
@@ -66,19 +73,20 @@ class NodeInfoManager:
         # ========== 节点信息表（三级缓存） ==========
         # L1: 最新状态表（字典，O(1)查询）
         # 结构: {node_id: {
-        #   'energy': float,           # 节点能量
-        #   'freshness': int,          # 信息新鲜度（采集时间）
+        #   'energy': float,           # 节点能量（可能是估算值）
+        #   'record_time': int,        # 信息记录时间（采集时刻）
         #   'arrival_time': int,       # 到达物理中心的时间
         #   'position': (x, y),        # 节点位置
         #   'is_solar': bool,          # 是否有太阳能
         #   'cluster_id': int,         # 所属簇ID
         #   'data_size': int,          # 数据包大小
-        #   'age': int                 # 信息年龄（arrival_time - freshness）
+        #   'aoi': int,                # Age of Information（信息年龄，每分钟+1）
+        #   'is_estimated': bool       # 是否为估算值
         # }}
         self.latest_info: Dict[int, Dict] = {}
         
         # L2: 近期历史（deque，固定大小，FIFO）
-        # 每个元素: (timestamp, node_id, energy, freshness, position, 
+        # 每个元素: (timestamp, node_id, energy, record_time, position, 
         #           is_solar, cluster_id, data_size)
         self.recent_history: deque = deque(maxlen=history_size)
         
@@ -87,6 +95,11 @@ class NodeInfoManager:
         self.archive_buffer = []  # 写入缓冲区
         self.archive_batch_size = 100  # 批量写入大小
         self.archive_initialized = False  # 归档文件是否已初始化
+        
+        # ========== 能量估算参数 ==========
+        self.enable_energy_estimation = enable_energy_estimation
+        self.decay_rate_default = decay_rate_default
+        self.use_solar_model = use_solar_model
         
         # ========== InfoNode常驻缓存 ==========
         # 存储所有节点的InfoNode实例，key为node_id
@@ -98,6 +111,8 @@ class NodeInfoManager:
         
         self._log(f"[NodeInfoManager] 初始化信息管理器，固定位置: {self.position}")
         self._log(f"[NodeInfoManager] 节点信息表已启用，历史缓存: {history_size} 条")
+        if self.enable_energy_estimation:
+            self._log(f"[NodeInfoManager] 能量估算已启用，衰减率: {self.decay_rate_default} J/min")
     
     def _log(self, message: str):
         """内部日志方法"""
@@ -129,7 +144,7 @@ class NodeInfoManager:
     
     # ==================== 节点信息表管理 ====================
     
-    def update_node_info(self, node_id: int, energy: float, freshness: int, 
+    def update_node_info(self, node_id: int, energy: float, record_time: int, 
                         arrival_time: int, position: Tuple[float, float] = None,
                         is_solar: bool = None, cluster_id: int = None, 
                         data_size: int = None):
@@ -138,7 +153,7 @@ class NodeInfoManager:
         
         :param node_id: 节点ID
         :param energy: 节点能量（J）
-        :param freshness: 信息新鲜度（信息采集时刻）
+        :param record_time: 信息记录时间（信息采集时刻）
         :param arrival_time: 到达物理中心的时间
         :param position: 节点位置 (x, y)
         :param is_solar: 是否有太阳能
@@ -148,20 +163,21 @@ class NodeInfoManager:
         # 构造信息记录
         info = {
             'energy': energy,
-            'freshness': freshness,
+            'record_time': record_time,
             'arrival_time': arrival_time,
             'position': position,
             'is_solar': is_solar,
             'cluster_id': cluster_id,
             'data_size': data_size,
-            'age': arrival_time - freshness  # 信息年龄（延迟）
+            'aoi': 0,  # Age of Information，刚到达时为0
+            'is_estimated': False  # 上报值不是估算值
         }
         
         # L1: 更新最新状态表
         self.latest_info[node_id] = info
         
         # L2: 添加到近期历史
-        history_record = (arrival_time, node_id, energy, freshness, position, 
+        history_record = (arrival_time, node_id, energy, record_time, position, 
                          is_solar, cluster_id, data_size)
         self.recent_history.append(history_record)
         
@@ -170,8 +186,8 @@ class NodeInfoManager:
             'arrival_time': arrival_time,
             'node_id': node_id,
             'energy': energy,
-            'freshness': freshness,
-            'age': info['age'],
+            'record_time': record_time,
+            'aoi': info['aoi'],
             'position_x': position[0] if position else None,
             'position_y': position[1] if position else None,
             'is_solar': is_solar,
@@ -194,8 +210,8 @@ class NodeInfoManager:
                 info_node.position = list(position)  # 从上报的位置更新
         
         self._log(f"[NodeInfoManager] 更新节点信息: Node {node_id}, "
-                 f"能量={energy:.1f}J, 新鲜度={freshness}, 到达时间={arrival_time}, "
-                 f"信息年龄={info['age']}分钟")
+                 f"能量={energy:.1f}J, 记录时间={record_time}, 到达时间={arrival_time}, "
+                 f"AoI={info['aoi']}分钟")
     
     def batch_update_node_info(self, nodes: List[SensorNode], current_time: int,
                                cluster_mapping: Dict[int, int] = None,
@@ -226,7 +242,7 @@ class NodeInfoManager:
             self.update_node_info(
                 node_id=node.node_id,
                 energy=node.current_energy,  # 节点上报的能量值
-                freshness=current_time,  # 信息采集时刻
+                record_time=current_time,  # 信息记录时刻
                 arrival_time=current_time,  # 信息到达时刻
                 position=tuple(node.position),  # 节点上报的位置
                 is_solar=node.has_solar,  # 节点属性
@@ -259,6 +275,134 @@ class NodeInfoManager:
         
         self._log(f"[NodeInfoManager] 从节点信息表同步 {len(self.info_nodes)} 个InfoNode")
     
+    # ==================== 能量估算 ====================
+    
+    def _solar_irradiance(self, t: int, G_max: float) -> float:
+        """
+        计算太阳辐照度（与SensorNode.solar_irradiance完全相同）
+        
+        :param t: 时间（分钟）
+        :param G_max: 最大辐照度 (W/m^2)
+        :return: 太阳辐照度 (W/m^2)
+        """
+        t = t % 1440  # 标准化为每日周期
+        if 360 <= t <= 1080:  # 日出到日落（6:00 AM - 6:00 PM）
+            return G_max * math.sin(math.pi * (t - 360) / 720)
+        return 0
+    
+    def _estimate_solar_harvest_single(self, t: int, params: dict) -> float:
+        """
+        估算单个时刻的太阳能采集（与SensorNode.energy_harvest完全相同）
+        
+        :param t: 时间（分钟）
+        :param params: 节点的太阳能参数
+        :return: 采集的能量（J）
+        """
+        if not params.get('enable_energy_harvesting', True):
+            return 0
+        
+        G_t = self._solar_irradiance(t, params['G_max'])
+        harvested_energy = (params['solar_efficiency'] * 
+                           params['solar_area'] * 
+                           G_t * 
+                           params['env_correction_factor'])
+        return harvested_energy
+    
+    def _estimate_energy(self, node_id: int, current_time: int) -> tuple:
+        """
+        估算节点当前能量（基于物理模型，与SensorNode逻辑完全一致）
+        
+        模型：E(t) = E(t0) + Σ harvest(t_i) - decay * Δt
+        
+        :param node_id: 节点ID
+        :param current_time: 当前时间（分钟）
+        :return: (estimated_energy, time_elapsed)
+        """
+        if node_id not in self.latest_info:
+            return None, 0
+        
+        info = self.latest_info[node_id]
+        last_report_time = info['arrival_time']
+        last_report_energy = info['energy']
+        time_elapsed = current_time - last_report_time
+        
+        # 如果是刚上报的（time_elapsed=0），直接返回上报值
+        if time_elapsed == 0:
+            return last_report_energy, 0
+        
+        # 获取节点参数
+        if node_id in self.energy_params:
+            params = self.energy_params[node_id]
+            decay_rate = params.get('energy_decay_rate', self.decay_rate_default)
+            capacity = params.get('capacity', 3.5)
+            voltage = params.get('voltage', 3.7)
+        else:
+            params = {}
+            decay_rate = self.decay_rate_default
+            capacity = 3.5
+            voltage = 3.7
+        
+        # 1. 计算自然衰减
+        total_decay = decay_rate * time_elapsed
+        
+        # 2. 估算太阳能采集（与SensorNode.energy_harvest完全相同）
+        total_harvest = 0.0
+        if self.use_solar_model and info.get('is_solar', False) and params:
+            # 对每一分钟求和，精确计算（与真实节点逻辑一致）
+            for t in range(last_report_time, current_time):
+                total_harvest += self._estimate_solar_harvest_single(t, params)
+        
+        # 3. 计算估算能量
+        estimated = last_report_energy + total_harvest - total_decay
+        estimated = max(0.0, estimated)  # 确保非负
+        max_energy = capacity * voltage * 3600  # 电池容量上限（J）
+        estimated = min(estimated, max_energy)  # 不超过容量
+        
+        return estimated, time_elapsed
+    
+    def estimate_all_nodes(self, current_time: int):
+        """
+        估算所有节点的当前能量并更新AoI到节点信息表
+        
+        工作流程：
+        1. 遍历所有节点
+        2. 对于未上报的节点（time_elapsed > 0），基于物理模型估算能量
+        3. 更新节点信息表中的能量值、is_estimated字段和AoI（每分钟+1）
+        4. InfoNode会自动从信息表同步
+        
+        :param current_time: 当前时间（分钟）
+        """
+        if not self.enable_energy_estimation:
+            return
+        
+        estimated_count = 0
+        
+        for node_id in self.latest_info.keys():
+            estimated_energy, time_elapsed = self._estimate_energy(node_id, current_time)
+            
+            if estimated_energy is None:
+                continue
+            
+            # 如果是估算值（time_elapsed > 0），更新信息表
+            if time_elapsed > 0:
+                # 更新节点信息表
+                self.latest_info[node_id]['energy'] = estimated_energy
+                self.latest_info[node_id]['is_estimated'] = True
+                
+                # 同步到InfoNode
+                if node_id in self.info_nodes:
+                    self.info_nodes[node_id].current_energy = estimated_energy
+                
+                estimated_count += 1
+            
+            # 更新AoI：每分钟+1（无论是否估算）
+            # AoI = current_time - arrival_time
+            arrival_time = self.latest_info[node_id]['arrival_time']
+            self.latest_info[node_id]['aoi'] = current_time - arrival_time
+        
+        if estimated_count > 0:
+            self._log(f"[NodeInfoManager] 能量估算完成：{estimated_count} 个节点")
+    
     def initialize_node_info(self, nodes: List[SensorNode], initial_time: int = 0):
         """
         初始化节点信息表（在网络创建后立即调用）
@@ -278,7 +422,7 @@ class NodeInfoManager:
             self.update_node_info(
                 node_id=node.node_id,
                 energy=node.initial_energy,  # 使用初始能量
-                freshness=initial_time,
+                record_time=initial_time,
                 arrival_time=initial_time,
                 position=tuple(node.position),
                 is_solar=node.has_solar,
@@ -373,7 +517,7 @@ class NodeInfoManager:
         if not self.archive_initialized:
             with open(self.archive_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=[
-                    'arrival_time', 'node_id', 'energy', 'freshness', 'age',
+                    'arrival_time', 'node_id', 'energy', 'record_time', 'aoi',
                     'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
                 ])
                 writer.writeheader()
@@ -383,7 +527,7 @@ class NodeInfoManager:
         # 追加写入数据
         with open(self.archive_path, 'a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=[
-                'arrival_time', 'node_id', 'energy', 'freshness', 'age',
+                'arrival_time', 'node_id', 'energy', 'record_time', 'aoi',
                 'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
             ])
             writer.writerows(self.archive_buffer)
@@ -411,14 +555,14 @@ class NodeInfoManager:
                 'avg_energy': 0,
                 'min_energy': 0,
                 'max_energy': 0,
-                'avg_age': 0,
-                'max_age': 0,
+                'avg_aoi': 0,
+                'max_aoi': 0,
                 'solar_nodes': 0,
                 'non_solar_nodes': 0
             }
         
         energies = [info['energy'] for info in self.latest_info.values()]
-        ages = [info['age'] for info in self.latest_info.values()]
+        aois = [info['aoi'] for info in self.latest_info.values()]
         solar_count = sum(1 for info in self.latest_info.values() 
                          if info.get('is_solar', False))
         
@@ -427,8 +571,8 @@ class NodeInfoManager:
             'avg_energy': sum(energies) / len(energies),
             'min_energy': min(energies),
             'max_energy': max(energies),
-            'avg_age': sum(ages) / len(ages) if ages else 0,
-            'max_age': max(ages) if ages else 0,
+            'avg_aoi': sum(aois) / len(aois) if aois else 0,
+            'max_aoi': max(aois) if aois else 0,
             'solar_nodes': solar_count,
             'non_solar_nodes': len(self.latest_info) - solar_count,
             'history_records': len(self.recent_history),
@@ -456,20 +600,32 @@ class NodeInfoManager:
     
     def _cache_energy_params(self, nodes: List[SensorNode]):
         """
-        缓存所有节点的能量传输参数（内部方法，在初始化时调用）
+        缓存所有节点的能量传输参数和太阳能参数（内部方法，在初始化时调用）
         
         :param nodes: 节点列表
         """
         for node in nodes:
             self.energy_params[node.node_id] = {
+                # 能量传输参数
                 'energy_char': getattr(node, 'energy_char', 300.0),
                 'energy_elec': getattr(node, 'energy_elec', 1e-4),
                 'epsilon_amp': getattr(node, 'epsilon_amp', 1e-5),
                 'bit_rate': getattr(node, 'bit_rate', 1000000.0),
                 'path_loss_exponent': getattr(node, 'path_loss_exponent', 2.0),
                 'sensor_energy': getattr(node, 'sensor_energy', 0.1),
+                # 能量衰减参数
+                'energy_decay_rate': getattr(node, 'energy_decay_rate', self.decay_rate_default),
+                # 电池参数
+                'capacity': getattr(node, 'capacity', 3.5),
+                'voltage': getattr(node, 'V', 3.7),
+                # 太阳能参数
+                'G_max': getattr(node, 'G_max', 1000.0),
+                'solar_efficiency': getattr(node, 'solar_efficiency', 0.2),
+                'solar_area': getattr(node, 'solar_area', 0.01),
+                'env_correction_factor': getattr(node, 'env_correction_factor', 0.8),
+                'enable_energy_harvesting': getattr(node, 'enable_energy_harvesting', True)
             }
-        self._log(f"[NodeInfoManager] 缓存 {len(self.energy_params)} 个节点的能量传输参数")
+        self._log(f"[NodeInfoManager] 缓存 {len(self.energy_params)} 个节点的能量传输和太阳能参数")
     
     def _create_info_nodes(self):
         """
@@ -484,13 +640,23 @@ class NodeInfoManager:
             # 获取该节点的能量传输参数
             params = self.energy_params.get(node_id, {})
             
+            # 只传递InfoNode需要的参数
+            info_node_params = {
+                'energy_char': params.get('energy_char', 300.0),
+                'energy_elec': params.get('energy_elec', 1e-4),
+                'epsilon_amp': params.get('epsilon_amp', 1e-5),
+                'bit_rate': params.get('bit_rate', 1000000.0),
+                'path_loss_exponent': params.get('path_loss_exponent', 2.0),
+                'sensor_energy': params.get('sensor_energy', 0.1)
+            }
+            
             info_node = InfoNode(
                 node_id=node_id,
                 energy=info['energy'],
                 position=info['position'],
                 is_solar=info.get('is_solar', False),
                 is_physical_center=(node_id == 0),  # 物理中心ID固定为0
-                **params
+                **info_node_params
             )
             self.info_nodes[node_id] = info_node
         
