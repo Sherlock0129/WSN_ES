@@ -408,6 +408,7 @@ class Network:
         - node_id = 0（固定）
         - 位置 = 普通节点的几何中心
         - 初始能量 = 普通节点初始能量 × 倍数
+        - 电池容量 = 普通节点电池容量 × 倍数（能量上限也是倍数）
         - is_physical_center = True
         - has_solar = False（物理中心不需要太阳能）
         - is_mobile = False（物理中心不移动）
@@ -419,8 +420,9 @@ class Network:
         center_x = sum(n.position[0] for n in regular_nodes) / len(regular_nodes)
         center_y = sum(n.position[1] for n in regular_nodes) / len(regular_nodes)
         
-        # 2. 计算物理中心初始能量
+        # 2. 计算物理中心初始能量和电池容量（都是普通节点的倍数）
         center_energy = self.node_initial_energy * self.center_initial_energy_multiplier
+        center_capacity = self.node_capacity * self.center_initial_energy_multiplier
         
         # 3. 创建物理中心节点
         physical_center = SensorNode(
@@ -432,8 +434,8 @@ class Network:
             has_solar=False,  # 物理中心不需要太阳能
             is_mobile=False,  # 物理中心不移动
             is_physical_center=True,  # 标记为物理中心
-            # 使用与普通节点相同的通信参数
-            capacity=self.node_capacity,
+            # 物理中心的电池容量是普通节点的倍数（使能量上限也是倍数）
+            capacity=center_capacity,
             voltage=self.node_voltage,
             enable_energy_harvesting=False,  # 物理中心不采集能量
             solar_efficiency=self.node_solar_efficiency,

@@ -228,6 +228,7 @@ class SimulationStats:
     def plot_results(self, results: List[List[Dict]], time_steps: int, network) -> None:
         """
         绘制仿真结果图表
+        Note: Physical center node (ID=0) is excluded from the plot.
         
         Args:
             results: 仿真结果数据
@@ -236,13 +237,15 @@ class SimulationStats:
         """
         time_steps_list = list(range(1, time_steps + 1))
 
-        # 提取能量数据用于绘图
-        node_ids = [node.node_id for node in network.nodes]
+        # 提取能量数据用于绘图（排除物理中心节点ID=0）
+        node_ids = [node.node_id for node in network.nodes if node.node_id != 0]
         energy_data = {node_id: [] for node_id in node_ids}
 
         for step_result in results:
             for node_data in step_result:
-                energy_data[node_data["node_id"]].append(node_data["current_energy"])
+                # 只记录非物理中心节点的数据
+                if node_data["node_id"] != 0 and node_data["node_id"] in energy_data:
+                    energy_data[node_data["node_id"]].append(node_data["current_energy"])
 
         # 绘制每个节点的能量数据
         plt.figure(figsize=(10, 6))
