@@ -124,7 +124,7 @@ class SimulationConfig:
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
     
     # 能量传输控制
-    enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
+    enable_energy_sharing: bool = False     # 是否启用节点间能量传输（WET）
 
     # 智能被动传能参数
     passive_mode: bool = True          # 是否启用智能被动传能模式（False为定时主动传能）
@@ -146,7 +146,7 @@ class SimulationConfig:
     use_lookahead: bool = False          # 是否进行短期前瞻评估以辅助 K 调整
     
     # ADCR链路层
-    enable_adcr_link_layer: bool = False # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
+    enable_adcr_link_layer: bool = True # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
     
     # 计算加速
     use_gpu_acceleration: bool = False   # GPU 加速开关（需要安装 CuPy 与 CUDA 驱动）

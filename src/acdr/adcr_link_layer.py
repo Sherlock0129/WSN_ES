@@ -22,7 +22,7 @@ except Exception:
 class ADCRLinkLayerVirtual(object):
     """
     ADCR (Adaptive Dynamic Collaborative Routing) 链路层协议
-    
+
     核心功能：
     - 估计最优簇数 K*（近邻统计启发式）
     - 能量感知 + 空间抑制 选择簇头
@@ -30,7 +30,7 @@ class ADCRLinkLayerVirtual(object):
     - 簇头向物理中心节点（ID=0）报告信息
     - 按通信能耗模型为真实节点扣除能量
     - 提供 Plotly 可视化：节点/簇/路径/物理中心
-    
+
     架构更新（物理中心节点）：
     - 不再使用"虚拟中心"和"锚点"概念
     - 所有通信都是真实节点之间的通信
@@ -118,10 +118,10 @@ class ADCRLinkLayerVirtual(object):
         self.vc_marker_size = int(vc_marker_size)
         self.line_width = float(line_width)
         self.path_line_width = float(path_line_width)
-        
+
         # 运行态
         self.last_round_t = 0  # 从0开始，避免在t=0时执行ADCR
-        
+
         # 物理中心信息管理器（位置固定）
         # 归档文件路径将在第一次使用时由 OutputManager 设置
         # 获取物理中心节点位置（如果启用）
@@ -140,14 +140,14 @@ class ADCRLinkLayerVirtual(object):
             else:
                 initial_pos = (0.0, 0.0)
                 print(f"[ADCR] 使用默认中心位置: (0.0, 0.0)")
-        
+
         self.vc = VirtualCenter(
             initial_position=initial_pos,
             enable_logging=True,
             history_size=1000,  # 保留最近1000条历史记录
             archive_path=None   # 稍后通过 set_archive_path 设置
         )
-        
+
         self.cluster_of = {}               # node_id -> ch_id
         self.ch_set = set()
         self.cluster_stats = {}            # ch_id -> summary
@@ -155,14 +155,14 @@ class ADCRLinkLayerVirtual(object):
 
         # 每轮通信统计
         self.last_comms = []               # list of dicts: {hop:(u->v), E_tx, E_rx, etc.}
-        
+
         # 初始化虚拟中心节点信息表（填充初始值）
         self._initialize_virtual_center_info()
-    
+
     def _initialize_virtual_center_info(self):
         """
         初始化虚拟中心节点信息表
-        
+
         在ADCR创建时立即填充所有节点的初始状态信息
         """
         if self.net.nodes:
@@ -172,11 +172,11 @@ class ADCRLinkLayerVirtual(object):
                 initial_time=0  # 初始时间为0
             )
             print(f"[ADCR] 虚拟中心节点信息表初始化完成，已记录 {len(self.vc.latest_info)} 个节点")
-    
+
     def set_archive_path(self, session_dir: str):
         """
         设置虚拟中心的归档路径
-        
+
         :param session_dir: 会话目录路径
         """
         import os
@@ -343,18 +343,18 @@ class ADCRLinkLayerVirtual(object):
             print(f"[ADCR-DEBUG] Path planning disabled or routing function unavailable")
             self.upstream_paths = {}
             return {}
-        
+
         # 获取物理中心节点
         physical_center = self.net.get_physical_center()
         if physical_center is None:
             print(f"[ADCR-DEBUG] No physical center found, skipping path planning")
             self.upstream_paths = {}
             return {}
-        
+
         # 获取簇头节点列表
         id2node = {n.node_id: n for n in self.net.nodes}
         cluster_heads = [id2node[ch_id] for ch_id in self.ch_set if ch_id in id2node]
-        
+
         # 为每个簇头规划到物理中心的路径
         self.upstream_paths = {}
         for ch in cluster_heads:
@@ -370,11 +370,11 @@ class ADCRLinkLayerVirtual(object):
                 dest_node=physical_center,
                 max_hops=self.max_hops
             )
-            
+
             if path is None or len(path) == 0:
                 print(f"[ADCR-DEBUG] No path found from CH {ch.node_id} to physical center")
                 path = [ch, physical_center]  # 回退：直接通信
-            
+
             self.upstream_paths[ch.node_id] = path
         
         return self.upstream_paths
@@ -394,11 +394,11 @@ class ADCRLinkLayerVirtual(object):
     def _settle_comm_energy(self):
         """
         为所有簇头上报路径结算通信能耗。
-        
+
         所有通信都是真实节点之间的通信，包括：
         1. 簇内通信：成员 → 簇头
         2. 簇间通信：簇头 → … → 物理中心节点（ID=0）
-        
+
         所有跳都使用相同的能耗模型，不再有"虚拟跳"概念
         """
         print(f"[ADCR-DEBUG] _settle_comm_energy() called, consume_energy={self.consume_energy}")
@@ -407,11 +407,77 @@ class ADCRLinkLayerVirtual(object):
             print("[ADCR-DEBUG] Energy consumption disabled, skipping")
             return
 
+        if not self.cluster_of:
+            print("[ADCR-DEBUG] No cluster assignments available, skipping")
+            return
+
+        # 建立节点ID到节点对象的映射
+        id2node = {n.node_id: n for n in self.net.nodes}
+
+        # ========== 第一阶段：簇内通信能耗结算 ==========
+        print(f"[ADCR-DEBUG] Phase 1: Settling intra-cluster communication energy")
+
+        # 统计簇内通信
+        intra_cluster_count = 0
+        intra_cluster_energy = 0.0
+
+        # 按簇分组
+        from collections import defaultdict
+        clusters = defaultdict(list)
+        for member_id, ch_id in self.cluster_of.items():
+            clusters[ch_id].append(member_id)
+
+        # 对每个簇处理簇内通信
+        for ch_id, member_ids in clusters.items():
+            if ch_id not in id2node:
+                continue
+
+            ch_node = id2node[ch_id]
+
+            # 簇内成员（不包括簇头自己）向簇头发送数据
+            for member_id in member_ids:
+                if member_id == ch_id:  # 跳过簇头自己
+                    continue
+
+                if member_id not in id2node:
+                    continue
+
+                member_node = id2node[member_id]
+
+                # 成员向簇头发送基础数据（使用base_data_size）
+                # 使用 _energy_consume_one_hop 方法扣除双向能量
+                Eu, Ev = self._energy_consume_one_hop(member_node, ch_node, transfer_WET=False)
+
+                # 记录通信
+                self.last_comms.append({
+                    "type": "intra_cluster",
+                    "hop": (member_id, ch_id),
+                    "E_member": Eu,
+                    "E_ch": Ev,
+                    "distance": member_node.distance_to(ch_node)
+                })
+
+                intra_cluster_count += 1
+                intra_cluster_energy += (Eu + Ev)
+
+        print(f"[ADCR-DEBUG] Intra-cluster communication: {intra_cluster_count} hops, total energy: {intra_cluster_energy:.2f}J")
+
+        # ========== 第二阶段：簇头到虚拟中心的路径能耗结算 ==========
+        print(f"[ADCR-DEBUG] Phase 2: Settling cluster head to virtual center path energy")
+
         if not self.upstream_paths:
-            print("[ADCR-DEBUG] No upstream paths available, skipping")
+            print("[ADCR-DEBUG] No upstream paths available, skipping phase 2")
             return
         
         print(f"[ADCR-DEBUG] Processing {len(self.upstream_paths)} upstream paths")
+
+        cx, cy = self.virtual_center
+
+        # 统计簇间路径通信
+        inter_cluster_hops = 0
+        inter_cluster_energy = 0.0
+        virtual_hops = 0
+        virtual_energy = 0.0
 
         for ch_id, path in self.upstream_paths.items():
             if (path is None) or (len(path) == 0):
@@ -420,7 +486,7 @@ class ADCRLinkLayerVirtual(object):
             # 阶段1：簇内通信（成员 → 簇头）
             cluster_members = [nid for nid, cid in self.cluster_of.items() if cid == ch_id]
             id2node = {n.node_id: n for n in self.net.nodes}
-            
+
             if ch_id in id2node:
                 ch_node = id2node[ch_id]
                 for member_id in cluster_members:
@@ -440,11 +506,51 @@ class ADCRLinkLayerVirtual(object):
             for i in range(len(path) - 1):
                 u, v = path[i], path[i+1]
                 Eu, Ev = self._energy_consume_one_hop(u, v, transfer_WET=False)
-                
+                self.last_comms.append({
+                    "type": "inter_cluster",
+                    "hop": (u.node_id, v.node_id),
+                    "E_tx": Eu,
+                    "E_rx": Ev
+                })
+                inter_cluster_hops += 1
+                inter_cluster_energy += (Eu + Ev)
+
+            # 最后一跳到虚拟中心（只有发送端计费）
+            last_real = path[-1]
+            # 计算到虚拟中心的欧式距离
+            d = self._dist_xy(last_real.position, (cx, cy))
+
+            # 计算该簇的聚合数据量
+            aggregated_data_size = self._calculate_cluster_data_size(ch_id)
+
+            # 使用聚合数据量计算能耗
+            E_elec = last_real.E_elec
+            eps = last_real.epsilon_amp
+            tau = last_real.tau
+            # 使用聚合数据量B_aggregated替代固定的B
+            E_tx_virtual = E_elec * aggregated_data_size + eps * aggregated_data_size * (d ** tau)
+            E_rx_virtual = E_elec * aggregated_data_size
+            E_com = self.tx_rx_ratio * (E_tx_virtual + E_rx_virtual) + self.sensor_energy
+            last_real.current_energy = max(0.0, last_real.current_energy - E_com)
+            self.last_comms.append({
+                "type": "virtual_hop",
+                "hop": (last_real.node_id, "VIRTUAL"),
+                "E_tx_only": E_com,
+                "data_size": aggregated_data_size,
+                "cluster_size": len([nid for nid, cid in self.cluster_of.items() if cid == ch_id])
+            })
+            virtual_hops += 1
+            virtual_energy += E_com
+
+        print(f"[ADCR-DEBUG] Inter-cluster paths: {inter_cluster_hops} hops, total energy: {inter_cluster_energy:.2f}J")
+        print(f"[ADCR-DEBUG] Virtual hops: {virtual_hops} hops, total energy: {virtual_energy:.2f}J")
+        print(f"[ADCR-DEBUG] Total energy consumption: {intra_cluster_energy + inter_cluster_energy + virtual_energy:.2f}J")
+        print(f"[ADCR-DEBUG] Total communication records: {len(self.last_comms)}")
+
                 # 标记是否是最后一跳（到物理中心）
                 is_final_hop = (i == len(path) - 2)
                 hop_type = "to_physical_center" if is_final_hop else "inter_cluster"
-                
+
                 self.last_comms.append({
                     "hop": (u.node_id, v.node_id),
                     "E_tx": Eu,
@@ -452,24 +558,24 @@ class ADCRLinkLayerVirtual(object):
                     "type": hop_type,
                     "cluster_id": ch_id
                 })
-    
+
     def _update_virtual_center_info(self, t: int):
         """
         更新虚拟中心的节点信息表
-        
+
         在ADCR通信结算后调用，将所有节点的最新状态信息上报到虚拟中心
-        
+
         :param t: 当前时间步
         """
         if not self.consume_energy:
             # 如果不进行能量结算，也不更新节点信息
             return
-        
+
         # 计算每个簇的聚合数据量
         data_sizes = {}
         for ch_id in self.ch_set:
             data_sizes[ch_id] = self._calculate_cluster_data_size(ch_id)
-        
+
         # 批量更新所有节点信息到虚拟中心
         self.vc.batch_update_node_info(
             nodes=self.net.nodes,
@@ -477,7 +583,7 @@ class ADCRLinkLayerVirtual(object):
             cluster_mapping=self.cluster_of,
             data_sizes=data_sizes
         )
-        
+
         print(f"[ADCR] 虚拟中心节点信息表已更新，当前记录: {len(self.vc.latest_info)} 个节点")
 
     # ---------------- Plotly 可视化 ----------------
@@ -501,7 +607,7 @@ class ADCRLinkLayerVirtual(object):
 
         nodes = self.net.nodes
         id2node = {n.node_id: n for n in nodes}
-        
+
         # 获取物理中心节点位置
         physical_center = self.net.get_physical_center()
         if physical_center is not None:
@@ -563,7 +669,7 @@ class ADCRLinkLayerVirtual(object):
                     name=f'CH {ch_id} → PC', showlegend=False
                 ))
                 continue
-            
+
             # 绘制完整路径（包括到物理中心的最后一跳）
             xs = [n.position[0] for n in path]
             ys = [n.position[1] for n in path]
@@ -663,7 +769,7 @@ class ADCRLinkLayerVirtual(object):
         # 4) 结算通信能耗（逐跳 + 虚拟跳只扣发送端）
         self._settle_comm_energy()
         print(f"[ADCR-DEBUG] Energy settlement completed, {len(self.last_comms)} communication hops processed")
-        
+
         # 4.5) 更新虚拟中心节点信息表
         self._update_virtual_center_info(t)
 
