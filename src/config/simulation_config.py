@@ -265,8 +265,11 @@ class PathCollectorConfig:
     replace_adcr: bool = True  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
     
     # 能量消耗模式
-    energy_mode: str = "free"  # 能量消耗模式："free"（零能耗，默认）
+    energy_mode: str = "full"  # 能量消耗模式："free"（零能耗，默认）
                             # 或 "full"（完全真实，路径逐跳 + 虚拟跳都消耗能量）
+    
+    # 数据包大小配置（与ADCR保持一致）
+    base_data_size: int = 1000000  # 基础数据大小（bits），每个节点贡献的基础信息量
     
     # 估算参数
     decay_rate: float = 5.0  # 自然衰减率（J/分钟，用于估算路径外节点能量）
@@ -636,6 +639,7 @@ class ConfigManager:
         return PathBasedInfoCollector(
             virtual_center=virtual_center,
             energy_mode=self.path_collector_config.energy_mode,
+            base_data_size=self.path_collector_config.base_data_size,
             enable_logging=self.path_collector_config.enable_logging,
             decay_rate=self.path_collector_config.decay_rate,
             use_solar_model=self.path_collector_config.use_solar_model,

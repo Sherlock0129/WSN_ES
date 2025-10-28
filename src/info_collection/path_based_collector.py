@@ -28,18 +28,23 @@ if TYPE_CHECKING:
 
 class PathBasedInfoCollector:
     """
-    基于能量传输路径的信息收集器
+    基于能量传输路径的机会主义信息收集器
     
-    工作流程：
-    1. 能量传输时，路径上的节点收集自身实时信息
-    2. Receiver（路径终点）汇总路径上所有节点信息
-    3. Receiver估算路径外节点的信息（基于历史+模型）
-    4. Receiver将全部信息上报到虚拟中心
+    工作流程（以路径 a→b→c 为例）：
+    1. 路径节点（a、b、c）各自收集信息，沿路径聚合到终点c
+    2. 终点c将路径节点的聚合信息（固定1B）上报到虚拟中心
+    3. 虚拟中心只更新路径节点（a、b、c）的信息
+    4. 非路径节点不做任何处理（不收集、不估算、不更新）
+    
+    能量模型：
+    - free模式：零能耗（信息完全搭载）
+    - full模式：路径逐跳 + 虚拟跳都消耗能量（与ADCR一致）
     """
     
     def __init__(self, 
                  virtual_center: VirtualCenter,
                  energy_mode: str = "free",
+                 base_data_size: int = 1000000,
                  enable_logging: bool = True,
                  # 估算参数
                  decay_rate: float = 5.0,
@@ -51,6 +56,7 @@ class PathBasedInfoCollector:
         
         :param virtual_center: 虚拟中心实例
         :param energy_mode: 能量消耗模式 ("free": 零能耗, "full": 完全真实)
+        :param base_data_size: 基础数据大小（bits），每个节点的基础信息量（与ADCR一致）
         :param enable_logging: 是否启用日志
         :param decay_rate: 自然衰减率（J/分钟，用于估算）
         :param use_solar_model: 是否使用太阳能模型进行估算
@@ -58,6 +64,7 @@ class PathBasedInfoCollector:
         """
         self.vc = virtual_center
         self.energy_mode = energy_mode
+        self.base_data_size = base_data_size
         self.enable_logging = enable_logging
         self.decay_rate = decay_rate
         self.use_solar_model = use_solar_model
@@ -70,6 +77,7 @@ class PathBasedInfoCollector:
         self.total_energy_consumed = 0.0  # 总能量消耗
         
         self._log(f"[PathCollector] 初始化完成 - 能量模式={energy_mode}, "
+                 f"数据包大小={base_data_size}bits, "
                  f"衰减率={decay_rate}J/min, 太阳能模型={'启用' if use_solar_model else '禁用'}")
     
     def _log(self, message: str):
@@ -86,11 +94,11 @@ class PathBasedInfoCollector:
         
         主要流程：
         1. 收集路径节点的实时信息
-        2. 估算路径外节点的信息
-        3. 批量更新虚拟中心
+        2. 计算能量消耗（如果启用full模式）
+        3. 更新虚拟中心（只更新路径节点）
         
         :param path: 能量传输路径 [donor, relay1, ..., receiver]
-        :param all_nodes: 所有网络节点
+        :param all_nodes: 所有网络节点（保留参数以兼容接口，实际未使用）
         :param current_time: 当前时间步（分钟）
         :return: 统计信息 {'real': int, 'estimated': int}
         """
@@ -101,34 +109,24 @@ class PathBasedInfoCollector:
         self.total_collections += 1
         
         # 1. 收集路径节点的实时信息
-        path_node_ids = {n.node_id for n in path}
-        real_info = self._collect_real_info(path, current_time)
+        path_info = self._collect_real_info(path, current_time)
         
-        # 2. 估算路径外节点的信息
-        other_nodes = [n for n in all_nodes if n.node_id not in path_node_ids]
-        estimated_info = self._estimate_other_nodes(other_nodes, current_time)
-        
-        # 3. 合并所有信息
-        all_info = {**real_info, **estimated_info}
-        
-        # 4. 能量消耗结算（如果启用）
+        # 2. 能量消耗结算（如果启用）
         if self.energy_mode == "full":
-            energy_cost = self._settle_energy_consumption(path, all_info)
+            energy_cost = self._settle_energy_consumption(path)
             self.total_energy_consumed += energy_cost
         
-        # 5. 更新虚拟中心
-        self._update_virtual_center(all_info, current_time)
+        # 3. 更新虚拟中心（只更新路径节点）
+        self._update_virtual_center(path_info, current_time)
         
-        # 6. 更新统计
-        real_count = len(real_info)
-        est_count = len(estimated_info)
-        self.total_real_info += real_count
-        self.total_estimated_info += est_count
+        # 4. 更新统计
+        path_node_count = len(path_info)
+        self.total_real_info += path_node_count
         
-        self._log(f"[PathCollector] 收集完成 - 实时: {real_count}, 估算: {est_count}, "
+        self._log(f"[PathCollector] 收集完成 - 路径节点: {path_node_count}, "
                  f"路径长度: {len(path)}, Receiver: Node {path[-1].node_id}")
         
-        return {'real': real_count, 'estimated': est_count}
+        return {'real': path_node_count, 'estimated': 0}
     
     def _collect_real_info(self, path: List[SensorNode], current_time: int) -> Dict[int, Dict]:
         """
@@ -319,11 +317,8 @@ class PathBasedInfoCollector:
         print("=" * 60)
         print(f"能量模式: {self.energy_mode}")
         print(f"总收集次数: {stats['total_collections']}")
-        print(f"实时信息: {stats['total_real_info']} ({stats['real_ratio']*100:.1f}%)")
-        print(f"估算信息: {stats['total_estimated_info']} ({stats['estimated_ratio']*100:.1f}%)")
-        print(f"平均每次收集:")
-        print(f"  - 实时: {stats['avg_real_per_collection']:.1f} 个节点")
-        print(f"  - 估算: {stats['avg_estimated_per_collection']:.1f} 个节点")
+        print(f"收集的路径节点数: {stats['total_real_info']}")
+        print(f"平均每次收集: {stats['avg_real_per_collection']:.1f} 个路径节点")
         if self.energy_mode == "full":
             print(f"能量消耗:")
             print(f"  - 总计: {stats['total_energy_consumed']:.2f} J")
@@ -380,17 +375,15 @@ class PathBasedInfoCollector:
     
     # ==================== 能量消耗结算 ====================
     
-    def _settle_energy_consumption(self, path: List[SensorNode], 
-                                   collected_info: Dict) -> float:
+    def _settle_energy_consumption(self, path: List[SensorNode]) -> float:
         """
         结算信息收集的能量消耗（仅在 energy_mode="full" 时调用）
         
         能量消耗包括：
-        1. 路径逐跳信息传递：信息沿路径累积传递，每跳消耗能量
+        1. 路径逐跳信息传递：路径节点信息沿路径聚合传递，每跳消耗能量
         2. 虚拟跳上报：Receiver → 虚拟中心的上报能量
         
         :param path: 传能路径 [donor, relay..., receiver]
-        :param collected_info: 收集的信息（用于计算数据量）
         :return: 总能量消耗（J）
         """
         if len(path) < 1:
@@ -401,7 +394,7 @@ class PathBasedInfoCollector:
         
         # 2. 计算虚拟跳能耗（Receiver → 虚拟中心）
         receiver = path[-1]
-        virtual_energy = self._calculate_virtual_hop_energy(receiver, collected_info)
+        virtual_energy = self._calculate_virtual_hop_energy(receiver)
         
         total_energy = path_energy + virtual_energy
         
@@ -412,60 +405,70 @@ class PathBasedInfoCollector:
     
     def _calculate_path_hop_energy(self, path: List[SensorNode]) -> float:
         """
-        计算路径逐跳能耗（信息沿路径传递）
+        计算路径逐跳能耗（信息沿路径聚合传递）
         
         模型：
-        - 每个节点收集自己的信息并转发前面节点的信息
-        - Hop i: 传递前i+1个节点的信息
-        - 能耗 = E_tx(sender) + E_rx(receiver)
+        - 路径节点（如a→b→c）各自收集信息，沿路径聚合
+        - 每一跳传输固定大小的聚合数据包（base_data_size），不随路径长度累积
+        - 路径终点（Receiver）汇聚路径上所有节点的信息
+        - 使用SensorNode.energy_consumption()方法（与ADCR一致）
+        - 能耗 = [(E_tx + E_rx) / 2 + E_sen] × 2端
         
-        :param path: 传能路径
+        :param path: 传能路径 [donor, relay..., receiver]
         :return: 路径总能量消耗（J）
         """
         if len(path) < 2:
             return 0.0
         
         total_energy = 0.0
-        info_packet_size = 100  # bits/节点（node_id + energy + position + ...）
         
-        # 沿路径逐跳累积信息并计算能耗
+        # 固定数据包大小（信息已聚合/压缩，不累积）
+        data_packet_size = self.base_data_size
+        
+        # 沿路径逐跳传输固定大小的聚合信息包
         for i in range(len(path) - 1):
             sender = path[i]
             receiver = path[i + 1]
             
-            # 累积信息大小：前面i+1个节点的信息
-            accumulated_size = (i + 1) * info_packet_size
+            # 使用与ADCR相同的能量计算方法
+            # 临时修改节点的B参数以传递数据大小
+            original_B_sender = sender.B
+            original_B_receiver = receiver.B
             
-            # 计算通信能耗（参考SensorNode.energy_consumption）
-            # E_tx = E_elec * B + epsilon_amp * B * d^tau
-            # E_rx = E_elec * B
-            distance = sender.distance_to(receiver)
-            E_tx = sender.E_elec * accumulated_size + \
-                   sender.epsilon_amp * accumulated_size * (distance ** sender.tau)
-            E_rx = receiver.E_elec * accumulated_size
+            sender.B = data_packet_size
+            receiver.B = data_packet_size
+            
+            # 调用SensorNode的energy_consumption方法（与ADCR._energy_consume_one_hop一致）
+            Eu = sender.energy_consumption(target_node=receiver, transfer_WET=False)
+            Ev = receiver.energy_consumption(target_node=sender, transfer_WET=False)
+            
+            # 恢复原始B值
+            sender.B = original_B_sender
+            receiver.B = original_B_receiver
             
             # 扣除能量
-            sender.current_energy -= E_tx
-            receiver.current_energy -= E_rx
+            sender.current_energy = max(0.0, sender.current_energy - Eu)
+            receiver.current_energy = max(0.0, receiver.current_energy - Ev)
             
-            total_energy += (E_tx + E_rx)
+            total_energy += (Eu + Ev)
         
         return total_energy
     
-    def _calculate_virtual_hop_energy(self, receiver: SensorNode, 
-                                      collected_info: Dict) -> float:
+    def _calculate_virtual_hop_energy(self, receiver: SensorNode) -> float:
         """
         计算虚拟跳能耗（Receiver → 虚拟中心）
         
         使用虚拟中心的 settle_virtual_hop_energy 方法（与ADCR相同）
+        数据大小固定为 base_data_size（路径节点信息已聚合/压缩到固定大小）
         
-        :param receiver: 路径终点节点（信息汇聚点）
-        :param collected_info: 收集的全部信息量
+        :param receiver: 路径终点节点（路径信息汇聚点）
         :return: 虚拟跳能量消耗（J）
+        
+        注意：虚拟跳传输的是路径节点的聚合信息，数据包大小固定为base_data_size，
+              不随路径长度或网络节点数增长。这是基于信息可以被充分压缩的假设。
         """
-        # 数据大小 = 所有节点信息数量 × 单节点信息包大小
-        info_packet_size = 100  # bits/节点
-        data_size = len(collected_info) * info_packet_size
+        # 固定数据包大小（路径节点信息聚合/压缩，不随节点数增长）
+        data_size = self.base_data_size
         
         # 使用虚拟中心的能量结算方法（与ADCR相同）
         E_virtual = self.vc.settle_virtual_hop_energy(
