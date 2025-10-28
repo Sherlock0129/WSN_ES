@@ -211,15 +211,21 @@ def plot_energy_paths_at_time(network, plans, t, output_path=None):
 def plot_energy_over_time(nodes, results, output_dir="data", session_dir=None):
     """
     Plot the energy change of each node over time using Plotly and save in IEEE style.
+    Note: Physical center node (ID=0) is excluded from the plot.
     """
     _ensure_dir(output_dir)
 
     time_steps = list(range(1, len(results) + 1))
 
-    energy_data = {node.node_id: [] for node in nodes}
+    # 排除物理中心节点（ID=0）
+    regular_nodes = [node for node in nodes if node.node_id != 0]
+    
+    energy_data = {node.node_id: [] for node in regular_nodes}
     for _, step_result in enumerate(results):
         for node_data in step_result:
-            energy_data[node_data["node_id"]].append(node_data["current_energy"])
+            # 只记录非物理中心节点的数据
+            if node_data["node_id"] != 0 and node_data["node_id"] in energy_data:
+                energy_data[node_data["node_id"]].append(node_data["current_energy"])
 
     fig = go.Figure()
     colors = [
