@@ -387,11 +387,14 @@ class ADCRLinkLayerVirtual(object):
 
     def _settle_comm_energy(self):
         """
-        为所有簇头上报路径结算通信能耗。
-        - 对每条真实节点路径：逐跳扣费 (u<->v)
-        - 最后一跳到虚拟中心：只对"最后一个真实节点"按到虚拟中心的距离扣"单端发射+感知"的通信费用，
-          这里按照你的 energy_consumption 形式近似：我们构造一个"等效距离"的 E_tx+E_rx/2 + E_sen，
-          但没有真实接收方，因此只扣发送端一次。
+        为ADCR算法的所有通信过程结算能耗，包括：
+        1. 簇内通信：成员节点 -> 簇头（双向扣能）
+        2. 簇间路径：簇头 -> 锚点的多跳路径（逐跳扣能）
+        3. 虚拟跳：锚点 -> 虚拟中心（仅发送端扣能）
+        
+        执行顺序：
+        - 先处理簇内通信（成员收集阶段）
+        - 再处理簇头上报路径（聚合后上报阶段）
         """
         print(f"[ADCR-DEBUG] _settle_comm_energy() called, consume_energy={self.consume_energy}")
         self.last_comms = []
@@ -399,14 +402,78 @@ class ADCRLinkLayerVirtual(object):
             print("[ADCR-DEBUG] Energy consumption disabled, skipping")
             return
 
+        if not self.cluster_of:
+            print("[ADCR-DEBUG] No cluster assignments available, skipping")
+            return
+        
+        # 建立节点ID到节点对象的映射
+        id2node = {n.node_id: n for n in self.net.nodes}
+        
+        # ========== 第一阶段：簇内通信能耗结算 ==========
+        print(f"[ADCR-DEBUG] Phase 1: Settling intra-cluster communication energy")
+        
+        # 统计簇内通信
+        intra_cluster_count = 0
+        intra_cluster_energy = 0.0
+        
+        # 按簇分组
+        from collections import defaultdict
+        clusters = defaultdict(list)
+        for member_id, ch_id in self.cluster_of.items():
+            clusters[ch_id].append(member_id)
+        
+        # 对每个簇处理簇内通信
+        for ch_id, member_ids in clusters.items():
+            if ch_id not in id2node:
+                continue
+                
+            ch_node = id2node[ch_id]
+            
+            # 簇内成员（不包括簇头自己）向簇头发送数据
+            for member_id in member_ids:
+                if member_id == ch_id:  # 跳过簇头自己
+                    continue
+                
+                if member_id not in id2node:
+                    continue
+                    
+                member_node = id2node[member_id]
+                
+                # 成员向簇头发送基础数据（使用base_data_size）
+                # 使用 _energy_consume_one_hop 方法扣除双向能量
+                Eu, Ev = self._energy_consume_one_hop(member_node, ch_node, transfer_WET=False)
+                
+                # 记录通信
+                self.last_comms.append({
+                    "type": "intra_cluster",
+                    "hop": (member_id, ch_id),
+                    "E_member": Eu,
+                    "E_ch": Ev,
+                    "distance": member_node.distance_to(ch_node)
+                })
+                
+                intra_cluster_count += 1
+                intra_cluster_energy += (Eu + Ev)
+        
+        print(f"[ADCR-DEBUG] Intra-cluster communication: {intra_cluster_count} hops, total energy: {intra_cluster_energy:.2f}J")
+        
+        # ========== 第二阶段：簇头到虚拟中心的路径能耗结算 ==========
+        print(f"[ADCR-DEBUG] Phase 2: Settling cluster head to virtual center path energy")
+        
         if not self.upstream_paths:
-            print("[ADCR-DEBUG] No upstream paths available, skipping")
+            print("[ADCR-DEBUG] No upstream paths available, skipping phase 2")
             return
         
         print(f"[ADCR-DEBUG] Processing {len(self.upstream_paths)} upstream paths")
 
         cx, cy = self.virtual_center
 
+        # 统计簇间路径通信
+        inter_cluster_hops = 0
+        inter_cluster_energy = 0.0
+        virtual_hops = 0
+        virtual_energy = 0.0
+        
         for ch_id, path in self.upstream_paths.items():
             if (path is None) or (len(path) == 0):
                 continue
@@ -415,7 +482,14 @@ class ADCRLinkLayerVirtual(object):
             for i in range(len(path) - 1):
                 u, v = path[i], path[i+1]
                 Eu, Ev = self._energy_consume_one_hop(u, v, transfer_WET=False)
-                self.last_comms.append({"hop": (u.node_id, v.node_id), "E_tx": Eu, "E_rx": Ev})
+                self.last_comms.append({
+                    "type": "inter_cluster",
+                    "hop": (u.node_id, v.node_id), 
+                    "E_tx": Eu, 
+                    "E_rx": Ev
+                })
+                inter_cluster_hops += 1
+                inter_cluster_energy += (Eu + Ev)
 
             # 最后一跳到虚拟中心（只有发送端计费）
             last_real = path[-1]
@@ -435,11 +509,19 @@ class ADCRLinkLayerVirtual(object):
             E_com = self.tx_rx_ratio * (E_tx_virtual + E_rx_virtual) + self.sensor_energy
             last_real.current_energy = max(0.0, last_real.current_energy - E_com)
             self.last_comms.append({
+                "type": "virtual_hop",
                 "hop": (last_real.node_id, "VIRTUAL"), 
                 "E_tx_only": E_com,
                 "data_size": aggregated_data_size,
                 "cluster_size": len([nid for nid, cid in self.cluster_of.items() if cid == ch_id])
             })
+            virtual_hops += 1
+            virtual_energy += E_com
+        
+        print(f"[ADCR-DEBUG] Inter-cluster paths: {inter_cluster_hops} hops, total energy: {inter_cluster_energy:.2f}J")
+        print(f"[ADCR-DEBUG] Virtual hops: {virtual_hops} hops, total energy: {virtual_energy:.2f}J")
+        print(f"[ADCR-DEBUG] Total energy consumption: {intra_cluster_energy + inter_cluster_energy + virtual_energy:.2f}J")
+        print(f"[ADCR-DEBUG] Total communication records: {len(self.last_comms)}")
 
     # ---------------- Plotly 可视化 ----------------
 
