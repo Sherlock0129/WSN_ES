@@ -62,7 +62,7 @@ class NodeConfig:
     energy_char: float = 500.0      # 单次名义可下发能量 J（捐能上限/步）
     energy_elec: float = 1e-4        # 电子学能耗 J/bit（发送/接收基底损耗）
     epsilon_amp: float = 1e-5        # 功放损耗系数 J/bit/m^path_loss_exponent
-    bit_rate: float = 1000.0      # 数据量 bits（用于估算一次发送/接收消耗）
+    bit_rate: float = 1000000.0      # 数据量 bits（用于估算一次发送/接收消耗）
     path_loss_exponent: float = 2.0  # 路损指数（自由空间≈2，障碍更高）
 
     # 其他每步能量项
@@ -227,7 +227,7 @@ class ADCRConfig:
     # 提示：同 NodeConfig，当前通信能耗中的传感能耗为固定常量 0.1 J，未与该配置绑定。
     
     # 信息聚合参数
-    base_data_size: int = 1000      # 基础数据大小（bits），每个节点贡献的基础信息量
+    base_data_size: int = 1000000      # 基础数据大小（bits），每个节点贡献的基础信息量
     aggregation_ratio: float = 1.0      # 信息聚合比例（1.0表示完全聚合，0.5表示压缩50%）
     enable_dynamic_data_size: bool = True  # 是否启用基于簇大小的动态数据量
     
@@ -262,18 +262,19 @@ class PathCollectorConfig:
     能量消耗模式：
     - free: 零能耗（默认），信息完全搭载在传能路径上
     - full: 完全真实，路径逐跳 + 虚拟跳都消耗能量
+    
+    注意：数据包大小 (base_data_size) 从 ADCRConfig 中统一获取
     """
     
     # 基本开关
-    enable_path_collector: bool = False  # 是否启用路径信息收集器
+    enable_path_collector: bool = True  # 是否启用路径信息收集器
     replace_adcr: bool = True  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
     
     # 能量消耗模式
     energy_mode: str = "full"  # 能量消耗模式："free"（零能耗，默认）
                             # 或 "full"（完全真实，路径逐跳 + 虚拟跳都消耗能量）
     
-    # 数据包大小配置（与ADCR保持一致）
-    base_data_size: int = 1000000  # 基础数据大小（bits），每个节点贡献的基础信息量
+    # 注意：数据包大小 (base_data_size) 使用 ADCRConfig 中的配置，保持一致性
     
     # 估算参数
     decay_rate: float = 5.0  # 自然衰减率（J/分钟，用于估算路径外节点能量）
@@ -652,7 +653,7 @@ class ConfigManager:
             virtual_center=virtual_center,
             physical_center=physical_center,
             energy_mode=self.path_collector_config.energy_mode,
-            base_data_size=self.path_collector_config.base_data_size,
+            base_data_size=self.adcr_config.base_data_size,  # 使用ADCR配置，保持一致
             enable_logging=self.path_collector_config.enable_logging,
             decay_rate=self.path_collector_config.decay_rate,
             use_solar_model=self.path_collector_config.use_solar_model,

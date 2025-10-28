@@ -270,6 +270,68 @@ def plot_energy_over_time(nodes, results, output_dir="data", session_dir=None):
     print(f"能量变化图已保存到: {save_path}")
     # IEEE Caption: Fig. X. Energy change over time for each node.
 
+def plot_center_node_energy(nodes, results, output_dir="data", session_dir=None):
+    """
+    Plot the energy change of the physical center node (Node 0) over time using Plotly.
+    """
+    _ensure_dir(output_dir)
+
+    time_steps = list(range(1, len(results) + 1))
+
+    # 找到物理中心节点（ID=0）
+    center_node = next((node for node in nodes if node.node_id == 0), None)
+    
+    if center_node is None:
+        print("警告: 未找到物理中心节点 (ID=0)，跳过绘图")
+        return
+    
+    # 提取物理中心节点的能量数据
+    energy_values = []
+    for _, step_result in enumerate(results):
+        for node_data in step_result:
+            if node_data["node_id"] == 0:
+                energy_values.append(node_data["current_energy"])
+                break
+
+    if not energy_values:
+        print("警告: 未找到物理中心节点的能量数据，跳过绘图")
+        return
+
+    fig = go.Figure()
+    
+    # 使用深蓝色绘制物理中心节点的能量变化
+    fig.add_trace(
+        go.Scatter(
+            x=time_steps, y=energy_values, mode='lines', name="Node 0",
+            line=dict(color='rgb(31, 119, 180)'),
+            hovertemplate='Node ID: ' + str(0) + '<br>Time Step: %{x}<br>Energy: %{y} J<extra></extra>'
+        )
+    )
+
+    fig.update_layout(
+        title=dict(text="Physical Center Node Energy Over Time", font=dict(size=10, family='Arial')),
+        xaxis_title="Time step", yaxis_title="Energy (J)",
+        font=dict(family='Arial', size=8),
+        legend=dict(x=1.05, y=1, xanchor='left', yanchor='top', font=dict(size=8, family='Arial')),
+        showlegend=True, hovermode='closest', template='plotly_white', margin=dict(r=150),
+        xaxis=dict(showgrid=True, gridcolor='rgba(0, 0, 0, 0.3)',
+                   title=dict(font=dict(size=8, family='Arial')),
+                   tickfont=dict(size=8, family='Arial')),
+        yaxis=dict(showgrid=True, gridcolor='rgba(0, 0, 0, 0.3)',
+                   title=dict(font=dict(size=8, family='Arial')),
+                   tickfont=dict(size=8, family='Arial'))
+    )
+
+    # 使用传入的会话目录或创建新的
+    if session_dir is None:
+        session_dir = OutputManager.get_session_dir(output_dir)
+    
+    save_path = OutputManager.get_file_path(session_dir, 'center_node_energy_over_time.png')
+    fig.write_image(save_path, width=800, height=600, scale=3)
+    fig.show()
+    print(f"物理中心节点能量变化图已保存到: {save_path}")
+    # IEEE Caption: Fig. X. Energy change over time for the physical center node.
+
 def plot_energy_histogram(nodes, time_step, output_dir="data"):
     """
     Plot a histogram of node energy levels at a given time step using Plotly and save in IEEE style.

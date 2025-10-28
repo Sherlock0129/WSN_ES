@@ -96,11 +96,12 @@ class PassiveTransferManager:
         else:
             energy_cv = 0
         
-        # 5. 预测性检查：基于能量消耗速率
-        predict_critical = self._check_predictive_trigger(energies, thresholds, total_nodes)
+        # 5. 预测性检查：基于能量消耗速率（已禁用）
+        # predict_critical = self._check_predictive_trigger(energies, thresholds, total_nodes)
+        predict_critical = False  # 禁用预测性触发
         
-        # 记录当前能量状态（用于未来预测）
-        self._update_energy_history(energies)
+        # 记录当前能量状态（用于未来预测）（已禁用）
+        # self._update_energy_history(energies)
         
         # 综合决策逻辑
         should_trigger, reasons = self._make_decision(
@@ -194,10 +195,10 @@ class PassiveTransferManager:
             should_trigger = True
             reasons.append(f"能量变异系数={energy_cv:.3f}>{self.energy_variance_threshold:.3f}")
         
-        # 条件3: 预测性触发
-        if predict_critical:
-            should_trigger = True
-            reasons.append(f"预测{self.predictive_window}分钟后将出现能量危机")
+        # 条件3: 预测性触发（已禁用）
+        # if predict_critical:
+        #     should_trigger = True
+        #     reasons.append(f"预测{self.predictive_window}分钟后将出现能量危机")
         
         # 条件4: 紧急情况 - 存在极低能量节点（低于阈值的50%）
         critical_nodes = energies < (thresholds * 0.5)

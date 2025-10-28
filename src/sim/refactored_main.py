@@ -18,7 +18,7 @@ from scheduling.schedulers import (
 from scheduling.passive_transfer import compare_passive_modes as _compare_passive_modes
 from utils.logger import logger, get_detailed_plan_logger
 from utils.error_handling import error_handler, handle_exceptions
-from viz.plotter import plot_node_distribution, plot_energy_over_time
+from viz.plotter import plot_node_distribution, plot_energy_over_time, plot_center_node_energy
 from sim.parallel_executor import ParallelSimulationExecutor
 
 
@@ -200,6 +200,9 @@ def run_simulation(config_file: str = None):
         
         # 绘制能量随时间变化图
         plot_energy_over_time(network.nodes, simulation.result_manager.get_results(), session_dir=simulation.session_dir)
+        
+        # 绘制物理中心节点能量变化图
+        plot_center_node_energy(network.nodes, simulation.result_manager.get_results(), session_dir=simulation.session_dir)
         
         # 绘制K值变化图
         simulation.plot_K_history()
