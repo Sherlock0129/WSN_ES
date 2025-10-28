@@ -59,10 +59,10 @@ class NodeConfig:
     env_correction_factor: float = 1.0    # 环境修正系数（天气/遮挡等），乘在辐照上
 
     # 无线能量传输/发送参数
-    energy_char: float = 1000.0      # 单次名义可下发能量 J（捐能上限/步）
+    energy_char: float = 500.0      # 单次名义可下发能量 J（捐能上限/步）
     energy_elec: float = 1e-4        # 电子学能耗 J/bit（发送/接收基底损耗）
     epsilon_amp: float = 1e-5        # 功放损耗系数 J/bit/m^path_loss_exponent
-    bit_rate: float = 1000000.0      # 数据量 bits（用于估算一次发送/接收消耗）
+    bit_rate: float = 1000.0      # 数据量 bits（用于估算一次发送/接收消耗）
     path_loss_exponent: float = 2.0  # 路损指数（自由空间≈2，障碍更高）
 
     # 其他每步能量项
@@ -99,7 +99,7 @@ class NetworkConfig:
 
     # 物理中心节点配置
     enable_physical_center: bool = True  # 是否启用物理中心节点（ID=0）
-    center_initial_energy_multiplier: float = 10.0  # 物理中心初始能量倍数（相对普通节点）
+    center_initial_energy_multiplier: float = 100.0  # 物理中心初始能量倍数（相对普通节点）
     
     # 能量分配模式配置
     energy_distribution_mode: str = "uniform"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
@@ -117,21 +117,21 @@ class SimulationConfig:
     - use_gpu_acceleration 控制是否使用 GPU（CuPy）加速统计/距离矩阵等并行计算。
     """
 
-    time_steps: int = 10080              # 总时间步数（分钟），默认 7 天
+    time_steps: int = 10080             # 总时间步数（分钟），默认 7 天
     energy_transfer_interval: int = 60   # 传能/调度触发间隔（分钟）
     # 注意：当前实现中触发条件写死为 `if t % 60 == 0`，未读取该配置值；后续可将其接入。
     output_dir: str = "data"             # 仿真输出根目录，由 OutputManager 管理会话子目录
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
     
     # 能量传输控制
-    enable_energy_sharing: bool = False     # 是否启用节点间能量传输（WET）
+    enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
 
     # 智能被动传能参数
     passive_mode: bool = True          # 是否启用智能被动传能模式（False为定时主动传能）
     check_interval: int = 1                # 智能检查间隔（分钟）
     critical_ratio: float = 0.2             # 低能量节点临界比例（0-1）
-    energy_variance_threshold: float = 0.1  # 能量方差阈值，超过则触发传能
-    cooldown_period: int = 1               # 传能冷却期（分钟），避免频繁触发
+    energy_variance_threshold: float = 0.05  # 能量方差阈值，超过则触发传能
+    cooldown_period: int = 0               # 传能冷却期（分钟），避免频繁触发
     predictive_window: int = 60             # 预测窗口（分钟），用于预测性触发
     
     # K 值自适应（影响每个接收端可匹配的捐能者数量上限）
@@ -146,7 +146,7 @@ class SimulationConfig:
     use_lookahead: bool = False          # 是否进行短期前瞻评估以辅助 K 调整
     
     # ADCR链路层
-    enable_adcr_link_layer: bool = True # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
+    enable_adcr_link_layer: bool = False # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
     
     # 计算加速
     use_gpu_acceleration: bool = False   # GPU 加速开关（需要安装 CuPy 与 CUDA 驱动）
@@ -227,7 +227,7 @@ class ADCRConfig:
     # 提示：同 NodeConfig，当前通信能耗中的传感能耗为固定常量 0.1 J，未与该配置绑定。
     
     # 信息聚合参数
-    base_data_size: int = 1000000      # 基础数据大小（bits），每个节点贡献的基础信息量
+    base_data_size: int = 1000      # 基础数据大小（bits），每个节点贡献的基础信息量
     aggregation_ratio: float = 1.0      # 信息聚合比例（1.0表示完全聚合，0.5表示压缩50%）
     enable_dynamic_data_size: bool = True  # 是否启用基于簇大小的动态数据量
     
@@ -265,7 +265,7 @@ class PathCollectorConfig:
     """
     
     # 基本开关
-    enable_path_collector: bool = True  # 是否启用路径信息收集器
+    enable_path_collector: bool = False  # 是否启用路径信息收集器
     replace_adcr: bool = True  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
     
     # 能量消耗模式

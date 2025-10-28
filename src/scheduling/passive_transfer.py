@@ -73,12 +73,19 @@ class PassiveTransferManager:
             return False, None
         
         nodes = network.nodes
-        total_nodes = len(nodes)
-        
-        # 计算当前网络能量状态
-        energies = np.array([node.current_energy for node in nodes])
-        thresholds = np.array([node.low_threshold_energy for node in nodes])
-        
+
+        # 排除物理中心节点（ID=0）用于阈值检测
+        physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
+        physical_center_id = physical_center.node_id if physical_center else None
+
+        # 过滤掉物理中心节点
+        regular_nodes = [node for node in nodes if node.node_id != physical_center_id]
+        total_nodes = len(regular_nodes)  # 只统计普通节点数量
+
+        # 计算当前网络能量状态（仅普通节点）
+        energies = np.array([node.current_energy for node in regular_nodes])
+        thresholds = np.array([node.low_threshold_energy for node in regular_nodes])
+
         # 3. 低能量节点比例检查
         low_energy_nodes = energies < thresholds
         low_energy_ratio = np.sum(low_energy_nodes) / total_nodes
@@ -108,15 +115,17 @@ class PassiveTransferManager:
         
         return False, None
     
-    def _check_predictive_trigger(self, energies: np.ndarray, 
-                                  thresholds: np.ndarray, 
+    def _check_predictive_trigger(self, energies: np.ndarray,
+                                  thresholds: np.ndarray,
                                   total_nodes: int) -> bool:
         """
         预测性检查：基于能量消耗速率预测未来
-        
-        :param energies: 当前能量数组
-        :param thresholds: 阈值数组
-        :param total_nodes: 总节点数
+
+        注意：energies 和 thresholds 数组已经排除了物理中心节点
+
+        :param energies: 当前普通节点能量数组
+        :param thresholds: 普通节点阈值数组
+        :param total_nodes: 普通节点总数
         :return: 是否预测到危机
         """
         predict_critical = False
@@ -144,8 +153,10 @@ class PassiveTransferManager:
     def _update_energy_history(self, energies: np.ndarray):
         """
         更新能量历史记录
-        
-        :param energies: 当前能量数组
+
+        注意：energies 数组已经排除了物理中心节点
+
+        :param energies: 当前普通节点能量数组
         """
         self.energy_history.append(np.mean(energies))
         
@@ -153,19 +164,21 @@ class PassiveTransferManager:
         if len(self.energy_history) > 20:
             self.energy_history.pop(0)
     
-    def _make_decision(self, low_energy_ratio: float, 
-                      energy_cv: float, 
+    def _make_decision(self, low_energy_ratio: float,
+                      energy_cv: float,
                       predict_critical: bool,
-                      energies: np.ndarray, 
+                      energies: np.ndarray,
                       thresholds: np.ndarray) -> Tuple[bool, List[str]]:
         """
         综合决策逻辑
-        
-        :param low_energy_ratio: 低能量节点比例
-        :param energy_cv: 能量变异系数
-        :param predict_critical: 是否预测到危机
-        :param energies: 能量数组
-        :param thresholds: 阈值数组
+
+        注意：所有参数都只基于普通节点（已排除物理中心节点）
+
+        :param low_energy_ratio: 普通节点中低能量节点比例
+        :param energy_cv: 普通节点能量变异系数
+        :param predict_critical: 是否预测到普通节点危机
+        :param energies: 普通节点能量数组
+        :param thresholds: 普通节点阈值数组
         :return: (是否触发, 原因列表)
         """
         reasons = []
