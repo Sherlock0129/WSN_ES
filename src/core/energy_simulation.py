@@ -29,10 +29,7 @@ class EnergySimulation:
                  critical_ratio=0.2,  # 低能量节点临界比例
                  energy_variance_threshold=0.3,  # 能量方差阈值
                  cooldown_period=30,  # 冷却期（分钟）
-                 predictive_window=60,  # 预测窗口（分钟）
-                 # 指令下发参数
-                 enable_command_downlink=True,  # 是否启用指令下发能量计算
-                 command_packet_size=1):  # 指令包大小（B）
+                 predictive_window=60):  # 预测窗口（分钟）
         """
         Initialize the energy simulation for the network.
 
@@ -58,8 +55,6 @@ class EnergySimulation:
         self.enable_energy_sharing = enable_energy_sharing
         self.enable_k_adaptation = enable_k_adaptation
         self.fixed_k = fixed_k
-        self.enable_command_downlink = enable_command_downlink
-        self.command_packet_size = command_packet_size
 
         # 创建智能被动传能管理器
         self.passive_manager = PassiveTransferManager(
@@ -96,49 +91,6 @@ class EnergySimulation:
     def K(self, value):
         """设置K值"""
         self.k_adaptation.K = value
-    
-    def calculate_command_downlink_energy(self, physical_center, plans):
-        """
-        计算指令下发的能量消耗（委托给NodeInfoManager）
-        
-        物理中心需要向所有参与传能的节点下发指令，告知它们执行传能计划。
-        该方法委托给NodeInfoManager.broadcast_commands()执行。
-        
-        :param physical_center: 物理中心节点
-        :param plans: 传能计划列表
-        :return: (total_energy, success) - 总能量消耗和是否成功
-        """
-        if not self.enable_command_downlink or physical_center is None:
-            return 0.0, True
-        
-        if not plans:
-            return 0.0, True
-        
-        # 获取NodeInfoManager
-        nim = None
-        if hasattr(self.network, 'adcr_link') and self.network.adcr_link:
-            nim = getattr(self.network.adcr_link, 'vc', None)
-        elif hasattr(self.network, 'path_info_collector') and self.network.path_info_collector:
-            nim = getattr(self.network.path_info_collector, 'vc', None)
-        
-        if nim is None:
-            print("[指令下发] 警告：未找到NodeInfoManager，跳过指令下发")
-            return 0.0, True
-        
-        # 委托给NodeInfoManager执行
-        total_energy, success, affected_nodes = nim.broadcast_commands(
-            physical_center, 
-            plans, 
-            self.command_packet_size
-        )
-        
-        # 打印结果
-        if success:
-            print(f"[指令下发] 通知 {len(affected_nodes)} 个节点，总能量: {total_energy:.4f}J")
-        else:
-            print(f"[指令下发] 警告：物理中心能量不足，本轮传能取消")
-        
-        return total_energy, success
 
     def simulate(self):
         """Run the energy simulation for the specified number of time steps."""
@@ -176,6 +128,14 @@ class EnergySimulation:
                 if self.enable_energy_sharing:
                     # ★ 优先使用外部调度器（若提供）
                     if self.scheduler is not None:
+                        # 【关键】更新NodeInfoManager中的节点能量信息
+                        # 在每次调度之前，必须同步真实节点的当前能量到InfoNode
+                        if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                            self.scheduler.nim.batch_update_node_info(
+                                nodes=self.network.nodes,
+                                current_time=t
+                            )
+                        
                         # 同步自适应K给调度器（若其带 K）
                         if hasattr(self.scheduler, "K"):
                             try:
@@ -189,36 +149,16 @@ class EnergySimulation:
                         else:
                             plans = result
                             cand = []
-                        
-                        # 计算并扣除指令下发能量
-                        physical_center = self.network.get_physical_center() if hasattr(self.network, 'get_physical_center') else None
-                        command_energy, can_execute = self.calculate_command_downlink_energy(physical_center, plans)
-                        
-                        # 只有指令下发成功才执行传能计划
-                        if can_execute:
-                            # PowerControlScheduler 有自定义执行器（按 energy_sent 执行）
-                            if (PowerControlScheduler is not None) and isinstance(self.scheduler, PowerControlScheduler):
-                                self.scheduler.execute_plans(self.network, plans)
-                            else:
-                                self.network.execute_energy_transfer(plans, current_time=t)
+                
+                        # PowerControlScheduler 有自定义执行器（按 energy_sent 执行）
+                        if (PowerControlScheduler is not None) and isinstance(self.scheduler, PowerControlScheduler):
+                            self.scheduler.execute_plans(self.network, plans)
                         else:
-                            # 指令下发失败，取消传能计划
-                            plans = []
-                            cand = []
+                            self.network.execute_energy_transfer(plans, current_time=t)
                     else:
                         # 兼容旧逻辑：使用 network.run_routing()
                         plans = self.network.run_routing(t, max_donors_per_receiver=self.K)
-                        
-                        # 计算并扣除指令下发能量
-                        physical_center = self.network.get_physical_center() if hasattr(self.network, 'get_physical_center') else None
-                        command_energy, can_execute = self.calculate_command_downlink_energy(physical_center, plans)
-                        
-                        # 只有指令下发成功才执行传能计划
-                        if can_execute:
-                            self.network.execute_energy_transfer(plans, current_time=t)
-                        else:
-                            # 指令下发失败，取消传能计划
-                            plans = []
+                        self.network.execute_energy_transfer(plans, current_time=t)
                 else:
                     # 能量传输被禁用，创建空的计划
                     plans = []

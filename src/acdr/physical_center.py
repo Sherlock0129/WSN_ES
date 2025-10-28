@@ -183,12 +183,15 @@ class NodeInfoManager:
         if len(self.archive_buffer) >= self.archive_batch_size:
             self._flush_archive()
         
-        # 同步更新InfoNode（如果已创建）
+        # 【关键】从节点信息表同步更新InfoNode（如果已创建）
+        # 注意：这里使用的是参数energy和position，这些数据来自节点上报的信息
+        # InfoNode不直接访问真实节点，只从节点信息表获取数据
+        # 数据流向：真实节点 → 上报 → 节点信息表 → InfoNode
         if node_id in self.info_nodes:
             info_node = self.info_nodes[node_id]
-            info_node.current_energy = energy
+            info_node.current_energy = energy  # 从上报的能量值更新
             if position is not None:
-                info_node.position = list(position)
+                info_node.position = list(position)  # 从上报的位置更新
         
         self._log(f"[NodeInfoManager] 更新节点信息: Node {node_id}, "
                  f"能量={energy:.1f}J, 新鲜度={freshness}, 到达时间={arrival_time}, "
@@ -198,9 +201,18 @@ class NodeInfoManager:
                                cluster_mapping: Dict[int, int] = None,
                                data_sizes: Dict[int, int] = None):
         """
-        批量更新多个节点的信息（通常在ADCR聚类后调用）
+        批量更新多个节点的信息（模拟节点上报信息到物理中心）
         
-        :param nodes: 节点列表
+        这个方法模拟真实的信息上报过程：
+        1. 节点将当前状态信息发送给物理中心
+        2. 物理中心将信息存储到节点信息表（L1/L2/L3）
+        3. InfoNode基于节点信息表同步更新（而非直接读取真实节点）
+        
+        注意：这里读取node.current_energy是模拟"节点上报当前能量"的过程，
+        而不是物理中心直接访问节点（上帝视角）。上报后，InfoNode只能
+        从节点信息表获取数据，保持了分布式系统的真实性。
+        
+        :param nodes: 节点列表（用于模拟上报）
         :param current_time: 当前时间
         :param cluster_mapping: 簇映射 {node_id: cluster_id}
         :param data_sizes: 数据大小映射 {node_id: data_size}
@@ -209,18 +221,43 @@ class NodeInfoManager:
             cluster_id = cluster_mapping.get(node.node_id) if cluster_mapping else None
             data_size = data_sizes.get(node.node_id) if data_sizes else None
             
+            # 模拟节点上报信息到物理中心
+            # 这里读取node.current_energy是模拟"节点发送自己的能量信息"
             self.update_node_info(
                 node_id=node.node_id,
-                energy=node.current_energy,
-                freshness=current_time,  # 假设信息是当前时刻采集的
-                arrival_time=current_time,  # 批量更新时，采集和到达同时发生
-                position=tuple(node.position),
-                is_solar=node.has_solar,
+                energy=node.current_energy,  # 节点上报的能量值
+                freshness=current_time,  # 信息采集时刻
+                arrival_time=current_time,  # 信息到达时刻
+                position=tuple(node.position),  # 节点上报的位置
+                is_solar=node.has_solar,  # 节点属性
                 cluster_id=cluster_id,
                 data_size=data_size
             )
         
         self._log(f"[NodeInfoManager] 批量更新 {len(nodes)} 个节点信息")
+    
+    def sync_info_nodes_from_table(self):
+        """
+        从节点信息表同步数据到InfoNode
+        
+        这个方法展示了正确的数据流向：
+        节点信息表（latest_info）→ InfoNode
+        
+        InfoNode不直接访问真实节点，只从节点信息表获取数据。
+        这保持了分布式系统的真实性，避免了"上帝视角"。
+        
+        注意：update_node_info() 已经在更新表的同时自动同步InfoNode，
+        所以这个方法通常不需要单独调用，除非需要显式地重新同步。
+        """
+        for node_id, info in self.latest_info.items():
+            if node_id in self.info_nodes:
+                info_node = self.info_nodes[node_id]
+                # 从节点信息表读取数据
+                info_node.current_energy = info['energy']
+                if info['position'] is not None:
+                    info_node.position = list(info['position'])
+        
+        self._log(f"[NodeInfoManager] 从节点信息表同步 {len(self.info_nodes)} 个InfoNode")
     
     def initialize_node_info(self, nodes: List[SensorNode], initial_time: int = 0):
         """
@@ -469,152 +506,6 @@ class NodeInfoManager:
         :return: InfoNode列表
         """
         return list(self.info_nodes.values())
-    
-    # ==================== 指令下发 ====================
-    
-    def _collect_command_recipients(self, plans):
-        """
-        收集需要接收指令的节点
-        
-        从传能计划中提取所有参与节点（donor、receiver、relay），
-        自动去重，确保每个节点只被通知一次。
-        
-        :param plans: 传能计划列表
-        :return: 节点集合（SensorNode对象）
-        """
-        notified_nodes = set()
-        for plan in plans:
-            # donor和receiver
-            notified_nodes.add(plan['donor'])
-            notified_nodes.add(plan['receiver'])
-            # 中继节点（path中除了起点和终点的节点）
-            if 'path' in plan and len(plan['path']) > 2:
-                for node in plan['path'][1:-1]:
-                    notified_nodes.add(node)
-        return notified_nodes
-    
-    def _execute_broadcast(self, physical_center_node, notified_nodes, command_packet_size):
-        """
-        执行指令广播并扣除能量
-        
-        计算物理中心向每个节点发送指令的能量消耗：
-        - 中心发送：E_tx
-        - 节点接收：E_rx
-        - 双向扣除能量
-        
-        :param physical_center_node: 物理中心节点实体
-        :param notified_nodes: 需要通知的节点集合
-        :param command_packet_size: 指令包大小（字节）
-        :return: (total_energy, success)
-        """
-        total_energy = 0.0
-        center_energy_cost = 0.0
-        
-        # 临时保存原始B值
-        original_B_center = physical_center_node.B
-        
-        # 第一遍：计算总能量消耗
-        for node in notified_nodes:
-            # 临时设置数据包大小
-            physical_center_node.B = command_packet_size
-            original_B_node = node.B
-            node.B = command_packet_size
-            
-            # 计算中心发送能量
-            E_tx = physical_center_node.energy_consumption(
-                target_node=node,
-                transfer_WET=False
-            )
-            
-            # 计算节点接收能量
-            E_rx = node.energy_consumption(
-                target_node=physical_center_node,
-                transfer_WET=False
-            )
-            
-            # 恢复B值
-            physical_center_node.B = original_B_center
-            node.B = original_B_node
-            
-            # 累加能量
-            center_energy_cost += E_tx
-            total_energy += (E_tx + E_rx)
-        
-        # 检查中心能量是否足够
-        if physical_center_node.current_energy < center_energy_cost:
-            self._log(f"[NodeInfoManager] 指令下发失败：物理中心能量不足")
-            self._log(f"  需要能量: {center_energy_cost:.2f}J")
-            self._log(f"  当前能量: {physical_center_node.current_energy:.2f}J")
-            return 0.0, False
-        
-        # 第二遍：扣除能量
-        # 先扣除中心能量
-        physical_center_node.current_energy -= center_energy_cost
-        
-        # 再扣除各节点的接收能量
-        for node in notified_nodes:
-            # 临时设置数据包大小
-            physical_center_node.B = command_packet_size
-            original_B_node = node.B
-            node.B = command_packet_size
-            
-            E_rx = node.energy_consumption(
-                target_node=physical_center_node,
-                transfer_WET=False
-            )
-            
-            # 恢复B值
-            physical_center_node.B = original_B_center
-            node.B = original_B_node
-            
-            node.current_energy = max(0.0, node.current_energy - E_rx)
-        
-        return total_energy, True
-    
-    def broadcast_commands(self, physical_center_node, plans, command_packet_size=1):
-        """
-        物理中心向参与节点广播执行指令
-        
-        这是物理中心的主动行为之一（另一个是接收信息上报）。
-        当调度算法生成传能计划后，物理中心需要向所有参与节点
-        （donor、receiver、relay）下发指令，告知它们执行传能。
-        
-        功能：
-        1. 收集需要通知的节点（自动去重）
-        2. 计算通信能量（双向：E_tx + E_rx）
-        3. 检查中心能量是否足够
-        4. 扣除双向能量
-        5. 返回执行结果
-        
-        :param physical_center_node: 物理中心节点实体（SensorNode）
-        :param plans: 传能计划列表
-        :param command_packet_size: 指令包大小（字节），默认1B
-        :return: (total_energy, success, affected_nodes)
-                 - total_energy: 总能量消耗（J）
-                 - success: 是否成功（能量足够）
-                 - affected_nodes: 受影响的节点列表
-        """
-        if physical_center_node is None or not plans:
-            return 0.0, True, []
-        
-        # 1. 收集需要通知的节点（去重）
-        notified_nodes = self._collect_command_recipients(plans)
-        
-        # 2. 计算并扣除能量
-        total_energy, success = self._execute_broadcast(
-            physical_center_node, 
-            notified_nodes, 
-            command_packet_size
-        )
-        
-        # 3. 记录日志
-        if success:
-            self._log(f"[NodeInfoManager] 指令广播成功：通知 {len(notified_nodes)} 个节点，"
-                     f"总能量 {total_energy:.4f}J")
-        else:
-            self._log(f"[NodeInfoManager] 指令广播失败：物理中心能量不足")
-        
-        return total_energy, success, list(notified_nodes)
     
     # ==================== 扩展接口 ====================
     

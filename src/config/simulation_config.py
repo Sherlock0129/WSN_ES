@@ -148,13 +148,6 @@ class SimulationConfig:
     # ADCR链路层
     enable_adcr_link_layer: bool = False # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
     
-    # 指令下发能量计算
-    enable_command_downlink: bool = True  # 是否启用指令下发能量计算（物理中心→节点）
-    command_packet_size: int = 1          # 指令包大小（B，与base_data_size相同）
-    # 说明：启用后，每轮调度前会计算中心向所有plan涉及节点下发指令的能量消耗
-    #      计算双向能量：中心的E_tx + 节点的E_rx，并扣除相应能量
-    #      若中心能量不足，则本轮传能取消
-    
     # 计算加速
     use_gpu_acceleration: bool = False   # GPU 加速开关（需要安装 CuPy 与 CUDA 驱动）
 
@@ -600,10 +593,7 @@ class ConfigManager:
             critical_ratio=self.simulation_config.critical_ratio,
             energy_variance_threshold=self.simulation_config.energy_variance_threshold,
             cooldown_period=self.simulation_config.cooldown_period,
-            predictive_window=self.simulation_config.predictive_window,
-            # 指令下发参数
-            enable_command_downlink=self.simulation_config.enable_command_downlink,
-            command_packet_size=self.simulation_config.command_packet_size
+            predictive_window=self.simulation_config.predictive_window
         )
     
     def create_adcr_link_layer(self, network):
