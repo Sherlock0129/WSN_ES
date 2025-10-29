@@ -81,7 +81,8 @@ class NodeInfoManager:
         #   'cluster_id': int,         # 所属簇ID
         #   'data_size': int,          # 数据包大小
         #   'aoi': int,                # Age of Information（信息年龄，每分钟+1）
-        #   'is_estimated': bool       # 是否为估算值
+        #   'is_estimated': bool,      # 是否为估算值
+        #   't': int                   # 全局时间戳（统一时钟，从0开始每分钟+1）
         # }}
         self.latest_info: Dict[int, Dict] = {}
         
@@ -170,7 +171,8 @@ class NodeInfoManager:
             'cluster_id': cluster_id,
             'data_size': data_size,
             'aoi': 0,  # Age of Information，刚到达时为0
-            'is_estimated': False  # 上报值不是估算值
+            'is_estimated': False,  # 上报值不是估算值
+            't': arrival_time  # 当前时间戳（信息到达时刻）
         }
         
         # L1: 更新最新状态表
@@ -188,6 +190,7 @@ class NodeInfoManager:
             'energy': energy,
             'record_time': record_time,
             'aoi': info['aoi'],
+            't': info['t'],
             'position_x': position[0] if position else None,
             'position_y': position[1] if position else None,
             'is_solar': is_solar,
@@ -245,7 +248,7 @@ class NodeInfoManager:
                 cluster_id=cluster_id,
                 data_size=data_size
             )
-    
+        
     def sync_info_nodes_from_table(self):
         """
         从节点信息表同步数据到InfoNode
@@ -362,7 +365,8 @@ class NodeInfoManager:
         1. 遍历所有节点
         2. 对于未上报的节点（time_elapsed > 0），基于物理模型估算能量
         3. 更新节点信息表中的能量值、is_estimated字段和AoI（每分钟+1）
-        4. InfoNode会自动从信息表同步
+        4. 所有节点的 t 字段统一更新为 current_time（全局时钟）
+        5. InfoNode会自动从信息表同步
         
         :param current_time: 当前时间（分钟）
         """
@@ -388,6 +392,10 @@ class NodeInfoManager:
                     self.info_nodes[node_id].current_energy = estimated_energy
                 
                 estimated_count += 1
+            
+            # 【统一时钟】所有节点的 t 字段都更新为当前时刻
+            # t 代表全局模拟时间，从0开始，每分钟+1
+            self.latest_info[node_id]['t'] = current_time
             
             # 更新AoI：每分钟+1（无论是否估算）
             # AoI = current_time - arrival_time
@@ -511,7 +519,7 @@ class NodeInfoManager:
         if not self.archive_initialized:
             with open(self.archive_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=[
-                    'arrival_time', 'node_id', 'energy', 'record_time', 'aoi',
+                    'arrival_time', 'node_id', 'energy', 'record_time', 'aoi', 't',
                     'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
                 ])
                 writer.writeheader()
@@ -521,7 +529,7 @@ class NodeInfoManager:
         # 追加写入数据
         with open(self.archive_path, 'a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=[
-                'arrival_time', 'node_id', 'energy', 'record_time', 'aoi',
+                'arrival_time', 'node_id', 'energy', 'record_time', 'aoi', 't',
                 'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
             ])
             writer.writerows(self.archive_buffer)
