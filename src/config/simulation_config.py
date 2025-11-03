@@ -265,7 +265,7 @@ class PathCollectorConfig:
     """
     
     # 基本开关
-    enable_path_collector: bool = False  # 是否启用路径信息收集器
+    enable_path_collector: bool = True  # 是否启用路径信息收集器
     replace_adcr: bool = True  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
     
     # 能量消耗模式
