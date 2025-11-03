@@ -160,10 +160,11 @@ class SchedulerConfig:
     - LyapunovScheduler：排队长度/能量差驱动的机会捐能匹配；
     - ClusterScheduler：类似 LEACH 的轮换簇首与簇内均衡；
     - PredictionScheduler：基于能量趋势/滑动估计的前瞻调度；
-    - PowerControlScheduler：以达成目标效率 `target_eta` 为导向的功率/送能控制。
+    - PowerControlScheduler：以达成目标效率 `target_eta` 为导向的功率/送能控制；
+    - DurationAwareLyapunovScheduler：传输时长优化的Lyapunov调度器，将传输时长作为优化维度，支持节点锁定机制。
     """
 
-    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
+    scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
@@ -181,11 +182,23 @@ class SchedulerConfig:
     power_target_eta: float = 0.25           # 目标传输效率（0~1），用于反推送能
 
     # DurationAwareLyapunovScheduler 超参数（传输时长优化）
-    duration_min: int = 1                    # 最小传输时长（分钟）
-    duration_max: int = 5                    # 最大传输时长（分钟）
-    duration_w_aoi: float = 0.1              # AoI惩罚权重（传输时间越长，AoI增长越多）
-    duration_w_info: float = 0.05            # 信息量奖励权重（鼓励信息搭便车）
-    duration_info_rate: float = 10000.0      # 信息采集速率（bits/分钟）
+    # 
+    # 核心特性：传输时长优化
+    # - 该调度器会将传输时长作为优化维度，综合考虑能量传输量、AoI变化、信息量累积等因素
+    # - 对于每个donor-receiver对，会尝试不同的传输时长（duration_min 到 duration_max），选择综合得分最高的时长
+    #
+    # 节点锁定机制（仅当传输时长 > 1 时启用）：
+    # - 当传输时长 > 1 分钟时，参与传输路径的所有节点（donor、receiver、中继节点）会被锁定
+    # - 锁定时间 = 当前时间 + 传输时长（duration）
+    # - 在锁定期间，这些节点无法参与新的能量传输（不能作为donor、receiver或路径中的节点）
+    # - 锁定到期后，节点自动解锁，可以再次参与传输
+    # - 注意：只有DurationAwareLyapunovScheduler使用此机制，其他调度器不受影响（duration=1时不会锁定）
+    #
+    duration_min: int = 1                    # 最小传输时长（分钟），推荐 >= 1
+    duration_max: int = 5                    # 最大传输时长（分钟），传输时长越长，节点锁定时间越长
+    duration_w_aoi: float = 0.1              # AoI惩罚权重（传输时间越长，AoI增长越多，惩罚越大）
+    duration_w_info: float = 0.05            # 信息量奖励权重（鼓励信息搭便车，传输时长越长可能累积更多信息）
+    duration_info_rate: float = 10000.0      # 信息采集速率（bits/分钟），用于计算传输期间累积的信息量
 
     # 若策略内部也采用 K 自适应，可在此设置其上限与权重（与 SimulationConfig 的 K 互不冲突）
     adaptive_k_max: int = 24
@@ -273,13 +286,8 @@ class EETORConfig:
     gamma: float = 2.0         # 距离衰减因子（路径损耗指数）
     
     # 邻居构建参数
-    
+    max_range: float = 10.0     # 最大通信范围（米），用于邻居发现
     min_efficiency: float = 0.01  # 最小传输效率阈值（低于此值的链路不考虑）
-    use_adaptive_range: bool = True  # 是否启用自适应邻居范围模式（固定邻居数）
-    # 如果 True：为每个节点动态计算通信范围，使每个节点大约有 target_neighbors 个邻居
-    # 如果 False：使用固定的 max_range 作为通信范围（根据网络密度在 dense/sparse 范围内选择）
-    target_neighbors: int = 6              # 目标邻居数（用于自适应调整通信范围）
-    max_range: float = 10.0     # 最大通信范围（米），用于邻居发现（如果 use_adaptive_range=False）
     
     # 能量状态感知参数
     enable_energy_state_aware: bool = True  # 是否启用能量状态感知
@@ -291,6 +299,7 @@ class EETORConfig:
     
     # 算法控制参数
     max_iter: int = 20                     # 代价计算最大迭代次数
+    target_neighbors: int = 6              # 目标邻居数（用于自适应调整通信范围）
     
     # 自适应范围调整参数
     dense_network_threshold: float = 12.0  # 密集网络阈值（平均邻居数）
@@ -299,7 +308,7 @@ class EETORConfig:
     
     # 信息感知路由参数
     enable_info_aware_routing: bool = True  # 是否启用信息感知路由
-    info_reward_factor: float = 0.3         # 信息奖励系数（0~1），信息量大的节点优先选择
+    info_reward_factor: float = 0.2          # 信息奖励系数（0~1），信息量大的节点优先选择
     # 注意：max_info_wait_time 和 min_info_volume_threshold 在 PathCollectorConfig 中配置
 
 
@@ -341,7 +350,7 @@ class PathCollectorConfig:
     # 机会主义信息传递参数
     enable_opportunistic_info_forwarding: bool = True  # 是否启用机会主义信息传递
     enable_delayed_reporting: bool = True               # 是否启用延迟上报（False为立即上报）
-    max_wait_time: int = 10                              # 最大等待时间（分钟），超时强制上报
+    max_wait_time: int = 5000                              # 最大等待时间（分钟），超时强制上报
     min_info_volume_threshold: int = 1                   # 最小信息量阈值（节点数），低于此值不等待
     max_info_volume: int = 1000000                         # 信息量最大值（bits），超过此值强制上报，None表示无限制
     
@@ -555,6 +564,21 @@ class ConfigManager:
             return {
                 "K": self.scheduler_config.lyapunov_k,
                 "max_hops": self.network_config.max_hops
+            }
+        elif scheduler_type == "duration_aware" or scheduler_type == "DurationAwareLyapunovScheduler":
+            # DurationAwareLyapunovScheduler参数
+            # 注意：当传输时长 > 1 时，节点锁定机制会自动启用
+            # 参与传输的所有节点会被锁定（lock_until = current_time + duration）
+            # 在锁定期间，这些节点无法参与新的能量传输
+            return {
+                "V": self.scheduler_config.lyapunov_v,
+                "K": self.scheduler_config.lyapunov_k,
+                "max_hops": self.network_config.max_hops,
+                "min_duration": self.scheduler_config.duration_min,        # 最小传输时长（分钟）
+                "max_duration": self.scheduler_config.duration_max,        # 最大传输时长（分钟），决定节点锁定时长
+                "w_aoi": self.scheduler_config.duration_w_aoi,            # AoI惩罚权重
+                "w_info": self.scheduler_config.duration_w_info,          # 信息量奖励权重
+                "info_collection_rate": self.scheduler_config.duration_info_rate  # 信息采集速率（bits/分钟）
             }
         else:
             raise ValueError(f"未知的调度器类型: {scheduler_type}")

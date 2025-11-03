@@ -267,6 +267,19 @@ class ParallelSimulationExecutor:
                 K=config_manager.scheduler_config.lyapunov_k,
                 max_hops=config_manager.network_config.max_hops
             )
+        elif scheduler_type == "duration_aware" or scheduler_type == "DurationAwareLyapunovScheduler":
+            from scheduling.schedulers import DurationAwareLyapunovScheduler
+            scheduler = DurationAwareLyapunovScheduler(
+                node_info_manager=node_info_manager,
+                V=config_manager.scheduler_config.lyapunov_v,
+                K=config_manager.scheduler_config.lyapunov_k,
+                max_hops=config_manager.network_config.max_hops,
+                min_duration=config_manager.scheduler_config.duration_min,
+                max_duration=config_manager.scheduler_config.duration_max,
+                w_aoi=config_manager.scheduler_config.duration_w_aoi,
+                w_info=config_manager.scheduler_config.duration_w_info,
+                info_collection_rate=config_manager.scheduler_config.duration_info_rate
+            )
         else:
             from scheduling.schedulers import BaselineHeuristic
             scheduler = BaselineHeuristic(

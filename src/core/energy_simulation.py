@@ -150,6 +150,13 @@ class EnergySimulation:
                         # 【关键】更新NodeInfoManager中的节点能量信息
                         # 在每次调度之前，必须同步真实节点的当前能量到InfoNode
                         if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                            # 设置当前时间
+                            self.scheduler.nim.current_time = t
+                            # 仅当使用DurationAwareLyapunovScheduler时，才检查并更新锁定状态
+                            from scheduling.schedulers import DurationAwareLyapunovScheduler
+                            if isinstance(self.scheduler, DurationAwareLyapunovScheduler):
+                                self.scheduler.nim.check_and_update_locks(t)
+                            # 更新节点信息
                             self.scheduler.nim.batch_update_node_info(
                                 nodes=self.network.nodes,
                                 current_time=t
@@ -185,6 +192,8 @@ class EnergySimulation:
             
                 # 能量传输执行完成后，更新节点信息表（基于传输计划计算实际能量变化）
                 if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                    # 设置当前时间
+                    self.scheduler.nim.current_time = t
                     # 首先：基于传输计划，更新参与传输的节点的能量（确定性计算）
                     # 中心节点知道所有传输路径和能量变化，可以精确计算
                     if plans:

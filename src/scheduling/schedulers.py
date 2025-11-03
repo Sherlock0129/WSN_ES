@@ -40,6 +40,25 @@ class BaseScheduler(object):
         :return: 过滤后的普通节点列表
         """
         return [n for n in nodes if not n.is_physical_center]
+    
+    def _filter_unlocked_nodes(self, nodes, current_time: int):
+        """
+        过滤出未锁定的节点（排除正在传输中的节点）
+        
+        正在传输中的节点（锁定状态）不能参与新的能量传输，包括：
+        - 不能作为donor（捐能者）
+        - 不能作为receiver（接收者）
+        - 不能作为relay（中继节点）
+        
+        :param nodes: 节点列表（InfoNode或SensorNode）
+        :param current_time: 当前时间（分钟）
+        :return: 过滤后的未锁定节点列表
+        """
+        unlocked = []
+        for node in nodes:
+            if not self.nim.is_node_locked(node.node_id, current_time):
+                unlocked.append(node)
+        return unlocked
 
     def plan(self, network, t):
         """返回路由/传能计划列表：[{receiver, donor, path, distance, (可选)energy_sent}, ...]"""
@@ -438,6 +457,8 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         
         # 排除物理中心节点
         nodes = self._filter_regular_nodes(info_nodes)
+        # DurationAwareLyapunovScheduler需要过滤锁定节点（传输时长优化特性）
+        nodes = self._filter_unlocked_nodes(nodes, t)
         E = np.array([n.current_energy for n in nodes], dtype=float)
         E_bar = float(E.mean())
         Q = dict((n, max(0.0, E_bar - n.current_energy)) for n in nodes)
