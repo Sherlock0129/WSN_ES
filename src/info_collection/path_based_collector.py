@@ -148,15 +148,24 @@ class PathBasedInfoCollector:
         path_info = self._collect_real_info(path, current_time)
         
         # 2. 能量消耗结算（如果启用）
+        # 注意：路径逐跳能量总是扣除，但上报跳能量只在真正上报时扣除
         if self.energy_mode == "full":
-            energy_cost = self._settle_energy_consumption(path)
-            self.total_energy_consumed += energy_cost
+            if not self.enable_opportunistic_info_forwarding:
+                # 禁用机会主义信息传递：立即上报，包括上报跳能量
+                energy_cost = self._settle_energy_consumption(path, include_report=True)
+                self.total_energy_consumed += energy_cost
+            else:
+                # 启用机会主义信息传递：只计算路径逐跳能量，上报跳能量在 _update_info_volume 中根据实际情况扣除
+                energy_cost = self._settle_energy_consumption(path, include_report=False)
+                self.total_energy_consumed += energy_cost
         
         # 3. 更新虚拟中心（只更新路径节点）
         self._update_virtual_center(path_info, current_time)
         
         # 4. 机会主义信息传递：更新信息量状态（如果启用）
         if self.enable_opportunistic_info_forwarding:
+            # 在 _update_info_volume 中会根据延迟上报模式和阈值决定是否上报
+            # 如果上报，会调用 _report_info_to_center，这会扣除上报跳能量
             self._update_info_volume(path, current_time)
         
         # 5. 记录一次完整的路径收集传输次数（仅在full模式下）
@@ -424,8 +433,13 @@ class PathBasedInfoCollector:
         node.current_energy = max(0.0, node.current_energy - Eu)
         self.physical_center.current_energy = max(0.0, self.physical_center.current_energy - Ev)
         
-        # 记录信息传输能量消耗
-        if hasattr(self.vc, 'record_info_transmission_energy'):
+        # 更新总能量消耗（仅在full模式下）
+        report_energy = Eu + Ev
+        if self.energy_mode == "full":
+            self.total_energy_consumed += report_energy
+        
+        # 记录信息传输能量消耗（仅当energy_mode="full"时）
+        if self.energy_mode == "full" and hasattr(self.vc, 'record_info_transmission_energy'):
             self.vc.record_info_transmission_energy(node.node_id, Eu, "path_collector")
             self.vc.record_info_transmission_energy(self.physical_center.node_id, Ev, "path_collector")
     
@@ -516,15 +530,16 @@ class PathBasedInfoCollector:
     
     # ==================== 能量消耗结算 ====================
     
-    def _settle_energy_consumption(self, path: List[SensorNode]) -> float:
+    def _settle_energy_consumption(self, path: List[SensorNode], include_report: bool = True) -> float:
         """
         结算信息收集的能量消耗（仅在 energy_mode="full" 时调用）
         
         能量消耗包括：
         1. 路径逐跳信息传递：路径节点信息沿路径聚合传递，每跳消耗能量
-        2. 上报跳：Receiver → 物理中心节点（ID=0）的真实通信能耗
+        2. 上报跳：Receiver → 物理中心节点（ID=0）的真实通信能耗（可选）
         
         :param path: 传能路径 [donor, relay..., receiver]
+        :param include_report: 是否包含上报跳能耗（如果为False，只计算路径逐跳能耗）
         :return: 总能量消耗（J）
         """
         if len(path) < 1:
@@ -533,14 +548,19 @@ class PathBasedInfoCollector:
         # 1. 计算路径逐跳能耗（信息沿路径传递）
         path_energy = self._calculate_path_hop_energy(path)
         
-        # 2. 计算上报跳能耗（Receiver → 物理中心节点）
-        receiver = path[-1]
-        report_energy = self._calculate_report_hop_energy(receiver, path)
+        # 2. 计算上报跳能耗（仅当 include_report=True 时）
+        report_energy = 0.0
+        if include_report:
+            receiver = path[-1]
+            report_energy = self._calculate_report_hop_energy(receiver, path)
         
         total_energy = path_energy + report_energy
         
-        self._log(f"[PathCollector] 能量消耗 - 路径逐跳={path_energy:.2f}J, "
-                 f"上报跳(→PC)={report_energy:.2f}J, 总计={total_energy:.2f}J")
+        if include_report:
+            self._log(f"[PathCollector] 能量消耗 - 路径逐跳={path_energy:.2f}J, "
+                     f"上报跳(→PC)={report_energy:.2f}J, 总计={total_energy:.2f}J")
+        else:
+            self._log(f"[PathCollector] 能量消耗 - 路径逐跳={path_energy:.2f}J (上报跳稍后处理)")
         
         return total_energy
     
@@ -568,7 +588,7 @@ class PathBasedInfoCollector:
             sender = path[i]
             receiver = path[i + 1]
             
-            # 数据包大小始终固定（类似快递盒大小不变）
+            # 数据包大小始终固定
             data_packet_size = self.base_data_size
             
             # 使用与ADCR相同的能量计算方法
@@ -592,7 +612,7 @@ class PathBasedInfoCollector:
             receiver.current_energy = max(0.0, receiver.current_energy - Ev)
             
             # 记录信息传输能量消耗（仅当energy_mode="full"时）
-            if hasattr(self.vc, 'record_info_transmission_energy'):
+            if self.energy_mode == "full" and hasattr(self.vc, 'record_info_transmission_energy'):
                 self.vc.record_info_transmission_energy(sender.node_id, Eu, "path_collector")
                 self.vc.record_info_transmission_energy(receiver.node_id, Ev, "path_collector")
             
@@ -648,8 +668,8 @@ class PathBasedInfoCollector:
         self.physical_center.current_energy = max(0.0, self.physical_center.current_energy - Ev)
         
         # 记录信息传输能量消耗（Receiver上报到物理中心）
-        # 记录发送方（Receiver）和接收方（物理中心）的能量消耗
-        if hasattr(self.vc, 'record_info_transmission_energy'):
+        # 记录发送方（Receiver）和接收方（物理中心）的能量消耗（仅当energy_mode="full"时）
+        if self.energy_mode == "full" and hasattr(self.vc, 'record_info_transmission_energy'):
             self.vc.record_info_transmission_energy(receiver.node_id, Eu, "path_collector")
             self.vc.record_info_transmission_energy(self.physical_center.node_id, Ev, "path_collector")
         
