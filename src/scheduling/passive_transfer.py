@@ -25,7 +25,8 @@ class PassiveTransferManager:
                  critical_ratio: float = 0.2,
                  energy_variance_threshold: float = 0.3,
                  cooldown_period: int = 30,
-                 predictive_window: int = 60):
+                 predictive_window: int = 60,
+                 node_info_manager=None):
         """
         初始化被动传能管理器
         
@@ -35,6 +36,7 @@ class PassiveTransferManager:
         :param energy_variance_threshold: 能量方差阈值
         :param cooldown_period: 冷却期（分钟）
         :param predictive_window: 预测窗口（分钟）
+        :param node_info_manager: NodeInfoManager实例（可选，用于虚拟能量层）
         """
         self.passive_mode = passive_mode
         self.check_interval = check_interval
@@ -42,6 +44,7 @@ class PassiveTransferManager:
         self.energy_variance_threshold = energy_variance_threshold
         self.cooldown_period = cooldown_period
         self.predictive_window = predictive_window
+        self.node_info_manager = node_info_manager  # 虚拟能量层管理器
         
         # 状态变量
         self.last_transfer_time = -cooldown_period  # 上次传能时间
@@ -54,6 +57,9 @@ class PassiveTransferManager:
     def should_trigger_transfer(self, t: int, network) -> Tuple[bool, Optional[str]]:
         """
         智能综合决策：是否应该触发能量传输
+        
+        ⚠️ 优先使用虚拟能量层（NodeInfoManager）获取节点能量信息，
+        避免直接访问SensorNode（"上帝视角"），保持分布式系统模型一致性。
         
         :param t: 当前时间步
         :param network: 网络对象
@@ -72,19 +78,49 @@ class PassiveTransferManager:
         if t - self.last_transfer_time < self.cooldown_period:
             return False, None
         
-        nodes = network.nodes
-
+        # 3. 获取节点能量状态（优先使用虚拟能量层）
         # 排除物理中心节点（ID=0）用于阈值检测
         physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
         physical_center_id = physical_center.node_id if physical_center else None
 
-        # 过滤掉物理中心节点
-        regular_nodes = [node for node in nodes if node.node_id != physical_center_id]
-        total_nodes = len(regular_nodes)  # 只统计普通节点数量
-
-        # 计算当前网络能量状态（仅普通节点）
-        energies = np.array([node.current_energy for node in regular_nodes])
-        thresholds = np.array([node.low_threshold_energy for node in regular_nodes])
+        # 优先从NodeInfoManager获取能量信息（虚拟能量层）
+        if self.node_info_manager is not None:
+            # 使用虚拟能量层：从NodeInfoManager的信息表获取能量
+            all_info = self.node_info_manager.get_all_nodes_info()
+            regular_nodes_info = {
+                node_id: info for node_id, info in all_info.items()
+                if node_id != physical_center_id
+            }
+            total_nodes = len(regular_nodes_info)
+            
+            if total_nodes == 0:
+                return False, None
+            
+            # 从虚拟能量层获取能量
+            energies = np.array([info['energy'] for info in regular_nodes_info.values()])
+            
+            # 阈值需要从真实节点获取（这是配置参数，不是状态信息）
+            # 获取第一个普通节点的阈值作为参考（假设所有节点阈值相同）
+            regular_nodes = [node for node in network.nodes if node.node_id != physical_center_id]
+            if len(regular_nodes) > 0:
+                # 使用第一个普通节点的阈值（所有节点阈值应该相同）
+                threshold_energy = regular_nodes[0].low_threshold_energy
+                thresholds = np.full(total_nodes, threshold_energy)
+            else:
+                # 如果没有普通节点，无法确定阈值
+                return False, None
+        else:
+            # 向后兼容：如果没有NodeInfoManager，回退到直接访问SensorNode
+            nodes = network.nodes
+            regular_nodes = [node for node in nodes if node.node_id != physical_center_id]
+            total_nodes = len(regular_nodes)
+            
+            if total_nodes == 0:
+                return False, None
+            
+            # 直接从SensorNode获取能量（向后兼容）
+            energies = np.array([node.current_energy for node in regular_nodes])
+            thresholds = np.array([node.low_threshold_energy for node in regular_nodes])
 
         # 3. 低能量节点比例检查
         low_energy_nodes = energies < thresholds

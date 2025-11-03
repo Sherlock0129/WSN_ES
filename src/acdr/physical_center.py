@@ -448,6 +448,163 @@ class NodeInfoManager:
         if estimated_count > 0:
             self._log(f"[NodeInfoManager] 能量估算完成：{estimated_count} 个节点")
     
+    def apply_energy_transfer_changes(self, plans: List[Dict], current_time: int):
+        """
+        根据能量传输计划，计算并更新节点信息表中的节点能量
+        
+        工作流程：
+        1. 遍历所有传输计划（plans）
+        2. 对于每条路径，计算每个节点的能量变化：
+           - Donor: 消耗 = energy_consumption(receiver, transfer_WET=True)
+           - 中继节点: 每跳的消耗和接收
+           - Receiver: 获得 = energy_sent * 路径总效率
+        3. 累计所有路径对每个节点的能量影响
+        4. 更新节点信息表和InfoNode
+        
+        注意：
+        - 中心节点规划了所有传输路径，知道每个节点的能量变化
+        - 这是确定性的计算（不是估算），基于物理模型和已知路径
+        
+        :param plans: 能量传输计划列表 [{donor, receiver, path, distance}, ...]
+        :param current_time: 当前时间步（分钟）
+        """
+        if not plans:
+            return
+        
+        # 初始化能量变化字典：{node_id: energy_delta}
+        energy_changes = {}
+        
+        # 1. 遍历所有传输计划，计算每个节点的能量变化
+        for plan in plans:
+            donor = plan.get("donor")
+            receiver = plan.get("receiver")
+            path = plan.get("path")
+            
+            if not donor or not receiver or not path:
+                continue
+            
+            donor_id = donor.node_id
+            receiver_id = receiver.node_id
+            
+            # 获取donor的InfoNode（用于计算能量消耗）
+            if donor_id not in self.info_nodes:
+                continue
+            donor_info = self.info_nodes[donor_id]
+            
+            # 初始发送能量
+            energy_sent = donor_info.E_char
+            
+            # 根据路径长度判断单跳或多跳
+            if len(path) == 2:
+                # 单跳直接传输
+                # 获取receiver的InfoNode（用于计算距离和效率）
+                if receiver_id not in self.info_nodes:
+                    continue
+                receiver_info = self.info_nodes[receiver_id]
+                
+                # 计算传输效率
+                eta = donor_info.energy_transfer_efficiency(receiver_info)
+                energy_received = energy_sent * eta
+                
+                # 计算donor消耗（使用InfoNode计算）
+                # energy_consumption = E_elec * B + epsilon_amp * B * d^tau + sensor_energy
+                # 如果 transfer_WET=True，还要加上 E_char
+                B = donor_info.bit_rate
+                d = donor_info.distance_to(receiver_info)
+                E_tx = donor_info.energy_elec * B + donor_info.epsilon_amp * B * (d ** donor_info.path_loss_exponent)
+                E_rx = donor_info.energy_elec * B
+                E_com = (E_tx + E_rx) / 2  # 双向确认通信，平均
+                E_sen = donor_info.sensor_energy
+                energy_consumed = E_com + E_sen + donor_info.E_char  # 加上WET开销
+                
+                # 记录能量变化
+                if donor_id not in energy_changes:
+                    energy_changes[donor_id] = 0.0
+                energy_changes[donor_id] -= energy_consumed
+                
+                if receiver_id not in energy_changes:
+                    energy_changes[receiver_id] = 0.0
+                energy_changes[receiver_id] += energy_received
+                
+            else:
+                # 多跳传输：逐跳转发，每跳能量衰减
+                energy_left = energy_sent
+                
+                for i in range(len(path) - 1):
+                    sender_node = path[i]
+                    receiver_i_node = path[i + 1]
+                    sender_id = sender_node.node_id
+                    receiver_i_id = receiver_i_node.node_id
+                    
+                    # 获取InfoNode（用于计算）
+                    if sender_id not in self.info_nodes or receiver_i_id not in self.info_nodes:
+                        continue
+                    
+                    sender_info = self.info_nodes[sender_id]
+                    receiver_i_info = self.info_nodes[receiver_i_id]
+                    
+                    # 计算本跳的效率
+                    eta = sender_info.energy_transfer_efficiency(receiver_i_info)
+                    
+                    # 计算本跳实际接收能量
+                    energy_delivered = energy_left * eta
+                    
+                    # 计算发送方消耗（使用InfoNode计算）
+                    transfer_WET = (i == 0)  # 仅第一跳计算WET模块消耗
+                    B = sender_info.bit_rate
+                    d = sender_info.distance_to(receiver_i_info)
+                    E_tx = sender_info.energy_elec * B + sender_info.epsilon_amp * B * (d ** sender_info.path_loss_exponent)
+                    E_rx = sender_info.energy_elec * B
+                    E_com = (E_tx + E_rx) / 2  # 双向确认通信，平均
+                    E_sen = sender_info.sensor_energy
+                    energy_consumed = E_com + E_sen
+                    if transfer_WET:
+                        energy_consumed += sender_info.E_char  # WET开销
+                    
+                    # 记录能量变化
+                    if sender_id not in energy_changes:
+                        energy_changes[sender_id] = 0.0
+                    energy_changes[sender_id] -= energy_consumed
+                    
+                    if receiver_i_id not in energy_changes:
+                        energy_changes[receiver_i_id] = 0.0
+                    energy_changes[receiver_i_id] += energy_delivered
+                    
+                    # 准备下一跳
+                    energy_left = energy_delivered
+        
+        # 2. 更新节点信息表和InfoNode
+        updated_count = 0
+        for node_id, energy_delta in energy_changes.items():
+            if abs(energy_delta) < 1e-9:  # 忽略极小的变化
+                continue
+            
+            if node_id not in self.latest_info:
+                continue
+            
+            # 获取当前能量
+            current_energy = self.latest_info[node_id]['energy']
+            
+            # 计算新能量（不能小于0）
+            new_energy = max(0.0, current_energy + energy_delta)
+            
+            # 更新节点信息表
+            self.latest_info[node_id]['energy'] = new_energy
+            self.latest_info[node_id]['is_estimated'] = False  # 基于传输计划的能量是确定的，不是估算
+            self.latest_info[node_id]['arrival_time'] = current_time  # 更新到达时间
+            self.latest_info[node_id]['record_time'] = current_time  # 更新记录时间
+            self.latest_info[node_id]['aoi'] = 0  # 刚更新，AoI重置为0
+            self.latest_info[node_id]['t'] = current_time  # 全局时间戳
+            
+            # 同步到InfoNode
+            if node_id in self.info_nodes:
+                self.info_nodes[node_id].current_energy = new_energy
+            
+            updated_count += 1
+        
+        if updated_count > 0:
+            self._log(f"[NodeInfoManager] 能量传输更新完成：{updated_count} 个节点")
+    
     def initialize_node_info(self, nodes: List[SensorNode], initial_time: int = 0):
         """
         初始化节点信息表（在网络创建后立即调用）
@@ -579,7 +736,8 @@ class NodeInfoManager:
             ])
             writer.writerows(self.archive_buffer)
         
-        self._log(f"[NodeInfoManager] 归档 {len(self.archive_buffer)} 条记录到 {self.archive_path}")
+        # 去掉归档输出的日志（减少控制台输出）
+        # self._log(f"[NodeInfoManager] 归档 {len(self.archive_buffer)} 条记录到 {self.archive_path}")
         self.archive_buffer.clear()
     
     def force_flush_archive(self):

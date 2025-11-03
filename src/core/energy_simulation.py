@@ -102,6 +102,11 @@ class EnergySimulation:
         """Run the energy simulation for the specified number of time steps."""
         start_time = datetime(2023, 1, 2)
         
+        # 设置被动传输管理器的NodeInfoManager（如果scheduler存在）
+        # 这确保了被动传输决策使用虚拟能量层而不是直接访问SensorNode
+        if self.scheduler is not None and hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+            self.passive_manager.node_info_manager = self.scheduler.nim
+        
         for t in range(self.time_steps):
             # Step 1: 更新节点能量（采集 + 衰减 + 位置）
             self.network.update_network_energy(t)
@@ -109,6 +114,14 @@ class EnergySimulation:
             # Step 1.5: ADCR链路层处理（如果启用）
             if hasattr(self.network, 'adcr_link') and self.network.adcr_link is not None:
                 self.network.adcr_link.step(t)
+
+            # Step 1.6: 在检查触发条件前，先同步节点能量到虚拟能量层（确保被动传输管理器使用最新能量）
+            # 这确保了被动传输决策基于最新的节点能量状态
+            if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                self.scheduler.nim.batch_update_node_info(
+                    nodes=self.network.nodes,
+                    current_time=t
+                )
 
             # Step 2: 智能综合决策能量传输触发（使用被动传能管理器）
             should_trigger, trigger_reason = self.passive_manager.should_trigger_transfer(t, self.network)
@@ -170,8 +183,14 @@ class EnergySimulation:
                     plans = []
                     cand = []
             
-                # 能量传输执行完成后，估算未上报节点的能量
+                # 能量传输执行完成后，更新节点信息表（基于传输计划计算实际能量变化）
                 if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                    # 首先：基于传输计划，更新参与传输的节点的能量（确定性计算）
+                    # 中心节点知道所有传输路径和能量变化，可以精确计算
+                    if plans:
+                        self.scheduler.nim.apply_energy_transfer_changes(plans, current_time=t)
+                    
+                    # 然后：估算未上报节点的能量（衰减+太阳能采集）
                     self.scheduler.nim.estimate_all_nodes(current_time=t)
                     
                     # 机会主义信息传递：检查超时并强制上报（如果启用路径信息收集器）

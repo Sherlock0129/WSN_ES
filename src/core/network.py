@@ -890,12 +890,21 @@ class Network:
                 donor.transferred_history.append(energy_sent)
                 receiver.received_history.append(energy_received)
 
-                print(f"[Direct WET] {donor.node_id} → {receiver.node_id}, η={eta:.2f}, +{energy_received:.2f}J, loss={energy_loss:.2f}J")
+                # 显示完整路径（所有节点）
+                path_str = " → ".join([str(node.node_id) for node in path])
+                print(f"[Direct WET] 路径: {path_str}, η={eta:.2f}, +{energy_received:.2f}J, loss={energy_loss:.2f}J")
             
             else:
                 # 多跳传输：逐跳转发，每跳能量衰减
                 energy_left = energy_sent
                 donor.transferred_history.append(energy_sent)
+
+                # 计算总路径效率（各跳效率的乘积）
+                total_eta = 1.0
+                for i in range(len(path) - 1):
+                    total_eta *= path[i].energy_transfer_efficiency(path[i + 1])
+                final_energy_received = energy_sent * total_eta
+                total_energy_loss = energy_sent - final_energy_received
 
                 for i in range(len(path) - 1):
                     sender = path[i]
@@ -916,12 +925,12 @@ class Network:
                     receiver_i.current_energy += energy_delivered
                     receiver_i.received_history.append(energy_delivered)
 
-                    # 打印日志
-                    print(
-                        f"  [Hop {i + 1}] {sender.node_id} → {receiver_i.node_id}, d={sender.distance_to(receiver_i):.2f}m, η={eta:.3f}, +{energy_delivered:.2f}J, loss={energy_loss_this_hop:.2f}J")
-
                     # 准备下一跳
                     energy_left = energy_delivered
+                
+                # 显示完整路径（所有节点）
+                path_str = " → ".join([str(node.node_id) for node in path])
+                print(f"[Multi-hop WET] 路径: {path_str}, 总效率η={total_eta:.3f}, 终点接收={final_energy_received:.2f}J, 总损失={total_energy_loss:.2f}J")
             
             # ✨ 新增：路径信息收集（如果启用）
             if self.path_info_collector is not None and current_time is not None:
