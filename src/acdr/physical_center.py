@@ -175,6 +175,13 @@ class NodeInfoManager:
         :param cluster_id: 所属簇ID
         :param data_size: 数据包大小（bits）
         """
+        # 保存现有信息量字段（如果存在）
+        existing_info_fields = {}
+        if node_id in self.latest_info:
+            for field in ['info_volume', 'info_waiting_since', 'info_is_reported', 'info_source_nodes']:
+                if field in self.latest_info[node_id]:
+                    existing_info_fields[field] = self.latest_info[node_id][field]
+        
         # 构造信息记录
         info = {
             'energy': energy,
@@ -188,6 +195,16 @@ class NodeInfoManager:
             'is_estimated': False,  # 上报值不是估算值
             't': arrival_time  # 当前时间戳（信息到达时刻）
         }
+        
+        # 恢复信息量字段（如果存在）
+        if existing_info_fields:
+            info.update(existing_info_fields)
+        else:
+            # 初始化信息量字段（如果不存在）
+            info['info_volume'] = 0
+            info['info_waiting_since'] = -1
+            info['info_is_reported'] = True
+            info['info_source_nodes'] = []
         
         # L1: 更新最新状态表
         self.latest_info[node_id] = info
@@ -690,6 +707,76 @@ class NodeInfoManager:
         return list(self.info_nodes.values())
     
     # ==================== 扩展接口 ====================
+    
+    def check_timeout_and_force_report(self, current_time: int, max_wait_time: int = 10,
+                                       path_collector=None, network=None) -> int:
+        """
+        检查等待中的节点是否超时，并强制上报（超时保护机制）
+        
+        :param current_time: 当前时间（分钟）
+        :param max_wait_time: 最大等待时间（分钟）
+        :param path_collector: PathBasedInfoCollector实例（用于上报信息）
+        :param network: Network实例（用于查找节点）
+        :return: 强制上报的节点数量
+        """
+        timeout_nodes = []
+        
+        # 1. 检查所有等待中的节点
+        for node_id, node_info in self.latest_info.items():
+            # 确保信息量字段存在（兼容旧数据）
+            info_volume = node_info.get('info_volume', 0)
+            is_reported = node_info.get('info_is_reported', True)
+            waiting_since = node_info.get('info_waiting_since', -1)
+            
+            # 检查是否有未上报的信息量
+            if not is_reported and info_volume > 0 and waiting_since >= 0:
+                # 计算等待时间
+                wait_time = current_time - waiting_since
+                
+                # 检查是否超时
+                if wait_time >= max_wait_time:
+                    timeout_nodes.append((node_id, node_info))
+        
+        # 2. 对超时节点强制上报
+        if timeout_nodes and path_collector and network:
+            for node_id, node_info in timeout_nodes:
+                # 查找节点对象
+                node = None
+                if hasattr(network, 'get_node_by_id'):
+                    node = network.get_node_by_id(node_id)
+                elif hasattr(network, 'nodes'):
+                    # 从nodes列表中查找
+                    for n in network.nodes:
+                        if n.node_id == node_id:
+                            node = n
+                            break
+                if node is not None:
+                    # 获取信息量
+                    info_volume = node_info.get('info_volume', 0)
+                    
+                    # 获取等待时间（需要在循环内计算）
+                    waiting_since = node_info.get('info_waiting_since', -1)
+                    wait_time = current_time - waiting_since if waiting_since >= 0 else 0
+                    
+                    # 强制单独上报（通过PathBasedInfoCollector）
+                    if hasattr(path_collector, '_report_info_to_center'):
+                        path_collector._report_info_to_center(node, info_volume)
+                    
+                    # 在节点信息表中清零信息量状态
+                    if node_id in self.latest_info:
+                        self.latest_info[node_id]['info_is_reported'] = True
+                        self.latest_info[node_id]['info_volume'] = 0
+                        self.latest_info[node_id]['info_waiting_since'] = -1
+                    
+                    # 记录强制上报统计
+                    if not hasattr(self, 'forced_reports_count'):
+                        self.forced_reports_count = 0
+                    self.forced_reports_count += 1
+                    
+                    self._log(f"[NodeInfoManager] 超时强制上报 - 节点 {node_id}, "
+                             f"信息量: {info_volume} bits, 等待时间: {wait_time} 分钟")
+        
+        return len(timeout_nodes)
     
     def reset(self):
         """重置状态"""

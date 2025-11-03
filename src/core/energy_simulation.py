@@ -14,6 +14,12 @@ except Exception:
     # 允许没有 schedulers.py 时仍可运行（使用原 run_routing）
     PowerControlScheduler = None
 
+# 导入EETOR配置设置函数
+try:
+    from routing.energy_transfer_routing import set_eetor_config
+except ImportError:
+    set_eetor_config = None
+
 class EnergySimulation:
     def __init__(self, network, time_steps, scheduler=None, 
                  # 能量传输控制
@@ -167,6 +173,21 @@ class EnergySimulation:
                 # 能量传输执行完成后，估算未上报节点的能量
                 if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
                     self.scheduler.nim.estimate_all_nodes(current_time=t)
+                    
+                    # 机会主义信息传递：检查超时并强制上报（如果启用路径信息收集器）
+                    if (hasattr(self.network, 'path_info_collector') and 
+                        self.network.path_info_collector is not None and
+                        hasattr(self.network.path_info_collector, 'enable_opportunistic_info_forwarding') and
+                        self.network.path_info_collector.enable_opportunistic_info_forwarding):
+                        max_wait_time = getattr(self.network.path_info_collector, 'max_wait_time', 10)
+                        forced_count = self.scheduler.nim.check_timeout_and_force_report(
+                            current_time=t,
+                            max_wait_time=max_wait_time,
+                            path_collector=self.network.path_info_collector,
+                            network=self.network
+                        )
+                        if forced_count > 0:
+                            print(f"[超时强制上报] 时间步 {t}: {forced_count} 个节点")
             
                 # 计算统计信息
                 stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, self.network)

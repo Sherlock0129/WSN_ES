@@ -164,6 +164,13 @@ def run_simulation(config_file: str = None):
         scheduler = create_scheduler(config_manager, network)
         logger.info(f"调度器创建完成: {scheduler.get_name()}")
     
+    # 3.5 设置EETOR配置（确保路由算法使用正确的配置）
+    from routing.energy_transfer_routing import set_eetor_config
+    set_eetor_config(config_manager.eetor_config)
+    if config_manager.eetor_config.enable_info_aware_routing:
+        logger.info("信息感知路由已启用")
+        logger.info(f"  - info_reward_factor: {config_manager.eetor_config.info_reward_factor}")
+    
     # 4. 运行仿真
     logger.info("开始仿真...")
     with handle_exceptions("仿真运行", recoverable=False):
