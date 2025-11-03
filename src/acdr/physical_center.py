@@ -83,7 +83,12 @@ class NodeInfoManager:
         #   'data_size': int,          # 数据包大小
         #   'aoi': int,                # Age of Information（信息年龄，每分钟+1）
         #   'is_estimated': bool,      # 是否为估算值
-        #   't': int                   # 全局时间戳（统一时钟，从0开始每分钟+1）
+        #   't': int,                  # 全局时间戳（统一时钟，从0开始每分钟+1）
+        #   # 机会主义信息传递字段
+        #   'info_volume': int,         # 累积的信息量（bits），0表示无信息量
+        #   'info_waiting_since': int, # 开始等待的时间戳（分钟），-1表示未等待
+        #   'info_is_reported': bool,  # 是否已上报（True表示已上报或立即上报模式）
+        #   'info_source_nodes': List[int]  # 信息来源节点列表（可选，用于去重优化）
         # }}
         self.latest_info: Dict[int, Dict] = {}
         
@@ -215,6 +220,9 @@ class NodeInfoManager:
         self.recent_history.append(history_record)
         
         # L3: 添加到归档缓冲区
+        # 将info_source_nodes列表序列化为字符串（CSV不支持列表）
+        info_source_nodes_str = ','.join(map(str, info.get('info_source_nodes', []))) if info.get('info_source_nodes') else ''
+        
         self.archive_buffer.append({
             'arrival_time': arrival_time,
             'node_id': node_id,
@@ -226,7 +234,11 @@ class NodeInfoManager:
             'position_y': position[1] if position else None,
             'is_solar': is_solar,
             'cluster_id': cluster_id,
-            'data_size': data_size
+            'data_size': data_size,
+            'info_volume': info.get('info_volume', 0),
+            'info_waiting_since': info.get('info_waiting_since', -1),
+            'info_is_reported': info.get('info_is_reported', True),
+            'info_source_nodes': info_source_nodes_str
         })
         
         # 批量写入归档
@@ -551,7 +563,8 @@ class NodeInfoManager:
             with open(self.archive_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=[
                     'arrival_time', 'node_id', 'energy', 'record_time', 'aoi', 't',
-                    'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
+                    'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size',
+                    'info_volume', 'info_waiting_since', 'info_is_reported', 'info_source_nodes'
                 ])
                 writer.writeheader()
             self.archive_initialized = True
@@ -561,7 +574,8 @@ class NodeInfoManager:
         with open(self.archive_path, 'a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=[
                 'arrival_time', 'node_id', 'energy', 'record_time', 'aoi', 't',
-                'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
+                'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size',
+                'info_volume', 'info_waiting_since', 'info_is_reported', 'info_source_nodes'
             ])
             writer.writerows(self.archive_buffer)
         

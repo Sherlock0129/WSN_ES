@@ -286,11 +286,10 @@ class EETORConfig:
     dense_network_range: float = 5.0        # 密集网络使用较小的通信范围
     sparse_network_range: float = 10.0      # 稀疏网络使用较大的通信范围
     
-    # 信息感知路由参数（机会主义信息传递）
-    enable_info_aware_routing: bool = True  # 是否启用信息感知路由
+    # 信息感知路由参数
+    enable_info_aware_routing: bool = False  # 是否启用信息感知路由
     info_reward_factor: float = 0.2          # 信息奖励系数（0~1），信息量大的节点优先选择
-    max_info_wait_time: int = 10              # 最大等待时间（分钟），用于信息感知路由
-    min_info_volume_threshold: int = 1       # 最小信息量阈值（节点数），低于此值不等待
+    # 注意：max_info_wait_time 和 min_info_volume_threshold 在 PathCollectorConfig 中配置
 
 
 @dataclass
