@@ -286,8 +286,9 @@ class EETORConfig:
     gamma: float = 2.0         # 距离衰减因子（路径损耗指数）
     
     # 邻居构建参数
-    max_range: float = 10.0     # 最大通信范围（米），用于邻居发现
+    max_range: float = 10.0     # 最大通信范围（米），用于上限限制（实际范围由target_neighbors自适应决定）
     min_efficiency: float = 0.01  # 最小传输效率阈值（低于此值的链路不考虑）
+    target_neighbors: int = 6      # 目标邻居数（用于自适应邻居发现，类似EEOR，每个节点会动态调整范围直到找到此数量的邻居）
     
     # 能量状态感知参数
     enable_energy_state_aware: bool = True  # 是否启用能量状态感知
@@ -299,12 +300,6 @@ class EETORConfig:
     
     # 算法控制参数
     max_iter: int = 20                     # 代价计算最大迭代次数
-    target_neighbors: int = 6              # 目标邻居数（用于自适应调整通信范围）
-    
-    # 自适应范围调整参数
-    dense_network_threshold: float = 12.0  # 密集网络阈值（平均邻居数）
-    dense_network_range: float = 5.0        # 密集网络使用较小的通信范围
-    sparse_network_range: float = 10.0      # 稀疏网络使用较大的通信范围
     
     # 信息感知路由参数
     enable_info_aware_routing: bool = True  # 是否启用信息感知路由

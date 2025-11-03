@@ -217,30 +217,38 @@ def get_energy_state_penalty(node, capacity: float = None, config=None) -> float
 def build_neighbors_energy_transfer(nodes: List, 
                                      max_range: float = None,
                                      min_efficiency: float = None,
+                                     target_neighbors: int = None,
                                      config=None,
                                      node_info_manager=None,
                                      current_time: int = None) -> Tuple[Dict, Dict]:
     """
-    为能量传输优化的邻居构建
+    为能量传输优化的邻居构建（使用EEOR自适应邻居发现）
     
     特性：
-    1. 移除硬性距离限制（或使用很大的范围）
+    1. 自适应邻居范围：动态调整通信范围，使每个节点有目标数量的邻居（类似EEOR）
     2. 只考虑传输效率≥阈值的链路
     3. 排除物理中心节点（ID=0）
+    4. 排除锁定的节点
     
     :param nodes: 节点列表
-    :param max_range: 最大通信范围（米），如果None则从配置获取
+    :param max_range: 最大通信范围（米），如果None则从配置获取（用于上限限制）
     :param min_efficiency: 最小传输效率阈值，如果None则从配置获取
+    :param target_neighbors: 目标邻居数（默认6，如果None则从配置获取）
     :param config: EETOR配置对象，如果None则从全局配置获取
+    :param node_info_manager: NodeInfoManager实例（用于检查锁定状态）
+    :param current_time: 当前时间（用于检查锁定状态）
     :return: (neighbor_map, node_dict)
     """
     # 从配置获取参数
     if config is None:
         config = get_eetor_config()
-    if max_range is None:
-        max_range = config.max_range
+    if target_neighbors is None:
+        target_neighbors = config.target_neighbors
     if min_efficiency is None:
         min_efficiency = config.min_efficiency
+    if max_range is None:
+        max_range = config.max_range  # 作为上限限制
+    
     nmap = {n.node_id: [] for n in nodes}
     ndict = {n.node_id: n for n in nodes}
     
@@ -249,16 +257,19 @@ def build_neighbors_energy_transfer(nodes: List,
     if current_time is None and node_info_manager is not None:
         current_time = getattr(node_info_manager, 'current_time', None)
     
+    # 对每个节点进行自适应邻居发现（类似EEOR）
     for ni in nodes:
         # 排除物理中心节点（ID=0完全不参与WET）
         if hasattr(ni, 'is_physical_center') and ni.is_physical_center:
             continue
         
-        # 排除锁定的节点
+        # 排除锁定的节点（不能作为发现邻居的主体）
         if current_time is not None and node_info_manager is not None:
             if node_info_manager.is_node_locked(ni.node_id, current_time):
                 continue
         
+        # 1. 计算到所有其他节点的距离和效率
+        candidates = []
         for nj in nodes:
             if ni == nj:
                 continue
@@ -274,17 +285,35 @@ def build_neighbors_energy_transfer(nodes: List,
             
             d = ni.distance_to(nj)
             
-            # 距离检查（可选，但设置较大的范围）
-            if d > max_range:
-                continue
-            
-            # 效率检查：只考虑效率≥阈值的链路（使用配置的eta_0和gamma）
+            # 效率检查：只考虑效率≥阈值的链路
             eta = calculate_energy_transfer_efficiency(d, eta_0=config.eta_0, gamma=config.gamma)
             if eta < min_efficiency:
                 continue
             
-            # 建立邻居关系
-            nmap[ni.node_id].append((nj.node_id, d, eta))
+            candidates.append((d, nj, eta))
+        
+        # 2. 按距离排序（类似EEOR）
+        candidates.sort(key=lambda x: x[0])  # 按距离排序
+        
+        # 3. 确定通信范围（自适应调整，类似EEOR）
+        if len(candidates) >= target_neighbors:
+            # 使用到第target_neighbors个邻居的距离作为通信范围
+            R = candidates[target_neighbors - 1][0] * 1.1  # 稍微扩大
+        else:
+            # 节点太少，使用最大距离（但不超过max_range上限）
+            R = candidates[-1][0] if candidates else max_range
+            # 如果节点数为0，使用默认范围
+            if not candidates:
+                R = max_range
+        
+        # 4. 限制通信范围上限，避免过度扩大
+        if max_range is not None:
+            R = min(R, max_range)
+        
+        # 5. 建立邻居关系（距离 <= R且效率 >= min_efficiency）
+        for d, nj, eta in candidates:
+            if d <= R:
+                nmap[ni.node_id].append((nj.node_id, d, eta))
     
     return nmap, ndict
 
@@ -542,6 +571,7 @@ def compute_energy_transfer_costs(nodes: List,
                                    max_iter: int = None,
                                    max_range: float = None,
                                    min_efficiency: float = None,
+                                   target_neighbors: int = None,
                                    energy_state_aware: bool = None,
                                    config=None,
                                    node_info_manager=None) -> Tuple[Dict[int, float], Dict[int, List[int]]]:
@@ -551,10 +581,12 @@ def compute_energy_transfer_costs(nodes: List,
     :param nodes: 节点列表（应包含目标节点）
     :param target_node_id: 目标节点ID
     :param max_iter: 最大迭代次数，如果None则从配置获取
-    :param max_range: 最大通信范围（米），如果None则从配置获取
+    :param max_range: 最大通信范围（米），如果None则从配置获取（用于上限限制）
     :param min_efficiency: 最小传输效率阈值，如果None则从配置获取
+    :param target_neighbors: 目标邻居数（用于自适应邻居发现），如果None则从配置获取
     :param energy_state_aware: 是否考虑节点能量状态，如果None则从配置获取
     :param config: EETOR配置对象，如果None则从全局配置获取
+    :param node_info_manager: NodeInfoManager实例（用于检查锁定状态）
     :return: (代价字典C, 转发前缀字典FWD)
     """
     # 从配置获取参数
@@ -566,10 +598,12 @@ def compute_energy_transfer_costs(nodes: List,
         max_range = config.max_range
     if min_efficiency is None:
         min_efficiency = config.min_efficiency
+    if target_neighbors is None:
+        target_neighbors = config.target_neighbors
     if energy_state_aware is None:
         energy_state_aware = config.enable_energy_state_aware
     
-    # 构建邻居图
+    # 构建邻居图（使用自适应邻居发现）
     # 获取当前时间（用于检查锁定状态）
     current_time = None
     if node_info_manager is not None:
@@ -579,6 +613,7 @@ def compute_energy_transfer_costs(nodes: List,
         nodes=nodes,
         max_range=max_range,
         min_efficiency=min_efficiency,
+        target_neighbors=target_neighbors,
         config=config,
         node_info_manager=node_info_manager,
         current_time=current_time
@@ -644,6 +679,7 @@ def find_energy_transfer_path(nodes: List,
                               max_hops: int = 5,
                               max_range: float = None,
                               min_efficiency: float = None,
+                              target_neighbors: int = None,
                               energy_state_aware: bool = None,
                               config=None,
                               node_info_manager=None) -> Optional[List]:
@@ -654,9 +690,12 @@ def find_energy_transfer_path(nodes: List,
     :param source_node: 源节点
     :param dest_node: 目标节点
     :param max_hops: 最大跳数
-    :param max_range: 最大通信范围（米）
+    :param max_range: 最大通信范围（米），用于上限限制
     :param min_efficiency: 最小传输效率阈值
+    :param target_neighbors: 目标邻居数（用于自适应邻居发现）
     :param energy_state_aware: 是否考虑节点能量状态
+    :param config: EETOR配置对象
+    :param node_info_manager: NodeInfoManager实例（用于检查锁定状态）
     :return: 路径节点列表，如果失败返回None
     """
     # 检查源节点和目标节点是否在nodes中
@@ -677,6 +716,8 @@ def find_energy_transfer_path(nodes: List,
         max_range = config.max_range
     if min_efficiency is None:
         min_efficiency = config.min_efficiency
+    if target_neighbors is None:
+        target_neighbors = config.target_neighbors
     if energy_state_aware is None:
         energy_state_aware = config.enable_energy_state_aware
     
@@ -686,6 +727,7 @@ def find_energy_transfer_path(nodes: List,
         target_node_id=dest_node.node_id,
         max_range=max_range,
         min_efficiency=min_efficiency,
+        target_neighbors=target_neighbors,
         energy_state_aware=energy_state_aware,
         config=config,
         node_info_manager=node_info_manager
@@ -744,14 +786,16 @@ def find_energy_transfer_path_adaptive(nodes: List,
     """
     自适应版本的能量传输路径查找（兼容现有调度器接口）
     
-    注意：target_neighbors参数保留以兼容接口，但实际使用更大的通信范围
+    使用EEOR的自适应邻居发现机制：动态调整通信范围，使每个节点有目标数量的邻居
     
     :param nodes: 节点列表
     :param source_node: 源节点
     :param dest_node: 目标节点
     :param max_hops: 最大跳数
-    :param target_neighbors: 目标邻居数（用于兼容，实际不使用）
+    :param target_neighbors: 目标邻居数（默认6，用于自适应邻居发现）
     :param energy_state_aware: 是否考虑节点能量状态
+    :param config: EETOR配置对象
+    :param node_info_manager: NodeInfoManager实例（用于检查锁定状态）
     :return: 路径节点列表，如果失败返回None
     """
     # 从配置获取参数
@@ -762,22 +806,16 @@ def find_energy_transfer_path_adaptive(nodes: List,
     if energy_state_aware is None:
         energy_state_aware = config.enable_energy_state_aware
     
-    # 根据target_neighbors动态调整通信范围（但保持较大范围）
-    # 如果网络密度高，可以适当缩小范围以提高效率
-    # 如果网络密度低，使用更大的范围
-    avg_neighbors = estimate_average_neighbors(nodes)
-    if avg_neighbors > config.dense_network_threshold:
-        max_range = config.dense_network_range  # 密集网络，可以缩小范围
-    else:
-        max_range = config.sparse_network_range  # 稀疏网络，使用大范围
-    
+    # 使用自适应邻居发现（类似EEOR）
+    # max_range作为上限限制，实际范围由target_neighbors动态决定
     return find_energy_transfer_path(
         nodes=nodes,
         source_node=source_node,
         dest_node=dest_node,
         max_hops=max_hops,
-        max_range=max_range,
+        max_range=config.max_range,  # 作为上限限制
         min_efficiency=config.min_efficiency,
+        target_neighbors=target_neighbors,  # 用于自适应邻居发现
         energy_state_aware=energy_state_aware,
         config=config,
         node_info_manager=node_info_manager
