@@ -56,49 +56,53 @@ class PathBasedInfoCollector:
                  # 估算参数
                  decay_rate: float = 5.0,
                  use_solar_model: bool = True,
-                 # 优化选项
-                 batch_update: bool = True,
-                 # 数据包大小模式
-                 enable_accumulative_data_size: bool = False,
-                 # 机会主义信息传递参数
-                 enable_opportunistic_info_forwarding: bool = True,
-                 enable_delayed_reporting: bool = True,
-                 max_wait_time: int = 10,
-                 min_info_volume_threshold: int = 1):
+        # 优化选项
+        batch_update: bool = True,
+        # 信息量累积模式（独立于数据包大小）
+        enable_info_volume_accumulation: bool = True,
+        # 机会主义信息传递参数
+        enable_opportunistic_info_forwarding: bool = True,
+        enable_delayed_reporting: bool = True,
+        max_wait_time: int = 10,
+        min_info_volume_threshold: int = 1,
+        max_info_volume: int = None):
         """
         初始化路径信息收集器
         
         :param virtual_center: 虚拟中心实例（用于节点信息表管理）
         :param physical_center: 物理中心节点（ID=0，信息上报目标）
         :param energy_mode: 能量消耗模式 ("free": 零能耗, "full": 完全真实)
-        :param base_data_size: 基础数据大小（bits），每个节点的基础信息量（与ADCR一致）
+        :param base_data_size: 基础数据包大小（bits），固定不变（类似快递盒大小）
         :param enable_logging: 是否启用日志
         :param decay_rate: 自然衰减率（J/分钟，用于估算）
         :param use_solar_model: 是否使用太阳能模型进行估算
         :param batch_update: 是否批量更新虚拟中心
-        :param enable_accumulative_data_size: 是否启用累积数据包大小模式
-                                           True: 数据包大小 = base_data_size × 经过的节点数
-                                           False: 数据包大小 = base_data_size（固定）
+        :param enable_info_volume_accumulation: 是否启用信息量累积模式
+                                              注意：数据包大小始终固定为 base_data_size（不变）
+                                              True: 信息量 = base_data_size × 路径节点数（用于路由判断）
+                                              False: 信息量 = base_data_size（固定，不累积）
         :param enable_opportunistic_info_forwarding: 是否启用机会主义信息传递
         :param enable_delayed_reporting: 是否启用延迟上报（False为立即上报）
         :param max_wait_time: 最大等待时间（分钟），超时强制上报
         :param min_info_volume_threshold: 最小信息量阈值（节点数），低于此值不等待
+        :param max_info_volume: 信息量最大值（bits），超过此值强制上报，None表示无限制
         """
         self.vc = virtual_center
         self.physical_center = physical_center
         self.energy_mode = energy_mode
-        self.base_data_size = base_data_size
+        self.base_data_size = base_data_size  # 固定数据包大小（类似快递盒）
         self.enable_logging = enable_logging
         self.decay_rate = decay_rate
         self.use_solar_model = use_solar_model
         self.batch_update = batch_update
-        self.enable_accumulative_data_size = enable_accumulative_data_size
+        self.enable_info_volume_accumulation = enable_info_volume_accumulation
         
         # 机会主义信息传递参数
         self.enable_opportunistic_info_forwarding = enable_opportunistic_info_forwarding
         self.enable_delayed_reporting = enable_delayed_reporting
         self.max_wait_time = max_wait_time
         self.min_info_volume_threshold = min_info_volume_threshold
+        self.max_info_volume = max_info_volume  # 信息量最大值（bits）
         
         # 统计信息
         self.total_collections = 0
@@ -106,9 +110,10 @@ class PathBasedInfoCollector:
         self.total_estimated_info = 0
         self.total_energy_consumed = 0.0  # 总能量消耗
         
-        data_size_mode = "累积模式" if enable_accumulative_data_size else "固定大小模式"
+        info_volume_mode = "累积模式" if enable_info_volume_accumulation else "固定模式"
         self._log(f"[PathCollector] 初始化完成 - 能量模式={energy_mode}, "
-                 f"数据包大小={base_data_size}bits ({data_size_mode}), "
+                 f"数据包大小={base_data_size}bits (固定), "
+                 f"信息量={info_volume_mode}, "
                  f"衰减率={decay_rate}J/min, 太阳能模型={'启用' if use_solar_model else '禁用'}")
     
     def _log(self, message: str):
@@ -240,10 +245,14 @@ class PathBasedInfoCollector:
                 if not is_reported and info_volume > 0:
                     nodes_with_info.append((node, node_info))
         
-        # 2. 计算整条路径的信息量
-        if self.enable_accumulative_data_size:
+        # 2. 计算整条路径的信息量（独立于数据包大小）
+        # 注意：数据包大小始终固定为 base_data_size（不变）
+        # 信息量可以累积（用于路由判断），但数据包大小不变
+        if self.enable_info_volume_accumulation:
+            # 信息量累积模式：信息量 = base_data_size × 路径节点数（用于路由判断）
             path_info_volume = self.base_data_size * len(path)
         else:
+            # 信息量固定模式：信息量 = base_data_size（固定，不累积）
             path_info_volume = self.base_data_size
         
         # 3. 如果有节点携带信息，实现"搭便车"
@@ -253,26 +262,46 @@ class PathBasedInfoCollector:
             for node, node_info in nodes_with_info:
                 total_info_volume += node_info.get('info_volume', 0)
             
-            # 在路径终点上报总信息量（消耗能量）
-            if self.energy_mode == "full" and self.physical_center:
-                self._report_info_to_center(receiver, total_info_volume)
-            
-            # 标记搭载信息的节点已上报（在节点信息表中更新）
-            for node, node_info in nodes_with_info:
-                if node.node_id in self.vc.latest_info:
-                    self.vc.latest_info[node.node_id]['info_is_reported'] = True
-                    self.vc.latest_info[node.node_id]['info_volume'] = 0
-                    self.vc.latest_info[node.node_id]['info_waiting_since'] = -1
-            
-            # 更新新路径终点的信息量（延迟上报模式）
-            if self.enable_delayed_reporting:
-                self._set_receiver_info_volume(receiver, path_info_volume, path, current_time)
-            else:
-                # 立即上报模式：信息量清零
+            # 检查是否超过最大值（优先检查，超过最大值必须立即上报）
+            if self.max_info_volume is not None and total_info_volume > self.max_info_volume:
+                # 超过最大值，强制立即上报总信息量
+                if self.energy_mode == "full" and self.physical_center:
+                    self._report_info_to_center(receiver, total_info_volume)
+                
+                # 标记搭载信息的节点已上报（在节点信息表中更新）
+                for node, node_info in nodes_with_info:
+                    if node.node_id in self.vc.latest_info:
+                        self.vc.latest_info[node.node_id]['info_is_reported'] = True
+                        self.vc.latest_info[node.node_id]['info_volume'] = 0
+                        self.vc.latest_info[node.node_id]['info_waiting_since'] = -1
+                
+                # 新路径终点也清零（因为已上报）
                 self._clear_receiver_info_volume(receiver)
-            
-            self._log(f"[PathCollector] 搭便车成功 - 搭载信息量: {total_info_volume - path_info_volume} bits, "
-                     f"总信息量: {total_info_volume} bits")
+                
+                self._log(f"[PathCollector] 搭便车时信息量超过最大值 ({total_info_volume} > {self.max_info_volume})，强制上报 - "
+                         f"搭载信息量: {total_info_volume - path_info_volume} bits, 总信息量: {total_info_volume} bits")
+            else:
+                # 未超过最大值，正常处理搭便车
+                # 在路径终点上报总信息量（消耗能量）
+                if self.energy_mode == "full" and self.physical_center:
+                    self._report_info_to_center(receiver, total_info_volume)
+                
+                # 标记搭载信息的节点已上报（在节点信息表中更新）
+                for node, node_info in nodes_with_info:
+                    if node.node_id in self.vc.latest_info:
+                        self.vc.latest_info[node.node_id]['info_is_reported'] = True
+                        self.vc.latest_info[node.node_id]['info_volume'] = 0
+                        self.vc.latest_info[node.node_id]['info_waiting_since'] = -1
+                
+                # 更新新路径终点的信息量（延迟上报模式）
+                if self.enable_delayed_reporting:
+                    self._set_receiver_info_volume(receiver, path_info_volume, path, current_time)
+                else:
+                    # 立即上报模式：信息量清零
+                    self._clear_receiver_info_volume(receiver)
+                
+                self._log(f"[PathCollector] 搭便车成功 - 搭载信息量: {total_info_volume - path_info_volume} bits, "
+                         f"总信息量: {total_info_volume} bits")
         else:
             # 没有节点携带信息，正常处理新路径
             if self.enable_delayed_reporting:
@@ -318,12 +347,19 @@ class PathBasedInfoCollector:
             self.vc.latest_info[receiver.node_id]['info_is_reported'] = True
             self.vc.latest_info[receiver.node_id]['info_source_nodes'] = []
         
-        # 检查信息量阈值
+        # 检查信息量阈值和最大值
         current_volume = self.vc.latest_info[receiver.node_id]['info_volume']
         new_volume = current_volume + path_info_volume
         threshold_volume = self.base_data_size * self.min_info_volume_threshold
         
-        if new_volume >= threshold_volume:
+        # 检查是否超过最大值（优先检查，超过最大值必须立即上报）
+        if self.max_info_volume is not None and new_volume > self.max_info_volume:
+            # 超过最大值，强制立即上报
+            if self.energy_mode == "full" and self.physical_center:
+                self._report_info_to_center(receiver, new_volume)
+            self._clear_receiver_info_volume(receiver)
+            self._log(f"[PathCollector] 信息量超过最大值 ({new_volume} > {self.max_info_volume})，强制上报 - 节点 {receiver.node_id}")
+        elif new_volume >= threshold_volume:
             # 达到阈值，进入等待状态
             self.vc.latest_info[receiver.node_id]['info_volume'] = new_volume
             self.vc.latest_info[receiver.node_id]['info_waiting_since'] = current_time
@@ -360,13 +396,14 @@ class PathBasedInfoCollector:
         上报信息到物理中心（消耗能量）
         
         :param node: 上报节点
-        :param info_volume: 信息量（bits）
+        :param info_volume: 信息量（bits），用于记录，但不用于能量计算
         """
         if not self.physical_center:
             return
         
-        # 使用实际的信息量计算能量消耗
-        data_size = info_volume
+        # 能量计算使用固定的数据包大小（类似快递盒大小不变）
+        # 信息量仅用于记录和统计，不影响能量计算
+        data_size = self.base_data_size
         
         # 临时修改B参数
         original_B_node = node.B
@@ -513,9 +550,8 @@ class PathBasedInfoCollector:
         
         模型：
         - 路径节点（如a→b→c）各自收集信息，沿路径聚合
-        - 如果启用累积模式：数据包大小 = base_data_size × 经过的节点数
-        - 如果禁用累积模式：数据包大小 = base_data_size（固定大小）
-        - 路径终点（Receiver）汇聚路径上所有节点的信息
+        - 数据包大小始终固定为 base_data_size（类似快递盒大小不变）
+        - 路径终点（Receiver）汇聚路径上所有节点的信息量（逻辑层，不影响数据包大小）
         - 使用SensorNode.energy_consumption()方法（与ADCR一致）
         - 能耗 = [(E_tx + E_rx) / 2 + E_sen] × 2端
         
@@ -527,20 +563,13 @@ class PathBasedInfoCollector:
         
         total_energy = 0.0
         
-        # 沿路径逐跳传输信息包
+        # 沿路径逐跳传输信息包（数据包大小固定不变）
         for i in range(len(path) - 1):
             sender = path[i]
             receiver = path[i + 1]
             
-            # 计算数据包大小
-            if self.enable_accumulative_data_size:
-                # 累积模式：数据包大小 = base_data_size × 经过的节点数（从起点到当前发送节点）
-                # 例如：路径 a→b→c，第1跳(a→b)传输 base_data_size×1，第2跳(b→c)传输 base_data_size×2
-                nodes_passed = i + 1  # 经过的节点数（包括发送节点）
-                data_packet_size = self.base_data_size * nodes_passed
-            else:
-                # 固定大小模式：数据包大小固定为 base_data_size
-                data_packet_size = self.base_data_size
+            # 数据包大小始终固定（类似快递盒大小不变）
+            data_packet_size = self.base_data_size
             
             # 使用与ADCR相同的能量计算方法
             # 临时修改节点的B参数以传递数据大小
@@ -579,12 +608,12 @@ class PathBasedInfoCollector:
         使用与ADCR相同的能耗模型计算双向通信能量消耗。
         
         :param receiver: 路径终点节点（路径信息汇聚点）
-        :param path: 传能路径（可选，用于计算累积信息量）
+        :param path: 传能路径（可选，已不再用于数据包大小计算，保留用于兼容）
         :return: 上报跳能量消耗（J）
         
         注意：
-        - 如果启用累积模式：数据包大小 = base_data_size × 路径节点数
-        - 如果禁用累积模式：数据包大小 = base_data_size（固定大小）
+        - 数据包大小始终固定为 base_data_size（类似快递盒大小不变）
+        - 信息量可以累积（逻辑层），但不影响数据包大小
         """
         # 如果没有物理中心节点，返回0
         if self.physical_center is None:
@@ -595,18 +624,8 @@ class PathBasedInfoCollector:
         if receiver.node_id == self.physical_center.node_id:
             return 0.0
         
-        # 计算数据包大小
-        if self.enable_accumulative_data_size:
-            # 累积模式：数据包大小 = base_data_size × 路径节点数
-            if path is not None:
-                path_node_count = len(path)
-            else:
-                # 如果路径未提供，尝试从receiver获取（降级处理）
-                path_node_count = 1
-            data_size = self.base_data_size * path_node_count
-        else:
-            # 固定大小模式：数据包大小固定为 base_data_size
-            data_size = self.base_data_size
+        # 数据包大小始终固定（类似快递盒大小不变）
+        data_size = self.base_data_size
         
         # 使用与ADCR._energy_consume_one_hop相同的能耗模型
         # 临时修改B参数

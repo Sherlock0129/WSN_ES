@@ -226,16 +226,36 @@ class EnergySimulation:
         # 模拟结束后绘制K值随时间变化的图表
         K_history, K_timestamps, _ = self.k_adaptation.get_K_history()
         self.stats.plot_K_history(K_history, K_timestamps)
-        self.stats.print_statistics(self.network)
         
-        # 打印信息传输能量消耗统计
+        # 获取信息传输能量消耗统计（如果可用）
+        info_transmission_stats = None
         if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+            # 获取统计信息
+            info_transmission_stats = self.scheduler.nim.get_info_transmission_statistics()
+            # 打印统计信息
             self.scheduler.nim.log_info_transmission_statistics()
+        
+        # 打印并保存统计信息（包含信息传输统计）
+        self.stats.print_statistics(self.network, additional_info={
+            'info_transmission': info_transmission_stats
+        } if info_transmission_stats else None)
 
     # 委托方法 - 将功能委托给相应的管理器
-    def print_statistics(self):
-        """打印仿真统计信息"""
-        return self.stats.print_statistics(self.network)
+    def print_statistics(self, additional_info: dict = None):
+        """
+        打印仿真统计信息
+        
+        Args:
+            additional_info: 额外的统计信息（例如信息传输统计）
+        """
+        # 如果未提供 additional_info，尝试获取信息传输统计
+        if additional_info is None:
+            if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                info_transmission_stats = self.scheduler.nim.get_info_transmission_statistics()
+                if info_transmission_stats:
+                    additional_info = {'info_transmission': info_transmission_stats}
+        
+        return self.stats.print_statistics(self.network, additional_info)
     
     def save_results(self, filename=None):
         """保存仿真结果"""
@@ -248,32 +268,6 @@ class EnergySimulation:
     def plot_results(self):
         """绘制仿真结果"""
         return self.stats.plot_results(self.result_manager.get_results(), self.time_steps, self.network)
-
-    def plot_energy_stats(self):
-        """绘制能量统计图表"""
-
-
-    # 委托方法 - 将功能委托给相应的管理器
-    def print_statistics(self):
-        """打印仿真统计信息"""
-        return self.stats.print_statistics(self.network)
-    
-    def save_results(self, filename=None):
-        """保存仿真结果"""
-        return self.result_manager.save_results(filename)
-
-
-    def display_results(self):
-
-        """显示仿真结果"""
-        return self.result_manager.display_results()
-
-
-    def plot_results(self):
-
-        """绘制仿真结果"""
-        return self.stats.plot_results(self.result_manager.get_results(), self.time_steps, self.network)
-
 
     def plot_energy_stats(self):
         """绘制能量统计图表"""

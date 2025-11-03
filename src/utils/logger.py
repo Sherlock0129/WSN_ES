@@ -511,12 +511,33 @@ class StatisticsLogger:
                     f.write("-" * 70 + "\n")
                     f.write("【额外信息】\n")
                     f.write("-" * 70 + "\n")
+                    
+                    # 特殊处理信息传输统计
+                    if 'info_transmission' in additional_info and additional_info['info_transmission']:
+                        info_stats = additional_info['info_transmission']
+                        f.write("\n")
+                        f.write("【信息传输能量消耗统计】\n")
+                        f.write("-" * 70 + "\n")
+                        f.write(f"总能量消耗:         {info_stats.get('total_energy', 0):>15.2f} J\n")
+                        f.write(f"ADCR协议消耗:       {info_stats.get('total_adcr_energy', 0):>15.2f} J "
+                               f"({info_stats.get('adcr_transmission_count', 0)} 次完整传输)\n")
+                        f.write(f"路径收集器消耗:     {info_stats.get('total_path_collector_energy', 0):>15.2f} J "
+                               f"({info_stats.get('path_collector_transmission_count', 0)} 次路径收集)\n")
+                        f.write(f"参与节点数:         {info_stats.get('total_nodes', 0):>15d} 个\n")
+                        f.write(f"平均每节点:         {info_stats.get('avg_energy_per_node', 0):>15.2f} J\n")
+                        f.write(f"最高消耗节点:       {info_stats.get('max_node_energy', 0):>15.2f} J\n")
+                        f.write(f"最低消耗节点:       {info_stats.get('min_node_energy', 0):>15.2f} J\n")
+                        f.write("\n")
+                    
+                    # 其他额外信息
                     for key, value in additional_info.items():
-                        if isinstance(value, float):
-                            f.write(f"{key}: {value:>15.4f}\n")
-                        else:
-                            f.write(f"{key}: {value}\n")
-                    f.write("\n")
+                        if key != 'info_transmission':
+                            if isinstance(value, float):
+                                f.write(f"{key}: {value:>15.4f}\n")
+                            else:
+                                f.write(f"{key}: {value}\n")
+                    if any(k != 'info_transmission' for k in additional_info.keys()):
+                        f.write("\n")
                 
                 f.write("=" * 70 + "\n")
                 f.write("报告结束\n")
@@ -586,6 +607,23 @@ class StatisticsLogger:
             print(f"节点总数: {len(network.nodes)}")
             print(f"存活节点: {alive_nodes}")
             print(f"死亡节点: {len(network.nodes) - alive_nodes}")
+        
+        # 打印信息传输统计（如果提供）
+        if additional_info and 'info_transmission' in additional_info and additional_info['info_transmission']:
+            info_stats = additional_info['info_transmission']
+            print("\n" + "=" * 70)
+            print("【信息传输能量消耗统计】")
+            print("=" * 70)
+            print(f"总能量消耗: {info_stats.get('total_energy', 0):.2f} J")
+            print(f"ADCR协议: {info_stats.get('total_adcr_energy', 0):.2f} J "
+                  f"({info_stats.get('adcr_transmission_count', 0)} 次完整传输)")
+            print(f"路径收集器: {info_stats.get('total_path_collector_energy', 0):.2f} J "
+                  f"({info_stats.get('path_collector_transmission_count', 0)} 次路径收集)")
+            print(f"参与节点数: {info_stats.get('total_nodes', 0)} 个")
+            print(f"平均每节点: {info_stats.get('avg_energy_per_node', 0):.2f} J")
+            print(f"最高消耗节点: {info_stats.get('max_node_energy', 0):.2f} J")
+            print(f"最低消耗节点: {info_stats.get('min_node_energy', 0):.2f} J")
+            print("=" * 70)
         
         print("=" * 70 + "\n")
         

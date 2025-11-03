@@ -88,12 +88,13 @@ class SimulationStats:
         self.energy_averages.append(energy_avg)
         self.energy_standards.append(energy_std)
     
-    def print_statistics(self, network) -> Dict[str, float]:
+    def print_statistics(self, network, additional_info: dict = None) -> Dict[str, float]:
         """
         打印仿真统计信息并保存到文件
         
         Args:
             network: 网络对象
+            additional_info: 额外的统计信息（例如信息传输统计）
             
         Returns:
             统计信息字典
@@ -121,7 +122,7 @@ class SimulationStats:
 
         # 使用 StatisticsLogger 打印并保存统计信息
         stats_logger = get_statistics_logger(self.session_dir)
-        stats_logger.print_and_save_statistics(stats, network)
+        stats_logger.print_and_save_statistics(stats, network, additional_info)
 
         # 返回这些统计值，以便在其他地方使用
         return stats

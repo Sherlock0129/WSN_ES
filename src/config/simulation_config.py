@@ -316,11 +316,12 @@ class PathCollectorConfig:
     energy_mode: str = "full"  # 能量消耗模式："free"（零能耗，默认）
                             # 或 "full"（完全真实，路径逐跳 + 虚拟跳都消耗能量）
     
-    # 数据包大小模式
-    enable_accumulative_data_size: bool = True  # 是否启用累积数据包大小模式
-    # 如果启用：数据包大小 = packet_size × 经过的节点数（随路径累积）
-    # 如果禁用：数据包大小 = packet_size（固定大小，不累积）
-    # 注意：数据包大小统一使用 NodeConfig.packet_size
+    # 信息量累积模式（独立于数据包大小）
+    enable_info_volume_accumulation: bool = True  # 是否启用信息量累积模式
+    # 注意：数据包大小始终固定为 packet_size（类似快递盒大小不变）
+    # 如果启用信息量累积：信息量 = packet_size × 路径节点数（用于路由判断）
+    # 如果禁用信息量累积：信息量 = packet_size（固定，不累积）
+    # 注意：数据包大小统一使用 NodeConfig.packet_size（固定不变）
     
     # 估算参数
     decay_rate: float = 5.0  # 自然衰减率（J/分钟，用于估算路径外节点能量）
@@ -331,6 +332,7 @@ class PathCollectorConfig:
     enable_delayed_reporting: bool = True               # 是否启用延迟上报（False为立即上报）
     max_wait_time: int = 10                              # 最大等待时间（分钟），超时强制上报
     min_info_volume_threshold: int = 1                   # 最小信息量阈值（节点数），低于此值不等待
+    max_info_volume: int = 1000000                         # 信息量最大值（bits），超过此值强制上报，None表示无限制
     
     # 优化选项
     batch_update: bool = True  # 是否批量更新虚拟中心（减少开销）
@@ -719,11 +721,12 @@ class ConfigManager:
             decay_rate=self.path_collector_config.decay_rate,
             use_solar_model=self.path_collector_config.use_solar_model,
             batch_update=self.path_collector_config.batch_update,
-            enable_accumulative_data_size=self.path_collector_config.enable_accumulative_data_size,
+            enable_info_volume_accumulation=self.path_collector_config.enable_info_volume_accumulation,
             enable_opportunistic_info_forwarding=self.path_collector_config.enable_opportunistic_info_forwarding,
             enable_delayed_reporting=self.path_collector_config.enable_delayed_reporting,
             max_wait_time=self.path_collector_config.max_wait_time,
-            min_info_volume_threshold=self.path_collector_config.min_info_volume_threshold
+            min_info_volume_threshold=self.path_collector_config.min_info_volume_threshold,
+            max_info_volume=self.path_collector_config.max_info_volume
         )
     
     def __str__(self) -> str:
