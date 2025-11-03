@@ -88,7 +88,16 @@ class ADCRLinkLayerVirtual(object):
         self.sensor_energy = float(sensor_energy)
         
         # 信息聚合参数
-        self.base_data_size = int(base_data_size)
+        # 注意：base_data_size已移除，改为从节点的B属性获取（通过NodeConfig.packet_size初始化）
+        # 如果传入None，则从节点的默认B值获取（假设所有节点使用相同的packet_size）
+        if base_data_size is None:
+            # 从网络的第一个节点获取B值作为默认数据包大小
+            if self.net and self.net.nodes:
+                self.base_data_size = int(self.net.nodes[0].B)
+            else:
+                self.base_data_size = 100000  # 默认值
+        else:
+            self.base_data_size = int(base_data_size)
         self.aggregation_ratio = float(aggregation_ratio)
         self.enable_dynamic_data_size = bool(enable_dynamic_data_size)
         
@@ -530,6 +539,14 @@ class ADCRLinkLayerVirtual(object):
                     "distance": member_node.distance_to(ch_node)
                 })
                 
+                # 记录信息传输能量消耗（成员节点和簇头都参与）
+                if hasattr(self.vc, 'record_info_transmission_energy'):
+                    self.vc.record_info_transmission_energy(member_id, Eu, "adcr")
+                    self.vc.record_info_transmission_energy(ch_id, Ev, "adcr")
+                    # 记录一次完整的簇内传输（每个成员到簇头算一次传输）
+                    if hasattr(self.vc, 'record_transmission_count'):
+                        self.vc.record_transmission_count("adcr")
+                
                 intra_cluster_count += 1
                 intra_cluster_energy += (Eu + Ev)
         
@@ -562,6 +579,15 @@ class ADCRLinkLayerVirtual(object):
                     "E_tx": Eu, 
                     "E_rx": Ev
                 })
+                
+                # 记录信息传输能量消耗（发送方和接收方都参与）
+                if hasattr(self.vc, 'record_info_transmission_energy'):
+                    self.vc.record_info_transmission_energy(u.node_id, Eu, "adcr")
+                    self.vc.record_info_transmission_energy(v.node_id, Ev, "adcr")
+                    # 记录一次完整的簇间路径跳传输（每跳算一次传输）
+                    if hasattr(self.vc, 'record_transmission_count'):
+                        self.vc.record_transmission_count("adcr")
+                
                 inter_cluster_hops += 1
                 inter_cluster_energy += (Eu + Ev)
         

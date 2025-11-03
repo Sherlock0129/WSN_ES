@@ -18,7 +18,7 @@ from scheduling.schedulers import (
 from scheduling.passive_transfer import compare_passive_modes as _compare_passive_modes
 from utils.logger import logger, get_detailed_plan_logger
 from utils.error_handling import error_handler, handle_exceptions
-from viz.plotter import plot_node_distribution, plot_energy_over_time
+from viz.plotter import plot_node_distribution, plot_energy_over_time, plot_center_node_energy
 from sim.parallel_executor import ParallelSimulationExecutor
 
 
@@ -164,6 +164,13 @@ def run_simulation(config_file: str = None):
         scheduler = create_scheduler(config_manager, network)
         logger.info(f"调度器创建完成: {scheduler.get_name()}")
     
+    # 3.5 设置EETOR配置（确保路由算法使用正确的配置）
+    from routing.energy_transfer_routing import set_eetor_config
+    set_eetor_config(config_manager.eetor_config)
+    if config_manager.eetor_config.enable_info_aware_routing:
+        logger.info("信息感知路由已启用")
+        logger.info(f"  - info_reward_factor: {config_manager.eetor_config.info_reward_factor}")
+    
     # 4. 运行仿真
     logger.info("开始仿真...")
     with handle_exceptions("仿真运行", recoverable=False):
@@ -200,6 +207,9 @@ def run_simulation(config_file: str = None):
         
         # 绘制能量随时间变化图
         plot_energy_over_time(network.nodes, simulation.result_manager.get_results(), session_dir=simulation.session_dir)
+        
+        # 绘制物理中心节点能量变化图
+        plot_center_node_energy(network.nodes, simulation.result_manager.get_results(), session_dir=simulation.session_dir)
         
         # 绘制K值变化图
         simulation.plot_K_history()

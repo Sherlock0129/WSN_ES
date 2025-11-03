@@ -18,6 +18,7 @@
 - 单一职责：只负责信息表管理，不持有节点实体
 - 高性能：三级缓存架构（L1:字典 L2:deque L3:CSV）
 - 轻量级：与物理中心节点实体（SensorNode）解耦
+
 """
 
 from __future__ import annotations
@@ -81,7 +82,13 @@ class NodeInfoManager:
         #   'cluster_id': int,         # 所属簇ID
         #   'data_size': int,          # 数据包大小
         #   'aoi': int,                # Age of Information（信息年龄，每分钟+1）
-        #   'is_estimated': bool       # 是否为估算值
+        #   'is_estimated': bool,      # 是否为估算值
+        #   't': int,                  # 全局时间戳（统一时钟，从0开始每分钟+1）
+        #   # 机会主义信息传递字段
+        #   'info_volume': int,         # 累积的信息量（bits），0表示无信息量
+        #   'info_waiting_since': int, # 开始等待的时间戳（分钟），-1表示未等待
+        #   'info_is_reported': bool,  # 是否已上报（True表示已上报或立即上报模式）
+        #   'info_source_nodes': List[int]  # 信息来源节点列表（可选，用于去重优化）
         # }}
         self.latest_info: Dict[int, Dict] = {}
         
@@ -108,6 +115,19 @@ class NodeInfoManager:
         
         # 能量传输参数缓存（从真实节点复制一次）
         self.energy_params: Dict[int, Dict] = {}
+        
+        # ========== 信息传输能量消耗统计 ==========
+        # 按节点统计信息传输的能量消耗
+        # 结构: {node_id: {'adcr': float, 'path_collector': float, 'total': float}}
+        self.info_transmission_energy: Dict[int, Dict[str, float]] = {}
+        # 总体统计
+        self.info_transmission_stats: Dict[str, float] = {
+            'total_adcr_energy': 0.0,
+            'total_path_collector_energy': 0.0,
+            'total_energy': 0.0,
+            'adcr_transmission_count': 0,  # ADCR传输次数（每次完整的传输，不是跳数）
+            'path_collector_transmission_count': 0  # 路径收集器传输次数（每次路径收集）
+        }
         
         self._log(f"[NodeInfoManager] 初始化信息管理器，固定位置: {self.position}")
         self._log(f"[NodeInfoManager] 节点信息表已启用，历史缓存: {history_size} 条")
@@ -160,6 +180,13 @@ class NodeInfoManager:
         :param cluster_id: 所属簇ID
         :param data_size: 数据包大小（bits）
         """
+        # 保存现有信息量字段（如果存在）
+        existing_info_fields = {}
+        if node_id in self.latest_info:
+            for field in ['info_volume', 'info_waiting_since', 'info_is_reported', 'info_source_nodes']:
+                if field in self.latest_info[node_id]:
+                    existing_info_fields[field] = self.latest_info[node_id][field]
+        
         # 构造信息记录
         info = {
             'energy': energy,
@@ -170,8 +197,19 @@ class NodeInfoManager:
             'cluster_id': cluster_id,
             'data_size': data_size,
             'aoi': 0,  # Age of Information，刚到达时为0
-            'is_estimated': False  # 上报值不是估算值
+            'is_estimated': False,  # 上报值不是估算值
+            't': arrival_time  # 当前时间戳（信息到达时刻）
         }
+        
+        # 恢复信息量字段（如果存在）
+        if existing_info_fields:
+            info.update(existing_info_fields)
+        else:
+            # 初始化信息量字段（如果不存在）
+            info['info_volume'] = 0
+            info['info_waiting_since'] = -1
+            info['info_is_reported'] = True
+            info['info_source_nodes'] = []
         
         # L1: 更新最新状态表
         self.latest_info[node_id] = info
@@ -182,17 +220,25 @@ class NodeInfoManager:
         self.recent_history.append(history_record)
         
         # L3: 添加到归档缓冲区
+        # 将info_source_nodes列表序列化为字符串（CSV不支持列表）
+        info_source_nodes_str = ','.join(map(str, info.get('info_source_nodes', []))) if info.get('info_source_nodes') else ''
+        
         self.archive_buffer.append({
             'arrival_time': arrival_time,
             'node_id': node_id,
             'energy': energy,
             'record_time': record_time,
             'aoi': info['aoi'],
+            't': info['t'],
             'position_x': position[0] if position else None,
             'position_y': position[1] if position else None,
             'is_solar': is_solar,
             'cluster_id': cluster_id,
-            'data_size': data_size
+            'data_size': data_size,
+            'info_volume': info.get('info_volume', 0),
+            'info_waiting_since': info.get('info_waiting_since', -1),
+            'info_is_reported': info.get('info_is_reported', True),
+            'info_source_nodes': info_source_nodes_str
         })
         
         # 批量写入归档
@@ -245,7 +291,7 @@ class NodeInfoManager:
                 cluster_id=cluster_id,
                 data_size=data_size
             )
-    
+        
     def sync_info_nodes_from_table(self):
         """
         从节点信息表同步数据到InfoNode
@@ -362,7 +408,8 @@ class NodeInfoManager:
         1. 遍历所有节点
         2. 对于未上报的节点（time_elapsed > 0），基于物理模型估算能量
         3. 更新节点信息表中的能量值、is_estimated字段和AoI（每分钟+1）
-        4. InfoNode会自动从信息表同步
+        4. 所有节点的 t 字段统一更新为 current_time（全局时钟）
+        5. InfoNode会自动从信息表同步
         
         :param current_time: 当前时间（分钟）
         """
@@ -388,6 +435,10 @@ class NodeInfoManager:
                     self.info_nodes[node_id].current_energy = estimated_energy
                 
                 estimated_count += 1
+            
+            # 【统一时钟】所有节点的 t 字段都更新为当前时刻
+            # t 代表全局模拟时间，从0开始，每分钟+1
+            self.latest_info[node_id]['t'] = current_time
             
             # 更新AoI：每分钟+1（无论是否估算）
             # AoI = current_time - arrival_time
@@ -511,8 +562,9 @@ class NodeInfoManager:
         if not self.archive_initialized:
             with open(self.archive_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=[
-                    'arrival_time', 'node_id', 'energy', 'record_time', 'aoi',
-                    'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
+                    'arrival_time', 'node_id', 'energy', 'record_time', 'aoi', 't',
+                    'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size',
+                    'info_volume', 'info_waiting_since', 'info_is_reported', 'info_source_nodes'
                 ])
                 writer.writeheader()
             self.archive_initialized = True
@@ -521,8 +573,9 @@ class NodeInfoManager:
         # 追加写入数据
         with open(self.archive_path, 'a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=[
-                'arrival_time', 'node_id', 'energy', 'record_time', 'aoi',
-                'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size'
+                'arrival_time', 'node_id', 'energy', 'record_time', 'aoi', 't',
+                'position_x', 'position_y', 'is_solar', 'cluster_id', 'data_size',
+                'info_volume', 'info_waiting_since', 'info_is_reported', 'info_source_nodes'
             ])
             writer.writerows(self.archive_buffer)
         
@@ -669,6 +722,76 @@ class NodeInfoManager:
     
     # ==================== 扩展接口 ====================
     
+    def check_timeout_and_force_report(self, current_time: int, max_wait_time: int = 10,
+                                       path_collector=None, network=None) -> int:
+        """
+        检查等待中的节点是否超时，并强制上报（超时保护机制）
+        
+        :param current_time: 当前时间（分钟）
+        :param max_wait_time: 最大等待时间（分钟）
+        :param path_collector: PathBasedInfoCollector实例（用于上报信息）
+        :param network: Network实例（用于查找节点）
+        :return: 强制上报的节点数量
+        """
+        timeout_nodes = []
+        
+        # 1. 检查所有等待中的节点
+        for node_id, node_info in self.latest_info.items():
+            # 确保信息量字段存在（兼容旧数据）
+            info_volume = node_info.get('info_volume', 0)
+            is_reported = node_info.get('info_is_reported', True)
+            waiting_since = node_info.get('info_waiting_since', -1)
+            
+            # 检查是否有未上报的信息量
+            if not is_reported and info_volume > 0 and waiting_since >= 0:
+                # 计算等待时间
+                wait_time = current_time - waiting_since
+                
+                # 检查是否超时
+                if wait_time >= max_wait_time:
+                    timeout_nodes.append((node_id, node_info))
+        
+        # 2. 对超时节点强制上报
+        if timeout_nodes and path_collector and network:
+            for node_id, node_info in timeout_nodes:
+                # 查找节点对象
+                node = None
+                if hasattr(network, 'get_node_by_id'):
+                    node = network.get_node_by_id(node_id)
+                elif hasattr(network, 'nodes'):
+                    # 从nodes列表中查找
+                    for n in network.nodes:
+                        if n.node_id == node_id:
+                            node = n
+                            break
+                if node is not None:
+                    # 获取信息量
+                    info_volume = node_info.get('info_volume', 0)
+                    
+                    # 获取等待时间（需要在循环内计算）
+                    waiting_since = node_info.get('info_waiting_since', -1)
+                    wait_time = current_time - waiting_since if waiting_since >= 0 else 0
+                    
+                    # 强制单独上报（通过PathBasedInfoCollector）
+                    if hasattr(path_collector, '_report_info_to_center'):
+                        path_collector._report_info_to_center(node, info_volume)
+                    
+                    # 在节点信息表中清零信息量状态
+                    if node_id in self.latest_info:
+                        self.latest_info[node_id]['info_is_reported'] = True
+                        self.latest_info[node_id]['info_volume'] = 0
+                        self.latest_info[node_id]['info_waiting_since'] = -1
+                    
+                    # 记录强制上报统计
+                    if not hasattr(self, 'forced_reports_count'):
+                        self.forced_reports_count = 0
+                    self.forced_reports_count += 1
+                    
+                    self._log(f"[NodeInfoManager] 超时强制上报 - 节点 {node_id}, "
+                             f"信息量: {info_volume} bits, 等待时间: {wait_time} 分钟")
+        
+        return len(timeout_nodes)
+    
     def reset(self):
         """重置状态"""
         self.last_update_time = -1
@@ -677,10 +800,152 @@ class NodeInfoManager:
         self.latest_info.clear()
         self.recent_history.clear()
         
+        # 清空信息传输能量消耗统计
+        self.info_transmission_energy.clear()
+        self.info_transmission_stats = {
+            'total_adcr_energy': 0.0,
+            'total_path_collector_energy': 0.0,
+            'total_energy': 0.0,
+            'adcr_transmission_count': 0,
+            'path_collector_transmission_count': 0
+        }
+        
         # 强制刷新归档
         self.force_flush_archive()
         
         self._log("[NodeInfoManager] 状态已重置，节点信息表已清空")
+    
+    # ==================== 信息传输能量消耗统计 ====================
+    
+    def record_info_transmission_energy(self, node_id: int, energy: float, 
+                                       transmission_type: str = "adcr"):
+        """
+        记录节点信息传输的能量消耗
+        
+        :param node_id: 节点ID
+        :param energy: 消耗的能量（J）
+        :param transmission_type: 传输类型 ("adcr" 或 "path_collector")
+        
+        注意：
+        1. 此方法只记录能量消耗，不记录传输次数。
+        2. 传输次数应该由调用方在完成一次完整传输后，调用 record_transmission_count() 单独记录。
+        """
+        if node_id not in self.info_transmission_energy:
+            self.info_transmission_energy[node_id] = {
+                'adcr': 0.0,
+                'path_collector': 0.0,
+                'total': 0.0
+            }
+        
+        self.info_transmission_energy[node_id][transmission_type] += energy
+        self.info_transmission_energy[node_id]['total'] += energy
+        
+        # 更新总体统计（能量累加）
+        if transmission_type == "adcr":
+            self.info_transmission_stats['total_adcr_energy'] += energy
+        elif transmission_type == "path_collector":
+            self.info_transmission_stats['total_path_collector_energy'] += energy
+        
+        self.info_transmission_stats['total_energy'] += energy
+    
+    def record_transmission_count(self, transmission_type: str = "adcr"):
+        """
+        记录一次完整的传输（用于统计传输次数）
+        
+        :param transmission_type: 传输类型 ("adcr" 或 "path_collector")
+        
+        注意：一次传输可能涉及多个节点和多次能量消耗记录，
+        但传输次数应该只在完整传输完成时计数一次。
+        """
+        if transmission_type == "adcr":
+            self.info_transmission_stats['adcr_transmission_count'] += 1
+        elif transmission_type == "path_collector":
+            self.info_transmission_stats['path_collector_transmission_count'] += 1
+    
+    def get_info_transmission_statistics(self) -> Dict:
+        """
+        获取信息传输能量消耗统计信息
+        
+        :return: 统计信息字典
+        """
+        if not self.info_transmission_energy:
+            return {
+                'total_nodes': 0,
+                'total_energy': 0.0,
+                'total_adcr_energy': 0.0,
+                'total_path_collector_energy': 0.0,
+                'avg_energy_per_node': 0.0,
+                'max_node_energy': 0.0,
+                'min_node_energy': 0.0,
+                'node_breakdown': {},
+                'adcr_transmission_count': 0,
+                'path_collector_transmission_count': 0
+            }
+        
+        total_energies = [stats['total'] for stats in self.info_transmission_energy.values()]
+        
+        # 按节点排序（按总能量降序）
+        node_breakdown = {
+            node_id: {
+                'adcr': stats['adcr'],
+                'path_collector': stats['path_collector'],
+                'total': stats['total']
+            }
+            for node_id, stats in sorted(
+                self.info_transmission_energy.items(),
+                key=lambda x: x[1]['total'],
+                reverse=True
+            )
+        }
+        
+        return {
+            'total_nodes': len(self.info_transmission_energy),
+            'total_energy': self.info_transmission_stats['total_energy'],
+            'total_adcr_energy': self.info_transmission_stats['total_adcr_energy'],
+            'total_path_collector_energy': self.info_transmission_stats['total_path_collector_energy'],
+            'avg_energy_per_node': sum(total_energies) / len(total_energies) if total_energies else 0.0,
+            'max_node_energy': max(total_energies) if total_energies else 0.0,
+            'min_node_energy': min(total_energies) if total_energies else 0.0,
+            'node_breakdown': node_breakdown,
+            'adcr_transmission_count': self.info_transmission_stats['adcr_transmission_count'],
+            'path_collector_transmission_count': self.info_transmission_stats['path_collector_transmission_count']
+        }
+    
+    def log_info_transmission_statistics(self):
+        """
+        打印信息传输能量消耗统计到日志
+        """
+        stats = self.get_info_transmission_statistics()
+        
+        self._log("\n" + "=" * 80)
+        self._log("信息传输能量消耗统计")
+        self._log("=" * 80)
+        self._log(f"总体统计:")
+        self._log(f"  - 总能量消耗: {stats['total_energy']:.2f} J")
+        self._log(f"  - ADCR协议: {stats['total_adcr_energy']:.2f} J "
+                 f"({stats['adcr_transmission_count']} 次完整传输)")
+        self._log(f"  - 路径收集器: {stats['total_path_collector_energy']:.2f} J "
+                 f"({stats['path_collector_transmission_count']} 次路径收集)")
+        self._log(f"  - 参与节点数: {stats['total_nodes']} 个")
+        self._log(f"  - 平均每节点: {stats['avg_energy_per_node']:.2f} J")
+        self._log(f"  - 最高消耗节点: {stats['max_node_energy']:.2f} J")
+        self._log(f"  - 最低消耗节点: {stats['min_node_energy']:.2f} J")
+        
+        if stats['total_nodes'] > 0:
+            self._log(f"\n节点详细统计 (Top 10):")
+            sorted_nodes = sorted(
+                stats['node_breakdown'].items(),
+                key=lambda x: x[1]['total'],
+                reverse=True
+            )[:10]
+            
+            self._log(f"  {'节点ID':<8} {'ADCR消耗(J)':<15} {'路径收集器消耗(J)':<20} {'总消耗(J)':<12}")
+            self._log(f"  {'-' * 8} {'-' * 15} {'-' * 20} {'-' * 12}")
+            for node_id, node_stats in sorted_nodes:
+                self._log(f"  {node_id:<8} {node_stats['adcr']:<15.2f} "
+                         f"{node_stats['path_collector']:<20.2f} {node_stats['total']:<12.2f}")
+        
+        self._log("=" * 80 + "\n")
     
     def __repr__(self):
         return f"NodeInfoManager(pos={self.position}, nodes={len(self.latest_info)})"

@@ -841,7 +841,7 @@ class Network:
 
                 # 规划路径 - 统一使用路由算法
                 path = opportunistic_routing(self.nodes, donor, receiver, max_hops=self.max_hops, t=t)
-                # path = eeor_find_path(self.nodes, donor, receiver, max_hops=self.max_hops)
+                # path = eetor_find_path_adaptive(self.nodes, donor, receiver, max_hops=self.max_hops)
                 if path is None:
                     print(f"[Routing Failed] {donor.node_id} → {receiver.node_id}")
                     continue

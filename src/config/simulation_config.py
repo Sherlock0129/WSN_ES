@@ -62,7 +62,7 @@ class NodeConfig:
     energy_char: float = 500.0      # 单次名义可下发能量 J（捐能上限/步）
     energy_elec: float = 1e-4        # 电子学能耗 J/bit（发送/接收基底损耗）
     epsilon_amp: float = 1e-5        # 功放损耗系数 J/bit/m^path_loss_exponent
-    bit_rate: float = 1000.0      # 数据量 bits（用于估算一次发送/接收消耗）
+    packet_size: float = 100000.0   # 数据包大小 bits（用于能量计算，节点默认B值）
     path_loss_exponent: float = 2.0  # 路损指数（自由空间≈2，障碍更高）
 
     # 其他每步能量项
@@ -79,7 +79,7 @@ class NetworkConfig:
     控制网络生成与路径约束：
     - 节点数、区域尺寸、最小间距共同决定布局密度与可连通性；
     - 分布模式决定初始位置生成方式；
-    - max_hops 限制多跳路径长度（影响 EEOR/机会路由）。
+    - max_hops 限制多跳路径长度（影响 EETOR/机会路由）。
     """
     num_nodes: int = 30
     max_hops: int = 3
@@ -99,7 +99,7 @@ class NetworkConfig:
 
     # 物理中心节点配置
     enable_physical_center: bool = True  # 是否启用物理中心节点（ID=0）
-    center_initial_energy_multiplier: float = 100.0  # 物理中心初始能量倍数（相对普通节点）
+    center_initial_energy_multiplier: float = 10.0  # 物理中心初始能量倍数（相对普通节点）
     
     # 能量分配模式配置
     energy_distribution_mode: str = "uniform"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
@@ -227,7 +227,7 @@ class ADCRConfig:
     # 提示：同 NodeConfig，当前通信能耗中的传感能耗为固定常量 0.1 J，未与该配置绑定。
     
     # 信息聚合参数
-    base_data_size: int = 1000      # 基础数据大小（bits），每个节点贡献的基础信息量
+    # 注意：base_data_size已移除，统一使用NodeConfig.packet_size
     aggregation_ratio: float = 1.0      # 信息聚合比例（1.0表示完全聚合，0.5表示压缩50%）
     enable_dynamic_data_size: bool = True  # 是否启用基于簇大小的动态数据量
     
@@ -251,6 +251,48 @@ class ADCRConfig:
 
 
 @dataclass
+class EETORConfig:
+    """EETOR路由算法配置参数
+    
+    专门为能量传输设计的路由算法参数：
+    - 能量传输效率模型参数（eta_0, gamma）
+    - 邻居构建参数（max_range, min_efficiency）
+    - 能量状态感知参数（惩罚系数、阈值）
+    - 算法控制参数（max_iter, target_neighbors）
+    """
+    
+    # 能量传输效率模型参数
+    eta_0: float = 0.6         # 1米处的参考效率（0~1）
+    gamma: float = 2.0         # 距离衰减因子（路径损耗指数）
+    
+    # 邻居构建参数
+    max_range: float = 10.0     # 最大通信范围（米），用于邻居发现
+    min_efficiency: float = 0.01  # 最小传输效率阈值（低于此值的链路不考虑）
+    
+    # 能量状态感知参数
+    enable_energy_state_aware: bool = True  # 是否启用能量状态感知
+    low_energy_threshold: float = 0.2      # 低能量阈值（能量比例，0~1）
+    medium_energy_threshold: float = 0.5  # 中等能量阈值（能量比例，0~1）
+    low_energy_penalty: float = 1.5        # 低能量节点代价惩罚系数（>1表示增加代价）
+    medium_energy_penalty: float = 1.2     # 中等能量节点代价惩罚系数
+    solar_bonus: float = 0.9               # 太阳能节点奖励系数（<1表示降低代价）
+    
+    # 算法控制参数
+    max_iter: int = 20                     # 代价计算最大迭代次数
+    target_neighbors: int = 6              # 目标邻居数（用于自适应调整通信范围）
+    
+    # 自适应范围调整参数
+    dense_network_threshold: float = 12.0  # 密集网络阈值（平均邻居数）
+    dense_network_range: float = 5.0        # 密集网络使用较小的通信范围
+    sparse_network_range: float = 10.0      # 稀疏网络使用较大的通信范围
+    
+    # 信息感知路由参数
+    enable_info_aware_routing: bool = False  # 是否启用信息感知路由
+    info_reward_factor: float = 0.2          # 信息奖励系数（0~1），信息量大的节点优先选择
+    # 注意：max_info_wait_time 和 min_info_volume_threshold 在 PathCollectorConfig 中配置
+
+
+@dataclass
 class PathCollectorConfig:
     """基于路径的信息收集器配置参数
     
@@ -262,6 +304,8 @@ class PathCollectorConfig:
     能量消耗模式：
     - free: 零能耗（默认），信息完全搭载在传能路径上
     - full: 完全真实，路径逐跳 + 虚拟跳都消耗能量
+    
+    注意：数据包大小统一使用 NodeConfig.packet_size
     """
     
     # 基本开关
@@ -272,12 +316,23 @@ class PathCollectorConfig:
     energy_mode: str = "full"  # 能量消耗模式："free"（零能耗，默认）
                             # 或 "full"（完全真实，路径逐跳 + 虚拟跳都消耗能量）
     
-    # 数据包大小配置（与ADCR保持一致）
-    base_data_size: int = 1000000  # 基础数据大小（bits），每个节点贡献的基础信息量
+    # 信息量累积模式（独立于数据包大小）
+    enable_info_volume_accumulation: bool = True  # 是否启用信息量累积模式
+    # 注意：数据包大小始终固定为 packet_size（类似快递盒大小不变）
+    # 如果启用信息量累积：信息量 = packet_size × 路径节点数（用于路由判断）
+    # 如果禁用信息量累积：信息量 = packet_size（固定，不累积）
+    # 注意：数据包大小统一使用 NodeConfig.packet_size（固定不变）
     
     # 估算参数
     decay_rate: float = 5.0  # 自然衰减率（J/分钟，用于估算路径外节点能量）
     use_solar_model: bool = True  # 是否使用太阳能模型进行估算
+    
+    # 机会主义信息传递参数
+    enable_opportunistic_info_forwarding: bool = True  # 是否启用机会主义信息传递
+    enable_delayed_reporting: bool = True               # 是否启用延迟上报（False为立即上报）
+    max_wait_time: int = 10                              # 最大等待时间（分钟），超时强制上报
+    min_info_volume_threshold: int = 1                   # 最小信息量阈值（节点数），低于此值不等待
+    max_info_volume: int = 1000000                         # 信息量最大值（bits），超过此值强制上报，None表示无限制
     
     # 优化选项
     batch_update: bool = True  # 是否批量更新虚拟中心（减少开销）
@@ -328,6 +383,7 @@ class ConfigManager:
         self.scheduler_config = SchedulerConfig()
         self.adcr_config = ADCRConfig()
         self.path_collector_config = PathCollectorConfig()
+        self.eetor_config = EETORConfig()
         self.parallel_config = ParallelConfig()
         
         print("使用默认配置（来自 dataclass 默认值）")
@@ -355,6 +411,8 @@ class ConfigManager:
                 self._update_dataclass(self.adcr_config, config_data['adcr'])
             if 'path_collector' in config_data:
                 self._update_dataclass(self.path_collector_config, config_data['path_collector'])
+            if 'eetor' in config_data:
+                self._update_dataclass(self.eetor_config, config_data['eetor'])
             if 'parallel' in config_data:
                 self._update_dataclass(self.parallel_config, config_data['parallel'])
                 
@@ -372,6 +430,8 @@ class ConfigManager:
                 'simulation': asdict(self.simulation_config),
                 'scheduler': asdict(self.scheduler_config),
                 'adcr': asdict(self.adcr_config),
+                'path_collector': asdict(self.path_collector_config),
+                'eetor': asdict(self.eetor_config),
                 'parallel': asdict(self.parallel_config)
             }
             
@@ -410,6 +470,8 @@ class ConfigManager:
                 'simulation': asdict(self.simulation_config),
                 'scheduler': asdict(self.scheduler_config),
                 'adcr': asdict(self.adcr_config),
+                'path_collector': asdict(self.path_collector_config),
+                'eetor': asdict(self.eetor_config),
                 'parallel': asdict(self.parallel_config)
             }
             
@@ -524,7 +586,7 @@ class ConfigManager:
             energy_char=self.node_config.energy_char,
             energy_elec=self.node_config.energy_elec,
             epsilon_amp=self.node_config.epsilon_amp,
-            bit_rate=self.node_config.bit_rate,
+            bit_rate=self.node_config.packet_size,  # 使用packet_size作为数据包大小
             path_loss_exponent=self.node_config.path_loss_exponent,
             energy_decay_rate=self.node_config.energy_decay_rate,
             sensor_energy=self.node_config.sensor_energy,
@@ -558,7 +620,7 @@ class ConfigManager:
             energy_char=self.node_config.energy_char,
             energy_elec=self.node_config.energy_elec,
             epsilon_amp=self.node_config.epsilon_amp,
-            bit_rate=self.node_config.bit_rate,
+            bit_rate=self.node_config.packet_size,  # 使用packet_size作为数据包大小
             path_loss_exponent=self.node_config.path_loss_exponent,
             energy_decay_rate=self.node_config.energy_decay_rate,
             sensor_energy=self.node_config.sensor_energy,
@@ -620,7 +682,9 @@ class ConfigManager:
             tx_rx_ratio=self.adcr_config.tx_rx_ratio,
             sensor_energy=self.adcr_config.sensor_energy,
             # 信息聚合参数
-            base_data_size=self.adcr_config.base_data_size,
+            # 注意：base_data_size已移除，统一使用NodeConfig.packet_size
+            # ADCRLinkLayerVirtual从节点的B属性获取（通过NodeConfig.packet_size初始化）
+            base_data_size=None,
             aggregation_ratio=self.adcr_config.aggregation_ratio,
             enable_dynamic_data_size=self.adcr_config.enable_dynamic_data_size,
             # 直接传输优化参数
@@ -652,11 +716,17 @@ class ConfigManager:
             virtual_center=virtual_center,
             physical_center=physical_center,
             energy_mode=self.path_collector_config.energy_mode,
-            base_data_size=self.path_collector_config.base_data_size,
+            base_data_size=self.node_config.packet_size,
             enable_logging=self.path_collector_config.enable_logging,
             decay_rate=self.path_collector_config.decay_rate,
             use_solar_model=self.path_collector_config.use_solar_model,
-            batch_update=self.path_collector_config.batch_update
+            batch_update=self.path_collector_config.batch_update,
+            enable_info_volume_accumulation=self.path_collector_config.enable_info_volume_accumulation,
+            enable_opportunistic_info_forwarding=self.path_collector_config.enable_opportunistic_info_forwarding,
+            enable_delayed_reporting=self.path_collector_config.enable_delayed_reporting,
+            max_wait_time=self.path_collector_config.max_wait_time,
+            min_info_volume_threshold=self.path_collector_config.min_info_volume_threshold,
+            max_info_volume=self.path_collector_config.max_info_volume
         )
     
     def __str__(self) -> str:

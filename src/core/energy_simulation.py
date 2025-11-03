@@ -14,6 +14,12 @@ except Exception:
     # 允许没有 schedulers.py 时仍可运行（使用原 run_routing）
     PowerControlScheduler = None
 
+# 导入EETOR配置设置函数
+try:
+    from routing.energy_transfer_routing import set_eetor_config
+except ImportError:
+    set_eetor_config = None
+
 class EnergySimulation:
     def __init__(self, network, time_steps, scheduler=None, 
                  # 能量传输控制
@@ -167,6 +173,21 @@ class EnergySimulation:
                 # 能量传输执行完成后，估算未上报节点的能量
                 if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
                     self.scheduler.nim.estimate_all_nodes(current_time=t)
+                    
+                    # 机会主义信息传递：检查超时并强制上报（如果启用路径信息收集器）
+                    if (hasattr(self.network, 'path_info_collector') and 
+                        self.network.path_info_collector is not None and
+                        hasattr(self.network.path_info_collector, 'enable_opportunistic_info_forwarding') and
+                        self.network.path_info_collector.enable_opportunistic_info_forwarding):
+                        max_wait_time = getattr(self.network.path_info_collector, 'max_wait_time', 10)
+                        forced_count = self.scheduler.nim.check_timeout_and_force_report(
+                            current_time=t,
+                            max_wait_time=max_wait_time,
+                            path_collector=self.network.path_info_collector,
+                            network=self.network
+                        )
+                        if forced_count > 0:
+                            print(f"[超时强制上报] 时间步 {t}: {forced_count} 个节点")
             
                 # 计算统计信息
                 stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, self.network)
@@ -205,12 +226,36 @@ class EnergySimulation:
         # 模拟结束后绘制K值随时间变化的图表
         K_history, K_timestamps, _ = self.k_adaptation.get_K_history()
         self.stats.plot_K_history(K_history, K_timestamps)
-        self.stats.print_statistics(self.network)
+        
+        # 获取信息传输能量消耗统计（如果可用）
+        info_transmission_stats = None
+        if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+            # 获取统计信息
+            info_transmission_stats = self.scheduler.nim.get_info_transmission_statistics()
+            # 打印统计信息
+            self.scheduler.nim.log_info_transmission_statistics()
+        
+        # 打印并保存统计信息（包含信息传输统计）
+        self.stats.print_statistics(self.network, additional_info={
+            'info_transmission': info_transmission_stats
+        } if info_transmission_stats else None)
 
     # 委托方法 - 将功能委托给相应的管理器
-    def print_statistics(self):
-        """打印仿真统计信息"""
-        return self.stats.print_statistics(self.network)
+    def print_statistics(self, additional_info: dict = None):
+        """
+        打印仿真统计信息
+        
+        Args:
+            additional_info: 额外的统计信息（例如信息传输统计）
+        """
+        # 如果未提供 additional_info，尝试获取信息传输统计
+        if additional_info is None:
+            if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                info_transmission_stats = self.scheduler.nim.get_info_transmission_statistics()
+                if info_transmission_stats:
+                    additional_info = {'info_transmission': info_transmission_stats}
+        
+        return self.stats.print_statistics(self.network, additional_info)
     
     def save_results(self, filename=None):
         """保存仿真结果"""
@@ -223,32 +268,6 @@ class EnergySimulation:
     def plot_results(self):
         """绘制仿真结果"""
         return self.stats.plot_results(self.result_manager.get_results(), self.time_steps, self.network)
-
-    def plot_energy_stats(self):
-        """绘制能量统计图表"""
-
-
-    # 委托方法 - 将功能委托给相应的管理器
-    def print_statistics(self):
-        """打印仿真统计信息"""
-        return self.stats.print_statistics(self.network)
-    
-    def save_results(self, filename=None):
-        """保存仿真结果"""
-        return self.result_manager.save_results(filename)
-
-
-    def display_results(self):
-
-        """显示仿真结果"""
-        return self.result_manager.display_results()
-
-
-    def plot_results(self):
-
-        """绘制仿真结果"""
-        return self.stats.plot_results(self.result_manager.get_results(), self.time_steps, self.network)
-
 
     def plot_energy_stats(self):
         """绘制能量统计图表"""

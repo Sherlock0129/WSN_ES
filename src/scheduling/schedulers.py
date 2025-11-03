@@ -6,7 +6,7 @@ import math
 import random
 import numpy as np
 
-from routing.EEOR import eeor_find_path, eeor_find_path_adaptive
+from routing.energy_transfer_routing import eetor_find_path_adaptive
 
 
 # ------------------ 通用基类 ------------------
@@ -34,7 +34,7 @@ class BaseScheduler(object):
         物理中心节点不参与能量传输（WET），包括：
         - 不能作为donor（捐能者）
         - 不能作为receiver（接收者）
-        - 不能作为relay（中继节点，由EEOR处理）
+        - 不能作为relay（中继节点，由EETOR处理）
         
         :param nodes: 节点列表（可以是InfoNode或SensorNode）
         :return: 过滤后的普通节点列表
@@ -79,7 +79,8 @@ class BaselineHeuristic(BaseScheduler):
                     break
                 dist = r.distance_to(d)
                 # 使用自适应路径查找（自动处理单跳和多跳）
-                path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
+                path = eetor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops, 
+                                                 node_info_manager=self.nim)
                 if path is None:
                     continue
                 
@@ -134,7 +135,8 @@ class LyapunovScheduler(BaseScheduler):
                     continue
                 dist = r.distance_to(d)
                 # 使用自适应路径查找（自动处理单跳和多跳）
-                path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
+                path = eetor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops, 
+                                                 node_info_manager=self.nim)
                 if path is None:
                     continue
                 eta = self._path_eta(path)
@@ -234,7 +236,8 @@ class ClusterScheduler(BaseScheduler):
                         continue
                     dist = r.distance_to(ch)
                     # 使用自适应路径查找（自动处理单跳和多跳）
-                    path = eeor_find_path_adaptive(nodes, ch, r, max_hops=self.max_hops)
+                    path = eetor_find_path_adaptive(nodes, ch, r, max_hops=self.max_hops,
+                                                     node_info_manager=self.nim)
                     if path is None:
                         continue
                     
@@ -253,7 +256,8 @@ class ClusterScheduler(BaseScheduler):
                         break
                     dist = ch.distance_to(d)
                     # 使用自适应路径查找（自动处理单跳和多跳）
-                    path = eeor_find_path_adaptive(nodes, d, ch, max_hops=self.max_hops)
+                    path = eetor_find_path_adaptive(nodes, d, ch, max_hops=self.max_hops,
+                                                     node_info_manager=self.nim)
                     if path is None:
                         continue
                     
@@ -309,7 +313,8 @@ class PredictionScheduler(BaseScheduler):
                     break
                 dist = r.distance_to(d)
                 # 使用自适应路径查找（自动处理单跳和多跳）
-                path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
+                path = eetor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops, 
+                                                 node_info_manager=self.nim)
                 if path is None:
                     continue
                 
@@ -362,7 +367,8 @@ class PowerControlScheduler(BaseScheduler):
                     break
                 dist = r.distance_to(d)
                 # 使用自适应路径查找（自动处理单跳和多跳）
-                path = eeor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops)
+                path = eetor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops, 
+                                                 node_info_manager=self.nim)
                 if path is None:
                     continue
                 eta = self._path_eta(path)
