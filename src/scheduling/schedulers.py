@@ -330,6 +330,197 @@ class PredictionScheduler(BaseScheduler):
 
 
 # ------------------ PowerControl：EAST-like 的功率/下发量收缩 ------------------
+class DurationAwareLyapunovScheduler(BaseScheduler):
+    """
+    传输时长感知的Lyapunov调度器
+    
+    核心创新：将传输时长作为新的优化维度，综合考虑：
+    1. 能量传输量：duration × E_char
+    2. AoI变化：传输期间AoI增长
+    3. 信息量累积：传输期间信息继续采集
+    4. 多目标权衡：能量、AoI、信息量的综合优化
+    """
+    def __init__(self, node_info_manager, V=0.5, K=2, max_hops=5,
+                 min_duration=1, max_duration=5,
+                 w_aoi=0.1, w_info=0.05, info_collection_rate=10000.0):
+        """
+        :param node_info_manager: 节点信息管理器
+        :param V: Lyapunov控制参数（能量-损耗权衡）
+        :param K: 每个receiver最多接受的donor数量
+        :param max_hops: 最大跳数
+        :param min_duration: 最小传输时长（分钟）
+        :param max_duration: 最大传输时长（分钟）
+        :param w_aoi: AoI惩罚权重
+        :param w_info: 信息量奖励权重
+        :param info_collection_rate: 信息采集速率（bits/分钟）
+        """
+        BaseScheduler.__init__(self, node_info_manager, K, max_hops)
+        self.V = float(V)
+        self.min_duration = min_duration
+        self.max_duration = max_duration
+        self.w_aoi = w_aoi
+        self.w_info = w_info
+        self.info_collection_rate = info_collection_rate
+    
+    def _path_eta(self, path):
+        """计算路径总效率"""
+        eta = 1.0
+        for i in range(len(path) - 1):
+            eta *= path[i].energy_transfer_efficiency(path[i + 1])
+        return max(1e-6, min(1.0, eta))
+    
+    def _compute_duration_score(self, donor, receiver, path, eta, E_bar, Q_r, duration):
+        """
+        计算特定传输时长的综合得分
+        
+        综合考虑：
+        1. 能量收益：receiver获得的能量 × Q权重
+        2. 能量损耗：传输损耗惩罚
+        3. AoI惩罚：传输时间越长，AoI增长越多
+        4. 信息量奖励：传输时间越长，累积信息量越多（可搭便车）
+        
+        :return: (score, energy_delivered, energy_loss, aoi_cost, info_gain)
+        """
+        E_char = getattr(donor, "E_char", 300.0)
+        
+        # 1. 能量计算
+        energy_sent_total = duration * E_char
+        energy_delivered = energy_sent_total * eta
+        energy_loss = energy_sent_total - energy_delivered
+        
+        # 2. AoI代价：传输期间所有未上报节点的AoI都会增长
+        # 简化模型：只考虑receiver的AoI增长
+        aoi_cost = duration  # 传输持续时间即为AoI增长
+        
+        # 3. 信息量收益：传输期间，receiver可能累积更多信息
+        # 如果receiver有传感任务，持续采集信息，传输时长越长，累积越多
+        info_gain = duration * self.info_collection_rate  # bits
+        
+        # 4. 综合得分计算（基于Lyapunov漂移加惩罚框架）
+        Q_normalized = Q_r / E_bar if E_bar > 0 else 0
+        
+        # 能量收益项（考虑队列backlog）
+        energy_benefit_score = energy_delivered * Q_normalized
+        
+        # 能量损耗惩罚项
+        energy_loss_penalty = self.V * energy_loss
+        
+        # AoI惩罚项（传输时间越长，其他节点AoI增长越多）
+        aoi_penalty = self.w_aoi * aoi_cost * Q_normalized
+        
+        # 信息量奖励项（传输时间越长，可能携带更多信息，减少后续上报）
+        # 检查receiver是否有未上报信息
+        receiver_info = self.nim.get_node_info(receiver.node_id)
+        has_info = False
+        if receiver_info:
+            info_volume = receiver_info.get('info_volume', 0)
+            is_reported = receiver_info.get('info_is_reported', True)
+            has_info = (not is_reported and info_volume > 0)
+        
+        # 如果receiver有未上报信息，给予信息奖励（鼓励搭便车）
+        info_bonus = self.w_info * info_gain if has_info else 0
+        
+        # 总得分 = 能量收益 - 能量损耗 - AoI惩罚 + 信息奖励
+        total_score = energy_benefit_score - energy_loss_penalty - aoi_penalty + info_bonus
+        
+        return total_score, energy_delivered, energy_loss, aoi_cost, info_gain
+    
+    def plan(self, network, t):
+        """
+        规划能量传输，优化传输时长
+        
+        对每个donor-receiver对，尝试不同的传输时长（1-5分钟），
+        选择综合得分最高的时长
+        """
+        # 从信息表创建InfoNode
+        info_nodes = self.nim.get_info_nodes()
+        id2node = {n.node_id: n for n in network.nodes}
+        
+        # 排除物理中心节点
+        nodes = self._filter_regular_nodes(info_nodes)
+        E = np.array([n.current_energy for n in nodes], dtype=float)
+        E_bar = float(E.mean())
+        Q = dict((n, max(0.0, E_bar - n.current_energy)) for n in nodes)
+        
+        receivers = sorted([n for n in nodes if Q[n] > 0], key=lambda x: Q[x], reverse=True)
+        donors = [n for n in nodes if n.current_energy > E_bar]
+        used = set()
+        plans = []
+        all_candidates = []
+        
+        for r in receivers:
+            cand = []
+            for d in donors:
+                if d in used or d is r:
+                    continue
+                
+                dist = r.distance_to(d)
+                
+                # 使用自适应路径查找
+                path = eetor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops,
+                                                 node_info_manager=self.nim)
+                if path is None:
+                    continue
+                
+                eta = self._path_eta(path)
+                
+                # 效率低于10%的传输直接放弃
+                if eta < 0.1:
+                    continue
+                
+                # 尝试不同的传输时长，选择最优的
+                best_duration = self.min_duration
+                best_score = float('-inf')
+                best_metrics = None
+                
+                for duration in range(self.min_duration, self.max_duration + 1):
+                    score, delivered, loss, aoi_cost, info_gain = \
+                        self._compute_duration_score(d, r, path, eta, E_bar, Q[r], duration)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_duration = duration
+                        best_metrics = (delivered, loss, aoi_cost, info_gain)
+                
+                if best_metrics:
+                    delivered, loss, aoi_cost, info_gain = best_metrics
+                    cand.append((best_score, d, r, path, dist, delivered, loss, 
+                                best_duration, aoi_cost, info_gain))
+            
+            if not cand:
+                continue
+            
+            cand.sort(key=lambda x: x[0], reverse=True)
+            all_candidates.extend(cand)
+            quota = self.K
+            
+            for sc, d, rr, path, dist, delivered, loss, duration, aoi_cost, info_gain in cand:
+                if quota <= 0:
+                    break
+                
+                # 转换回真实节点对象
+                receiver = id2node[rr.node_id]
+                donor = id2node[d.node_id]
+                real_path = [id2node[n.node_id] for n in path]
+                
+                plans.append({
+                    "receiver": receiver,
+                    "donor": donor,
+                    "path": real_path,
+                    "distance": dist,
+                    "delivered": delivered,
+                    "loss": loss,
+                    "duration": duration,  # 新增：传输时长（分钟）
+                    "aoi_cost": aoi_cost,  # 新增：AoI代价
+                    "info_gain": info_gain,  # 新增：信息量收益
+                    "score": sc  # 新增：综合得分
+                })
+                used.add(d)
+                quota -= 1
+        
+        return plans, all_candidates
+
+
 class PowerControlScheduler(BaseScheduler):
     def __init__(self, node_info_manager, target_eta=0.25, K=2, max_hops=5):
         BaseScheduler.__init__(self, node_info_manager, K, max_hops)

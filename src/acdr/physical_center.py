@@ -491,8 +491,10 @@ class NodeInfoManager:
                 continue
             donor_info = self.info_nodes[donor_id]
             
-            # 初始发送能量
-            energy_sent = donor_info.E_char
+            # 初始发送能量（支持传输时长）
+            # 如果plan中包含duration（传输时长），则能量 = duration × E_char
+            duration = plan.get("duration", 1)  # 默认1分钟
+            energy_sent = duration * donor_info.E_char
             
             # 根据路径长度判断单跳或多跳
             if len(path) == 2:

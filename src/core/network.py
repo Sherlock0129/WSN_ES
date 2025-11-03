@@ -874,8 +874,11 @@ class Network:
             path = plan["path"]
             distance = plan["distance"]
 
-            # 传输能量上限（可调策略）
-            energy_sent = donor.E_char
+            # 传输能量计算（支持传输时长）
+            # 如果plan中包含duration（传输时长），则能量 = duration × E_char
+            # 否则使用默认的 E_char（1分钟的传输量）
+            duration = plan.get("duration", 1)  # 默认1分钟
+            energy_sent = duration * donor.E_char
 
             # 根据路径长度判断单跳或多跳（自适应路径查找已确定最优路径）
             if len(path) == 2:
@@ -892,7 +895,8 @@ class Network:
 
                 # 显示完整路径（所有节点）
                 path_str = " → ".join([str(node.node_id) for node in path])
-                print(f"[Direct WET] 路径: {path_str}, η={eta:.2f}, +{energy_received:.2f}J, loss={energy_loss:.2f}J")
+                duration_str = f", {duration}分钟" if duration > 1 else ""
+                print(f"[Direct WET] 路径: {path_str}, η={eta:.2f}, +{energy_received:.2f}J, loss={energy_loss:.2f}J{duration_str}")
             
             else:
                 # 多跳传输：逐跳转发，每跳能量衰减
@@ -930,7 +934,8 @@ class Network:
                 
                 # 显示完整路径（所有节点）
                 path_str = " → ".join([str(node.node_id) for node in path])
-                print(f"[Multi-hop WET] 路径: {path_str}, 总效率η={total_eta:.3f}, 终点接收={final_energy_received:.2f}J, 总损失={total_energy_loss:.2f}J")
+                duration_str = f", {duration}分钟" if duration > 1 else ""
+                print(f"[Multi-hop WET] 路径: {path_str}, 总效率η={total_eta:.3f}, 终点接收={final_energy_received:.2f}J, 总损失={total_energy_loss:.2f}J{duration_str}")
             
             # ✨ 新增：路径信息收集（如果启用）
             if self.path_info_collector is not None and current_time is not None:

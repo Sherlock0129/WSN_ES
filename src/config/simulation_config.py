@@ -180,6 +180,13 @@ class SchedulerConfig:
     # PowerControlScheduler 超参数
     power_target_eta: float = 0.25           # 目标传输效率（0~1），用于反推送能
 
+    # DurationAwareLyapunovScheduler 超参数（传输时长优化）
+    duration_min: int = 1                    # 最小传输时长（分钟）
+    duration_max: int = 5                    # 最大传输时长（分钟）
+    duration_w_aoi: float = 0.1              # AoI惩罚权重（传输时间越长，AoI增长越多）
+    duration_w_info: float = 0.05            # 信息量奖励权重（鼓励信息搭便车）
+    duration_info_rate: float = 10000.0      # 信息采集速率（bits/分钟）
+
     # 若策略内部也采用 K 自适应，可在此设置其上限与权重（与 SimulationConfig 的 K 互不冲突）
     adaptive_k_max: int = 24
     adaptive_hysteresis: float = 0.2
@@ -188,7 +195,7 @@ class SchedulerConfig:
     adaptive_w_l: float = 1.5               # 损耗惩罚权重
     # 统计口径提示：`SimulationStats.compute_step_stats()` 以 donor.E_char 估算本轮发送总量；
     # 若启用 PowerControlScheduler，会按 `energy_sent = min(1, target_eta/η_path) * E_char` 缩放实际发送量，
-    # 因此“发送总量/损耗”的统计与真实发送存在偏差。后续可改为读取 plans 中的 energy_sent。
+    # 因此"发送总量/损耗"的统计与真实发送存在偏差。后续可改为读取 plans 中的 energy_sent。
 
 
 @dataclass
