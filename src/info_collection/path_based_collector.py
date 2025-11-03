@@ -128,7 +128,11 @@ class PathBasedInfoCollector:
         # 3. 更新虚拟中心（只更新路径节点）
         self._update_virtual_center(path_info, current_time)
         
-        # 4. 更新统计
+        # 4. 记录一次完整的路径收集传输次数（仅在full模式下）
+        if self.energy_mode == "full" and hasattr(self.vc, 'record_transmission_count'):
+            self.vc.record_transmission_count("path_collector")
+        
+        # 5. 更新统计
         path_node_count = len(path_info)
         self.total_real_info += path_node_count
         
@@ -342,6 +346,11 @@ class PathBasedInfoCollector:
             sender.current_energy = max(0.0, sender.current_energy - Eu)
             receiver.current_energy = max(0.0, receiver.current_energy - Ev)
             
+            # 记录信息传输能量消耗（仅当energy_mode="full"时）
+            if hasattr(self.vc, 'record_info_transmission_energy'):
+                self.vc.record_info_transmission_energy(sender.node_id, Eu, "path_collector")
+                self.vc.record_info_transmission_energy(receiver.node_id, Ev, "path_collector")
+            
             total_energy += (Eu + Ev)
         
         return total_energy
@@ -391,6 +400,12 @@ class PathBasedInfoCollector:
         # 扣除能量
         receiver.current_energy = max(0.0, receiver.current_energy - Eu)
         self.physical_center.current_energy = max(0.0, self.physical_center.current_energy - Ev)
+        
+        # 记录信息传输能量消耗（Receiver上报到物理中心）
+        # 记录发送方（Receiver）和接收方（物理中心）的能量消耗
+        if hasattr(self.vc, 'record_info_transmission_energy'):
+            self.vc.record_info_transmission_energy(receiver.node_id, Eu, "path_collector")
+            self.vc.record_info_transmission_energy(self.physical_center.node_id, Ev, "path_collector")
         
         total_energy = Eu + Ev
         

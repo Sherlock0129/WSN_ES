@@ -18,6 +18,7 @@
 - 单一职责：只负责信息表管理，不持有节点实体
 - 高性能：三级缓存架构（L1:字典 L2:deque L3:CSV）
 - 轻量级：与物理中心节点实体（SensorNode）解耦
+
 """
 
 from __future__ import annotations
@@ -109,6 +110,19 @@ class NodeInfoManager:
         
         # 能量传输参数缓存（从真实节点复制一次）
         self.energy_params: Dict[int, Dict] = {}
+        
+        # ========== 信息传输能量消耗统计 ==========
+        # 按节点统计信息传输的能量消耗
+        # 结构: {node_id: {'adcr': float, 'path_collector': float, 'total': float}}
+        self.info_transmission_energy: Dict[int, Dict[str, float]] = {}
+        # 总体统计
+        self.info_transmission_stats: Dict[str, float] = {
+            'total_adcr_energy': 0.0,
+            'total_path_collector_energy': 0.0,
+            'total_energy': 0.0,
+            'adcr_transmission_count': 0,  # ADCR传输次数（每次完整的传输，不是跳数）
+            'path_collector_transmission_count': 0  # 路径收集器传输次数（每次路径收集）
+        }
         
         self._log(f"[NodeInfoManager] 初始化信息管理器，固定位置: {self.position}")
         self._log(f"[NodeInfoManager] 节点信息表已启用，历史缓存: {history_size} 条")
@@ -685,10 +699,152 @@ class NodeInfoManager:
         self.latest_info.clear()
         self.recent_history.clear()
         
+        # 清空信息传输能量消耗统计
+        self.info_transmission_energy.clear()
+        self.info_transmission_stats = {
+            'total_adcr_energy': 0.0,
+            'total_path_collector_energy': 0.0,
+            'total_energy': 0.0,
+            'adcr_transmission_count': 0,
+            'path_collector_transmission_count': 0
+        }
+        
         # 强制刷新归档
         self.force_flush_archive()
         
         self._log("[NodeInfoManager] 状态已重置，节点信息表已清空")
+    
+    # ==================== 信息传输能量消耗统计 ====================
+    
+    def record_info_transmission_energy(self, node_id: int, energy: float, 
+                                       transmission_type: str = "adcr"):
+        """
+        记录节点信息传输的能量消耗
+        
+        :param node_id: 节点ID
+        :param energy: 消耗的能量（J）
+        :param transmission_type: 传输类型 ("adcr" 或 "path_collector")
+        
+        注意：
+        1. 此方法只记录能量消耗，不记录传输次数。
+        2. 传输次数应该由调用方在完成一次完整传输后，调用 record_transmission_count() 单独记录。
+        """
+        if node_id not in self.info_transmission_energy:
+            self.info_transmission_energy[node_id] = {
+                'adcr': 0.0,
+                'path_collector': 0.0,
+                'total': 0.0
+            }
+        
+        self.info_transmission_energy[node_id][transmission_type] += energy
+        self.info_transmission_energy[node_id]['total'] += energy
+        
+        # 更新总体统计（能量累加）
+        if transmission_type == "adcr":
+            self.info_transmission_stats['total_adcr_energy'] += energy
+        elif transmission_type == "path_collector":
+            self.info_transmission_stats['total_path_collector_energy'] += energy
+        
+        self.info_transmission_stats['total_energy'] += energy
+    
+    def record_transmission_count(self, transmission_type: str = "adcr"):
+        """
+        记录一次完整的传输（用于统计传输次数）
+        
+        :param transmission_type: 传输类型 ("adcr" 或 "path_collector")
+        
+        注意：一次传输可能涉及多个节点和多次能量消耗记录，
+        但传输次数应该只在完整传输完成时计数一次。
+        """
+        if transmission_type == "adcr":
+            self.info_transmission_stats['adcr_transmission_count'] += 1
+        elif transmission_type == "path_collector":
+            self.info_transmission_stats['path_collector_transmission_count'] += 1
+    
+    def get_info_transmission_statistics(self) -> Dict:
+        """
+        获取信息传输能量消耗统计信息
+        
+        :return: 统计信息字典
+        """
+        if not self.info_transmission_energy:
+            return {
+                'total_nodes': 0,
+                'total_energy': 0.0,
+                'total_adcr_energy': 0.0,
+                'total_path_collector_energy': 0.0,
+                'avg_energy_per_node': 0.0,
+                'max_node_energy': 0.0,
+                'min_node_energy': 0.0,
+                'node_breakdown': {},
+                'adcr_transmission_count': 0,
+                'path_collector_transmission_count': 0
+            }
+        
+        total_energies = [stats['total'] for stats in self.info_transmission_energy.values()]
+        
+        # 按节点排序（按总能量降序）
+        node_breakdown = {
+            node_id: {
+                'adcr': stats['adcr'],
+                'path_collector': stats['path_collector'],
+                'total': stats['total']
+            }
+            for node_id, stats in sorted(
+                self.info_transmission_energy.items(),
+                key=lambda x: x[1]['total'],
+                reverse=True
+            )
+        }
+        
+        return {
+            'total_nodes': len(self.info_transmission_energy),
+            'total_energy': self.info_transmission_stats['total_energy'],
+            'total_adcr_energy': self.info_transmission_stats['total_adcr_energy'],
+            'total_path_collector_energy': self.info_transmission_stats['total_path_collector_energy'],
+            'avg_energy_per_node': sum(total_energies) / len(total_energies) if total_energies else 0.0,
+            'max_node_energy': max(total_energies) if total_energies else 0.0,
+            'min_node_energy': min(total_energies) if total_energies else 0.0,
+            'node_breakdown': node_breakdown,
+            'adcr_transmission_count': self.info_transmission_stats['adcr_transmission_count'],
+            'path_collector_transmission_count': self.info_transmission_stats['path_collector_transmission_count']
+        }
+    
+    def log_info_transmission_statistics(self):
+        """
+        打印信息传输能量消耗统计到日志
+        """
+        stats = self.get_info_transmission_statistics()
+        
+        self._log("\n" + "=" * 80)
+        self._log("信息传输能量消耗统计")
+        self._log("=" * 80)
+        self._log(f"总体统计:")
+        self._log(f"  - 总能量消耗: {stats['total_energy']:.2f} J")
+        self._log(f"  - ADCR协议: {stats['total_adcr_energy']:.2f} J "
+                 f"({stats['adcr_transmission_count']} 次完整传输)")
+        self._log(f"  - 路径收集器: {stats['total_path_collector_energy']:.2f} J "
+                 f"({stats['path_collector_transmission_count']} 次路径收集)")
+        self._log(f"  - 参与节点数: {stats['total_nodes']} 个")
+        self._log(f"  - 平均每节点: {stats['avg_energy_per_node']:.2f} J")
+        self._log(f"  - 最高消耗节点: {stats['max_node_energy']:.2f} J")
+        self._log(f"  - 最低消耗节点: {stats['min_node_energy']:.2f} J")
+        
+        if stats['total_nodes'] > 0:
+            self._log(f"\n节点详细统计 (Top 10):")
+            sorted_nodes = sorted(
+                stats['node_breakdown'].items(),
+                key=lambda x: x[1]['total'],
+                reverse=True
+            )[:10]
+            
+            self._log(f"  {'节点ID':<8} {'ADCR消耗(J)':<15} {'路径收集器消耗(J)':<20} {'总消耗(J)':<12}")
+            self._log(f"  {'-' * 8} {'-' * 15} {'-' * 20} {'-' * 12}")
+            for node_id, node_stats in sorted_nodes:
+                self._log(f"  {node_id:<8} {node_stats['adcr']:<15.2f} "
+                         f"{node_stats['path_collector']:<20.2f} {node_stats['total']:<12.2f}")
+        
+        self._log("=" * 80 + "\n")
     
     def __repr__(self):
         return f"NodeInfoManager(pos={self.position}, nodes={len(self.latest_info)})"

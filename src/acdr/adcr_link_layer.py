@@ -530,6 +530,14 @@ class ADCRLinkLayerVirtual(object):
                     "distance": member_node.distance_to(ch_node)
                 })
                 
+                # 记录信息传输能量消耗（成员节点和簇头都参与）
+                if hasattr(self.vc, 'record_info_transmission_energy'):
+                    self.vc.record_info_transmission_energy(member_id, Eu, "adcr")
+                    self.vc.record_info_transmission_energy(ch_id, Ev, "adcr")
+                    # 记录一次完整的簇内传输（每个成员到簇头算一次传输）
+                    if hasattr(self.vc, 'record_transmission_count'):
+                        self.vc.record_transmission_count("adcr")
+                
                 intra_cluster_count += 1
                 intra_cluster_energy += (Eu + Ev)
         
@@ -562,6 +570,15 @@ class ADCRLinkLayerVirtual(object):
                     "E_tx": Eu, 
                     "E_rx": Ev
                 })
+                
+                # 记录信息传输能量消耗（发送方和接收方都参与）
+                if hasattr(self.vc, 'record_info_transmission_energy'):
+                    self.vc.record_info_transmission_energy(u.node_id, Eu, "adcr")
+                    self.vc.record_info_transmission_energy(v.node_id, Ev, "adcr")
+                    # 记录一次完整的簇间路径跳传输（每跳算一次传输）
+                    if hasattr(self.vc, 'record_transmission_count'):
+                        self.vc.record_transmission_count("adcr")
+                
                 inter_cluster_hops += 1
                 inter_cluster_energy += (Eu + Ev)
         

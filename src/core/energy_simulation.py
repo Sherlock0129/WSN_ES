@@ -206,6 +206,10 @@ class EnergySimulation:
         K_history, K_timestamps, _ = self.k_adaptation.get_K_history()
         self.stats.plot_K_history(K_history, K_timestamps)
         self.stats.print_statistics(self.network)
+        
+        # 打印信息传输能量消耗统计
+        if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+            self.scheduler.nim.log_info_transmission_statistics()
 
     # 委托方法 - 将功能委托给相应的管理器
     def print_statistics(self):
