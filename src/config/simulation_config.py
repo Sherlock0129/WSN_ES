@@ -266,8 +266,13 @@ class EETORConfig:
     gamma: float = 2.0         # 距离衰减因子（路径损耗指数）
     
     # 邻居构建参数
-    max_range: float = 10.0     # 最大通信范围（米），用于邻居发现
+    
     min_efficiency: float = 0.01  # 最小传输效率阈值（低于此值的链路不考虑）
+    use_adaptive_range: bool = True  # 是否启用自适应邻居范围模式（固定邻居数）
+    # 如果 True：为每个节点动态计算通信范围，使每个节点大约有 target_neighbors 个邻居
+    # 如果 False：使用固定的 max_range 作为通信范围（根据网络密度在 dense/sparse 范围内选择）
+    target_neighbors: int = 6              # 目标邻居数（用于自适应调整通信范围）
+    max_range: float = 10.0     # 最大通信范围（米），用于邻居发现（如果 use_adaptive_range=False）
     
     # 能量状态感知参数
     enable_energy_state_aware: bool = True  # 是否启用能量状态感知
@@ -279,7 +284,6 @@ class EETORConfig:
     
     # 算法控制参数
     max_iter: int = 20                     # 代价计算最大迭代次数
-    target_neighbors: int = 6              # 目标邻居数（用于自适应调整通信范围）
     
     # 自适应范围调整参数
     dense_network_threshold: float = 12.0  # 密集网络阈值（平均邻居数）
@@ -287,8 +291,8 @@ class EETORConfig:
     sparse_network_range: float = 10.0      # 稀疏网络使用较大的通信范围
     
     # 信息感知路由参数
-    enable_info_aware_routing: bool = False  # 是否启用信息感知路由
-    info_reward_factor: float = 0.2          # 信息奖励系数（0~1），信息量大的节点优先选择
+    enable_info_aware_routing: bool = True  # 是否启用信息感知路由
+    info_reward_factor: float = 0.3         # 信息奖励系数（0~1），信息量大的节点优先选择
     # 注意：max_info_wait_time 和 min_info_volume_threshold 在 PathCollectorConfig 中配置
 
 
