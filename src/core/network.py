@@ -1,7 +1,6 @@
 import numpy as np
 import math
 
-from acdr.adcr_link_layer import ADCRLinkLayerVirtual
 from .SensorNode import SensorNode
 from .energy_management import balance_energy
 from utils.gpu_compute import get_gpu_manager, compute_distance_matrix_gpu

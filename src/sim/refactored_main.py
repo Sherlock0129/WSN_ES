@@ -5,7 +5,6 @@
 
 import os
 import sys
-from datetime import datetime
 
 import logger
 
@@ -60,7 +59,7 @@ def create_scheduler(config_manager: ConfigManager, network):
         logger.info("调度器使用PathCollector的节点信息管理器")
     else:
         # 如果没有信息管理器，创建一个独立的
-        from acdr.physical_center import NodeInfoManager
+        from info_collection.physical_center import NodeInfoManager
         physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
         if physical_center:
             initial_pos = tuple(physical_center.position)
@@ -245,8 +244,7 @@ def _run_training_loop(config_manager: ConfigManager, config_file: str = None):
     logger.info("=" * 80)
     
     # 训练循环
-    from core.energy_simulation import EnergySimulation
-    
+
     scheduler = None
     for episode in range(training_episodes):
         logger.info(f"\n{'='*70}")
@@ -355,7 +353,7 @@ def _run_single_simulation(config_manager: ConfigManager, config_file: str = Non
                 logger.info("使用ADCR的虚拟中心")
             else:
                 # 创建独立的虚拟中心
-                from acdr.physical_center import VirtualCenter
+                from info_collection.physical_center import VirtualCenter
                 # 获取物理中心节点位置（如果启用）
                 physical_center = network.get_physical_center()
                 if physical_center:

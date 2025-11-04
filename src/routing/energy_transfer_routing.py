@@ -14,12 +14,9 @@ EETOR: Energy-Efficient Transfer Opportunistic Routing
 6. 优化目标：最小化总损耗 + 最大化最终接收能量
 """
 
-import math
 from typing import List, Dict, Tuple, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.SensorNode import SensorNode
-    from scheduling.info_node import InfoNode
     from config.simulation_config import EETORConfig
 
 # 统一的节点类型（可以是SensorNode或InfoNode）

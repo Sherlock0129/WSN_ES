@@ -20,7 +20,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.simulation_config import ConfigManager
 from utils.logger import logger
-from utils.error_handling import handle_exceptions
 from utils.output_manager import OutputManager
 
 
@@ -219,7 +218,7 @@ class ParallelSimulationExecutor:
             node_info_manager = network.adcr_link.vc
         else:
             # 创建独立的节点信息管理器
-            from acdr.physical_center import NodeInfoManager
+            from info_collection.physical_center import NodeInfoManager
             physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
             if physical_center:
                 initial_pos = tuple(physical_center.position)

@@ -23,12 +23,11 @@
 """
 
 from __future__ import annotations
-from typing import List, Dict, Set, TYPE_CHECKING
-import math
+from typing import List, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.SensorNode import SensorNode
-    from acdr.physical_center import VirtualCenter
+    from info_collection.physical_center import VirtualCenter
 
 
 class PathBasedInfoCollector:
