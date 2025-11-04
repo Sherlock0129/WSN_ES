@@ -242,9 +242,10 @@ class EnergySimulation:
             # Step 3: 记录能量状态
             self.result_manager.record_energy_status(self.network)
         
-        # 模拟结束后绘制K值随时间变化的图表
-        K_history, K_timestamps, _ = self.k_adaptation.get_K_history()
-        self.stats.plot_K_history(K_history, K_timestamps)
+        # 模拟结束后绘制K值随时间变化的图表（训练模式下跳过）
+        if not getattr(self, 'training_mode', False):
+            K_history, K_timestamps, _ = self.k_adaptation.get_K_history()
+            self.stats.plot_K_history(K_history, K_timestamps)
         
         # 获取信息传输能量消耗统计（如果可用）
         info_transmission_stats = None

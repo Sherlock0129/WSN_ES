@@ -1,0 +1,29 @@
+{
+  "simulation": {
+    "time_steps": 2000,
+    "enable_k_adaptation": false,
+    "fixed_k": 2,
+    "enable_energy_sharing": true,
+    "passive_mode": true
+  },
+  "network": {
+    "num_nodes": 50,
+    "network_area_width": 5.0,
+    "network_area_height": 5.0,
+    "max_hops": 3,
+    "distribution_mode": "random",
+    "solar_node_ratio": 0.6
+  },
+  "scheduler": {
+    "scheduler_type": "LyapunovScheduler",
+    "lyapunov_v": 0.5,
+    "lyapunov_k": 2
+  },
+  "adcr": {
+    "enable_adcr": true,
+    "enable_intra_cluster_energy_transfer": true,
+    "opportunistic_mode": "info_aware"
+  }
+}
+
+

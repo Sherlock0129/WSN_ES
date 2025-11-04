@@ -330,6 +330,157 @@ class PredictionScheduler(BaseScheduler):
 
 
 # ------------------ PowerControl：EAST-like 的功率/下发量收缩 ------------------
+class AdaptiveDurationLyapunovScheduler(BaseScheduler):
+    """
+    自适应传输时长的Lyapunov调度器（简化版）
+    
+    核心思想：
+    - 基于Lyapunov漂移加惩罚框架
+    - 对每个donor-receiver对，尝试不同传输时长（1-5分钟）
+    - 选择使Lyapunov函数减少最多的时长
+    - 纯粹的能量优化，不考虑AoI和信息量
+    
+    得分函数：delivered × Q[r] - V × loss
+    """
+    def __init__(self, node_info_manager, V=0.5, K=2, max_hops=5,
+                 min_duration=1, max_duration=5):
+        """
+        :param node_info_manager: 节点信息管理器
+        :param V: Lyapunov控制参数（能量-损耗权衡）
+        :param K: 每个receiver最多接受的donor数量
+        :param max_hops: 最大跳数
+        :param min_duration: 最小传输时长（分钟）
+        :param max_duration: 最大传输时长（分钟）
+        """
+        BaseScheduler.__init__(self, node_info_manager, K, max_hops)
+        self.V = float(V)
+        self.min_duration = min_duration
+        self.max_duration = max_duration
+    
+    def _path_eta(self, path):
+        """计算路径总效率"""
+        eta = 1.0
+        for i in range(len(path) - 1):
+            eta *= path[i].energy_transfer_efficiency(path[i + 1])
+        return max(1e-6, min(1.0, eta))
+    
+    def _compute_duration_score(self, donor, receiver, path, eta, E_bar, Q_r, duration):
+        """
+        计算特定传输时长的Lyapunov得分（纯能量优化）
+        
+        得分 = delivered × Q[r] - V × loss
+        
+        :param duration: 传输时长（分钟）
+        :return: (score, energy_delivered, energy_loss)
+        """
+        E_char = getattr(donor, "E_char", 300.0)
+        
+        # 能量计算
+        energy_sent_total = duration * E_char
+        energy_delivered = energy_sent_total * eta
+        energy_loss = energy_sent_total - energy_delivered
+        
+        # Lyapunov得分计算
+        Q_normalized = Q_r / E_bar if E_bar > 0 else 0
+        
+        # 得分 = 能量收益 - 能量损耗惩罚
+        score = energy_delivered * Q_normalized - self.V * energy_loss
+        
+        return score, energy_delivered, energy_loss
+    
+    def plan(self, network, t):
+        """
+        规划能量传输，自适应选择传输时长
+        
+        对每个donor-receiver对，尝试不同的传输时长（1-5分钟），
+        选择Lyapunov得分最高的时长
+        """
+        # 从信息表创建InfoNode
+        info_nodes = self.nim.get_info_nodes()
+        id2node = {n.node_id: n for n in network.nodes}
+        
+        # 排除物理中心节点
+        nodes = self._filter_regular_nodes(info_nodes)
+        E = np.array([n.current_energy for n in nodes], dtype=float)
+        E_bar = float(E.mean())
+        Q = dict((n, max(0.0, E_bar - n.current_energy)) for n in nodes)
+        
+        receivers = sorted([n for n in nodes if Q[n] > 0], key=lambda x: Q[x], reverse=True)
+        donors = [n for n in nodes if n.current_energy > E_bar]
+        used = set()
+        plans = []
+        all_candidates = []
+        
+        for r in receivers:
+            cand = []
+            for d in donors:
+                if d in used or d is r:
+                    continue
+                
+                dist = r.distance_to(d)
+                
+                # 使用自适应路径查找
+                path = eetor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops,
+                                                 node_info_manager=self.nim)
+                if path is None:
+                    continue
+                
+                eta = self._path_eta(path)
+                
+                # 效率低于10%的传输直接放弃
+                if eta < 0.1:
+                    continue
+                
+                # 尝试不同的传输时长，选择最优的
+                best_duration = self.min_duration
+                best_score = float('-inf')
+                best_metrics = None
+                
+                for duration in range(self.min_duration, self.max_duration + 1):
+                    score, delivered, loss = \
+                        self._compute_duration_score(d, r, path, eta, E_bar, Q[r], duration)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_duration = duration
+                        best_metrics = (delivered, loss)
+                
+                if best_metrics:
+                    delivered, loss = best_metrics
+                    cand.append((best_score, d, r, path, dist, delivered, loss, best_duration))
+            
+            if not cand:
+                continue
+            
+            cand.sort(key=lambda x: x[0], reverse=True)
+            all_candidates.extend(cand)
+            quota = self.K
+            
+            for sc, d, rr, path, dist, delivered, loss, duration in cand:
+                if quota <= 0:
+                    break
+                
+                # 转换回真实节点对象
+                receiver = id2node[rr.node_id]
+                donor = id2node[d.node_id]
+                real_path = [id2node[n.node_id] for n in path]
+                
+                plans.append({
+                    "receiver": receiver,
+                    "donor": donor,
+                    "path": real_path,
+                    "distance": dist,
+                    "delivered": delivered,
+                    "loss": loss,
+                    "duration": duration,  # 传输时长（分钟）
+                    "score": sc  # Lyapunov得分
+                })
+                used.add(d)
+                quota -= 1
+        
+        return plans, all_candidates
+
+
 class DurationAwareLyapunovScheduler(BaseScheduler):
     """
     传输时长感知的Lyapunov调度器

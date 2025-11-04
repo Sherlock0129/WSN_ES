@@ -1,0 +1,23 @@
+# Core dependencies
+numpy
+pandas
+matplotlib
+scipy
+pyyaml
+
+# Deep Learning (Optional - for DQN/DDPG schedulers)
+# Uncomment if you want to use DQN/DDPG schedulers:
+# torch>=2.0.0
+# tensorboard>=2.13.0
+
+# GPU Acceleration (已安装 - for GPU-accelerated computing)
+# CUDA 12.x version installed
+cupy-cuda12x
+
+# Testing (Optional)
+# pytest
+
+# Development tools (Optional)
+# black
+# flake8
+

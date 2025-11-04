@@ -7,14 +7,31 @@ import os
 import sys
 from datetime import datetime
 
+import logger
+
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.simulation_config import ConfigManager, load_config
 from scheduling.schedulers import (
     LyapunovScheduler, ClusterScheduler, PredictionScheduler,
-    PowerControlScheduler, BaselineHeuristic
+    PowerControlScheduler, BaselineHeuristic,
+    AdaptiveDurationLyapunovScheduler
 )
+# 尝试导入深度学习调度器（可能需要PyTorch）
+try:
+    from scheduling.dqn_scheduler import DQNScheduler
+    DQN_AVAILABLE = True
+except ImportError:
+    DQN_AVAILABLE = False
+    logger.warning("DQN调度器不可用（需要安装PyTorch）")
+
+try:
+    from scheduling.ddpg_scheduler import DDPGScheduler
+    DDPG_AVAILABLE = True
+except ImportError:
+    DDPG_AVAILABLE = False
+    logger.warning("DDPG调度器不可用（需要安装PyTorch）")
 from scheduling.passive_transfer import compare_passive_modes as _compare_passive_modes
 from utils.logger import logger, get_detailed_plan_logger
 from utils.error_handling import error_handler, handle_exceptions
@@ -60,11 +77,93 @@ def create_scheduler(config_manager: ConfigManager, network):
     # 添加node_info_manager到参数中
     scheduler_params['node_info_manager'] = node_info_manager
     
+    # 检查是否启用深度学习调度器
+    sched_config = config_manager.scheduler_config
+    
+    # 优先检查DQN/DDPG开关（覆盖scheduler_type）
+    if sched_config.enable_dqn:
+        if not DQN_AVAILABLE:
+            raise ImportError("DQN调度器已启用但PyTorch未安装。请安装: pip install torch")
+        
+        logger.info("=" * 60)
+        logger.info("使用DQN深度强化学习调度器（离散动作空间：1-10分钟）")
+        logger.info(f"  - 训练模式: {sched_config.dqn_training_mode}")
+        logger.info(f"  - 模型路径: {sched_config.dqn_model_path}")
+        logger.info(f"  - 动作空间: {sched_config.dqn_action_dim}个离散动作")
+        logger.info("=" * 60)
+        
+        scheduler = DQNScheduler(
+            node_info_manager=node_info_manager,
+            K=scheduler_params.get('K', 2),
+            max_hops=scheduler_params.get('max_hops', 5),
+            action_dim=sched_config.dqn_action_dim,
+            lr=sched_config.dqn_lr,
+            gamma=sched_config.dqn_gamma,
+            tau=sched_config.dqn_tau,
+            buffer_capacity=sched_config.dqn_buffer_capacity,
+            epsilon_start=sched_config.dqn_epsilon_start,
+            epsilon_end=sched_config.dqn_epsilon_end,
+            epsilon_decay=sched_config.dqn_epsilon_decay,
+            training_mode=sched_config.dqn_training_mode
+        )
+        
+        # 如果是测试模式，加载已训练模型
+        if not sched_config.dqn_training_mode and os.path.exists(sched_config.dqn_model_path):
+            # 先初始化agent
+            dummy_network = network if network else None
+            if dummy_network:
+                scheduler.plan(dummy_network, 0)
+            scheduler.load_model(sched_config.dqn_model_path)
+            logger.info(f"✓ DQN模型已加载: {sched_config.dqn_model_path}")
+        elif not sched_config.dqn_training_mode:
+            logger.warning(f"⚠ DQN模型文件不存在: {sched_config.dqn_model_path}")
+            logger.warning("  将使用随机初始化的网络（性能可能较差）")
+        
+        return scheduler
+    
+    elif sched_config.enable_ddpg:
+        if not DDPG_AVAILABLE:
+            raise ImportError("DDPG调度器已启用但PyTorch未安装。请安装: pip install torch")
+        
+        logger.info("=" * 60)
+        logger.info("使用DDPG深度强化学习调度器（连续动作空间：1.0-5.0分钟）")
+        logger.info(f"  - 训练模式: {sched_config.ddpg_training_mode}")
+        logger.info(f"  - 模型路径: {sched_config.ddpg_model_path}")
+        logger.info("=" * 60)
+        
+        scheduler = DDPGScheduler(
+            node_info_manager=node_info_manager,
+            K=scheduler_params.get('K', 2),
+            max_hops=scheduler_params.get('max_hops', 5),
+            action_dim=sched_config.ddpg_action_dim,
+            actor_lr=sched_config.ddpg_actor_lr,
+            critic_lr=sched_config.ddpg_critic_lr,
+            gamma=sched_config.ddpg_gamma,
+            tau=sched_config.ddpg_tau,
+            buffer_capacity=sched_config.ddpg_buffer_capacity,
+            training_mode=sched_config.ddpg_training_mode
+        )
+        
+        # 如果是测试模式，加载已训练模型
+        if not sched_config.ddpg_training_mode and os.path.exists(sched_config.ddpg_model_path):
+            dummy_network = network if network else None
+            if dummy_network:
+                scheduler.plan(dummy_network, 0)
+            scheduler.load_model(sched_config.ddpg_model_path)
+            logger.info(f"✓ DDPG模型已加载: {sched_config.ddpg_model_path}")
+        elif not sched_config.ddpg_training_mode:
+            logger.warning(f"⚠ DDPG模型文件不存在: {sched_config.ddpg_model_path}")
+            logger.warning("  将使用随机初始化的网络（性能可能较差）")
+        
+        return scheduler
+    
+    # 使用传统调度器
     logger.info(f"创建调度器: {scheduler_type}")
     
-    # 创建调度器
     if scheduler_type == "LyapunovScheduler":
         scheduler = LyapunovScheduler(**scheduler_params)
+    elif scheduler_type == "AdaptiveDurationLyapunovScheduler":
+        scheduler = AdaptiveDurationLyapunovScheduler(**scheduler_params)
     elif scheduler_type == "ClusterScheduler":
         scheduler = ClusterScheduler(**scheduler_params)
     elif scheduler_type == "PredictionScheduler":
@@ -91,7 +190,112 @@ def run_simulation(config_file: str = None):
         config_manager = ConfigManager()
         logger.info("使用默认配置")
     
-    # 1.5 显示智能被动传能配置信息
+    # 1.1 检查是否是DQN/DDPG训练模式
+    sched_config = config_manager.scheduler_config
+    is_dqn_training = sched_config.enable_dqn and sched_config.dqn_training_mode
+    is_ddpg_training = sched_config.enable_ddpg and sched_config.ddpg_training_mode
+    
+    if is_dqn_training or is_ddpg_training:
+        # 使用训练循环
+        return _run_training_loop(config_manager, config_file)
+    
+    # 否则使用标准单次运行
+    return _run_single_simulation(config_manager, config_file)
+
+
+def _run_training_loop(config_manager: ConfigManager, config_file: str = None):
+    """DQN/DDPG训练循环"""
+    sched_config = config_manager.scheduler_config
+    
+    if sched_config.enable_dqn:
+        mode_name = "DQN"
+        training_episodes = sched_config.dqn_training_episodes
+        save_interval = sched_config.dqn_save_interval
+        model_path = sched_config.dqn_model_path
+    else:
+        mode_name = "DDPG"
+        training_episodes = getattr(sched_config, 'ddpg_training_episodes', 100)
+        save_interval = getattr(sched_config, 'ddpg_save_interval', 10)
+        model_path = sched_config.ddpg_model_path
+    
+    logger.info("=" * 80)
+    logger.info(f"{mode_name} 训练模式")
+    logger.info("=" * 80)
+    logger.info(f"训练回合数: {training_episodes}")
+    logger.info(f"每回合步数: {config_manager.simulation_config.time_steps}")
+    logger.info(f"模型保存间隔: 每{save_interval}回合")
+    logger.info(f"模型保存路径: {model_path}")
+    logger.info("=" * 80)
+    
+    # 训练循环
+    from core.energy_simulation import EnergySimulation
+    
+    scheduler = None
+    for episode in range(training_episodes):
+        logger.info(f"\n{'='*70}")
+        logger.info(f"训练回合 {episode + 1}/{training_episodes}")
+        logger.info(f"{'='*70}")
+        
+        # 创建新网络
+        network = config_manager.create_network()
+        
+        # 创建或复用调度器
+        if episode == 0:
+            scheduler = create_scheduler(config_manager, network)
+            if hasattr(scheduler, 'episode_count'):
+                scheduler.episode_count = 0
+        else:
+            # 复用调度器，重置状态
+            if hasattr(scheduler, 'nim'):
+                scheduler.nim.initialize_node_info(network.nodes, initial_time=0)
+            if hasattr(scheduler, 'prev_state'):
+                scheduler.prev_state = None
+                scheduler.prev_action = None
+        
+        if hasattr(scheduler, 'episode_count'):
+            scheduler.episode_count = episode + 1
+        
+        # 运行仿真（使用config_manager创建，确保所有参数正确传递）
+        simulation = config_manager.create_energy_simulation(network, scheduler)
+        simulation.training_mode = True  # 标记为训练模式
+        
+        # 静默运行
+        import io
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        simulation.simulate()
+        sys.stdout = old_stdout
+        
+        # 显示训练统计
+        if hasattr(scheduler, 'get_training_stats'):
+            stats = scheduler.get_training_stats()
+            logger.info(f"训练统计:")
+            logger.info(f"  - 平均损失: {stats.get('avg_loss', 0):.4f}")
+            logger.info(f"  - 探索率ε: {stats.get('epsilon', 0):.4f}")
+            logger.info(f"  - 缓冲区: {stats.get('buffer_size', 0)}")
+            logger.info(f"  - 更新次数: {stats.get('update_count', 0)}")
+        
+        # 定期保存模型
+        if (episode + 1) % save_interval == 0:
+            if hasattr(scheduler, 'save_model'):
+                scheduler.save_model(model_path)
+                logger.info(f"✓ 模型已保存（回合{episode + 1}）")
+    
+    # 训练完成，保存最终模型
+    if scheduler and hasattr(scheduler, 'save_model'):
+        scheduler.save_model(model_path)
+        logger.info("\n" + "="*80)
+        logger.info(f"{mode_name} 训练完成！")
+        logger.info(f"最终模型已保存到: {model_path}")
+        logger.info("="*80)
+        logger.info(f"\n使用训练好的模型:")
+        logger.info(f"1. 在配置中设置 dqn_training_mode = False")
+        logger.info(f"2. 重新运行: python src/sim/refactored_main.py")
+
+
+def _run_single_simulation(config_manager: ConfigManager, config_file: str = None):
+    """运行单次仿真（标准模式）"""
+    
     sim_config = config_manager.simulation_config
     if sim_config.passive_mode:
         logger.info("=" * 50)
