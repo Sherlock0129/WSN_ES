@@ -587,8 +587,13 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
             is_reported = receiver_info.get('info_is_reported', True)
             has_info = (not is_reported and info_volume > 0)
         
-        # 如果receiver有未上报信息，给予信息奖励（鼓励搭便车）
-        info_bonus = self.w_info * info_gain if has_info else 0
+        # 信息奖励策略：
+        # - 如果有未上报信息：全额奖励（鼓励搭便车）
+        # - 否则：仍给予部分奖励（鼓励长传输，为未来信息传输铺路）
+        if has_info:
+            info_bonus = self.w_info * info_gain  # 全额奖励
+        else:
+            info_bonus = self.w_info * info_gain * 0.5  # 半额奖励（即使没有当前信息）
         
         # 总得分 = 能量收益 - 能量损耗 - AoI惩罚 + 信息奖励
         total_score = energy_benefit_score - energy_loss_penalty - aoi_penalty + info_bonus

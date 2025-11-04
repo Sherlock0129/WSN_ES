@@ -158,26 +158,40 @@ def create_scheduler(config_manager: ConfigManager, network):
         return scheduler
     
     # 使用传统调度器
+    logger.info("=" * 60)
     logger.info(f"创建调度器: {scheduler_type}")
+    logger.info("=" * 60)
     
     if scheduler_type == "LyapunovScheduler":
         scheduler = LyapunovScheduler(**scheduler_params)
+        logger.info("✓ 使用标准 Lyapunov 调度器")
     elif scheduler_type == "AdaptiveDurationLyapunovScheduler":
         scheduler = AdaptiveDurationLyapunovScheduler(**scheduler_params)
+        logger.info("✓ 使用自适应时长 Lyapunov 调度器")
     elif scheduler_type == "ClusterScheduler":
         scheduler = ClusterScheduler(**scheduler_params)
+        logger.info("✓ 使用聚类调度器")
     elif scheduler_type == "PredictionScheduler":
         scheduler = PredictionScheduler(**scheduler_params)
+        logger.info("✓ 使用预测调度器")
     elif scheduler_type == "PowerControlScheduler":
         scheduler = PowerControlScheduler(**scheduler_params)
+        logger.info("✓ 使用功率控制调度器")
     elif scheduler_type == "BaselineHeuristic":
         scheduler = BaselineHeuristic(**scheduler_params)
+        logger.info("✓ 使用基线启发式调度器")
     elif scheduler_type == "duration_aware" or scheduler_type == "DurationAwareLyapunovScheduler":
         from scheduling.schedulers import DurationAwareLyapunovScheduler
         scheduler = DurationAwareLyapunovScheduler(**scheduler_params)
+        logger.info("✓ 使用传输时长感知 Lyapunov 调度器 (DurationAwareLyapunovScheduler)")
+        logger.info(f"  - 时长范围: {scheduler_params.get('min_duration', 1)}-{scheduler_params.get('max_duration', 5)} 分钟")
+        logger.info(f"  - AoI权重: {scheduler_params.get('w_aoi', 0.1)}")
+        logger.info(f"  - 信息量权重: {scheduler_params.get('w_info', 0.05)}")
+        logger.info(f"  - 节点锁定: 启用（当duration > 1时）")
     else:
         raise ValueError(f"未知的调度器类型: {scheduler_type}")
     
+    logger.info("=" * 60)
     return scheduler
 
 
@@ -425,6 +439,46 @@ def _run_single_simulation(config_manager: ConfigManager, config_file: str = Non
         if hasattr(network, 'adcr_link') and network.adcr_link is not None:
             from viz.plotter import plot_adcr_clusters_and_paths
             plot_adcr_clusters_and_paths(network.adcr_link, session_dir=simulation.session_dir)
+        
+        # 如果使用DurationAwareLyapunovScheduler，生成专门的可视化
+        from scheduling.schedulers import DurationAwareLyapunovScheduler
+        if isinstance(scheduler, DurationAwareLyapunovScheduler):
+            logger.info("生成传输时长感知的专门可视化...")
+            try:
+                from viz.duration_aware_plotter import (
+                    plot_duration_statistics,
+                    plot_energy_transfer_timeline,
+                    plot_energy_transfer_with_duration,
+                    create_energy_flow_animation
+                )
+                
+                # 统计图
+                plot_duration_statistics(simulation, simulation.session_dir)
+                logger.info("✓ 传输时长统计图生成完成")
+                
+                # 为关键时间点生成时间线图和路径图
+                if hasattr(simulation, 'plans_by_time'):
+                    # 选择有传输的时间点
+                    transfer_times = [t for t, data in simulation.plans_by_time.items() 
+                                    if data.get('plans')]
+                    
+                    # 选择前3个和最后1个时间点
+                    sample_times = transfer_times[:3] + transfer_times[-1:] if transfer_times else []
+                    
+                    for t in sample_times:
+                        plans = simulation.plans_by_time[t].get('plans', [])
+                        if plans:
+                            plot_energy_transfer_timeline(plans, network, t, simulation.session_dir)
+                            plot_energy_transfer_with_duration(plans, network, t, simulation.session_dir)
+                    
+                    logger.info(f"✓ 为{len(sample_times)}个时间点生成了时间线和路径图")
+                
+                # 创建动画（可选，比较耗时）
+                # create_energy_flow_animation(simulation)
+                # logger.info("✓ 能量传输动画生成完成")
+                
+            except Exception as e:
+                logger.warning(f"生成传输时长可视化时出错: {e}")
         
         logger.info("可视化图表生成完成")
     
