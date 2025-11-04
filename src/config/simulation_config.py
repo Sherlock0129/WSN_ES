@@ -164,7 +164,9 @@ class SchedulerConfig:
     - DurationAwareLyapunovScheduler：传输时长优化的Lyapunov调度器，将传输时长作为优化维度，支持节点锁定机制。
     """
 
-    scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
+    # scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
+
+    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
@@ -201,7 +203,7 @@ class SchedulerConfig:
     duration_info_rate: float = 10000.0      # 信息采集速率（bits/分钟），用于计算传输期间累积的信息量
 
     # DQN深度强化学习调度器超参数（离散动作空间：1-10分钟）
-    enable_dqn: bool = True                  # 是否启用DQN调度器
+    enable_dqn: bool = False                  # 是否启用DQN调度器
     dqn_model_path: str = "dqn_model.pth"    # DQN模型文件路径
     dqn_training_mode: bool = False           # 是否处于训练模式（False=使用已训练模型）
     dqn_training_episodes: int = 50          # 训练回合数（仅训练模式）
