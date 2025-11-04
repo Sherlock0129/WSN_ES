@@ -180,10 +180,15 @@ class NodeInfoManager:
         :param cluster_id: 所属簇ID
         :param data_size: 数据包大小（bits）
         """
-        # 保存现有信息量字段（如果存在）
+        # 保存现有信息量字段和锁定状态字段（如果存在）
         existing_info_fields = {}
         if node_id in self.latest_info:
+            # 信息量相关字段
             for field in ['info_volume', 'info_waiting_since', 'info_is_reported', 'info_source_nodes']:
+                if field in self.latest_info[node_id]:
+                    existing_info_fields[field] = self.latest_info[node_id][field]
+            # 锁定状态字段（传输时长锁定）
+            for field in ['is_locked', 'lock_until']:
                 if field in self.latest_info[node_id]:
                     existing_info_fields[field] = self.latest_info[node_id][field]
         
@@ -201,7 +206,7 @@ class NodeInfoManager:
             't': arrival_time  # 当前时间戳（信息到达时刻）
         }
         
-        # 恢复信息量字段（如果存在）
+        # 恢复信息量字段和锁定状态字段（如果存在）
         if existing_info_fields:
             info.update(existing_info_fields)
         else:
@@ -210,6 +215,9 @@ class NodeInfoManager:
             info['info_waiting_since'] = -1
             info['info_is_reported'] = True
             info['info_source_nodes'] = []
+            # 初始化锁定状态字段（如果不存在）
+            info['is_locked'] = False
+            info['lock_until'] = -1  # -1表示未锁定
         
         # L1: 更新最新状态表
         self.latest_info[node_id] = info
@@ -575,8 +583,19 @@ class NodeInfoManager:
                     # 准备下一跳
                     energy_left = energy_delivered
         
-        # 2. 更新节点信息表和InfoNode
+        # 2. 更新节点信息表和InfoNode，并设置锁定状态
         updated_count = 0
+        locked_nodes = set()  # 记录需要锁定的节点（路径中的所有节点）
+        
+        # 首先收集所有需要锁定的节点（路径中的所有节点）
+        for plan in plans:
+            path = plan.get("path")
+            duration = plan.get("duration", 1)
+            if path and duration > 0:
+                # 路径中的所有节点都需要锁定
+                for node in path:
+                    locked_nodes.add(node.node_id)
+        
         for node_id, energy_delta in energy_changes.items():
             if abs(energy_delta) < 1e-9:  # 忽略极小的变化
                 continue
@@ -604,8 +623,33 @@ class NodeInfoManager:
             
             updated_count += 1
         
+        # 3. 设置锁定状态（仅当传输时长 > 1 时才锁定，即仅用于DurationAwareLyapunovScheduler）
+        # 找到每个节点参与的传输的最长时长
+        node_lock_duration = {}  # {node_id: max_duration}
+        for plan in plans:
+            path = plan.get("path")
+            duration = plan.get("duration", 1)
+            # 只有当 duration > 1 时才设置锁定（DurationAwareLyapunovScheduler的特性）
+            if path and duration > 1:
+                for node in path:
+                    node_id = node.node_id
+                    if node_id not in node_lock_duration or duration > node_lock_duration[node_id]:
+                        node_lock_duration[node_id] = duration
+        
+        # 设置锁定状态（仅当有传输时长 > 1 的计划时）
+        if node_lock_duration:
+            for node_id, duration in node_lock_duration.items():
+                if node_id in self.latest_info:
+                    lock_until = current_time + duration  # 锁定到当前时间 + 传输时长
+                    self.latest_info[node_id]['is_locked'] = True
+                    self.latest_info[node_id]['lock_until'] = lock_until
+        
         if updated_count > 0:
-            self._log(f"[NodeInfoManager] 能量传输更新完成：{updated_count} 个节点")
+            if node_lock_duration:
+                locked_count = len(node_lock_duration)
+                self._log(f"[NodeInfoManager] 能量传输更新完成：{updated_count} 个节点，锁定 {locked_count} 个节点（传输时长：{max(node_lock_duration.values())} 分钟）")
+            else:
+                self._log(f"[NodeInfoManager] 能量传输更新完成：{updated_count} 个节点")
     
     def initialize_node_info(self, nodes: List[SensorNode], initial_time: int = 0):
         """
@@ -638,12 +682,70 @@ class NodeInfoManager:
         self._create_info_nodes()
         
         self._log(f"[NodeInfoManager] 节点信息表初始化完成，记录数: {len(self.latest_info)}")
-        self._log(f"[NodeInfoManager] InfoNode实例创建完成，数量: {len(self.info_nodes)}")
+    
+    def check_and_update_locks(self, current_time: int):
+        """
+        检查并更新节点锁定状态
         
-        # 输出统计信息
-        stats = self.get_statistics()
-        self._log(f"[NodeInfoManager] 初始统计 - 平均能量: {stats['avg_energy']:.1f}J, "
-                 f"太阳能节点: {stats['solar_nodes']}/{stats['total_nodes']}")
+        遍历所有节点，检查是否已超过锁定时间，如果超过则解锁
+        
+        :param current_time: 当前时间（分钟）
+        :return: 解锁的节点数量
+        """
+        unlocked_count = 0
+        
+        for node_id, info in self.latest_info.items():
+            if info.get('is_locked', False):
+                lock_until = info.get('lock_until', -1)
+                if lock_until >= 0 and current_time > lock_until:
+                    # 锁定时间已到，解锁
+                    info['is_locked'] = False
+                    info['lock_until'] = -1
+                    unlocked_count += 1
+        
+        if unlocked_count > 0:
+            self._log(f"[NodeInfoManager] 解锁 {unlocked_count} 个节点")
+        
+        return unlocked_count
+    
+    def is_node_locked(self, node_id: int, current_time: int) -> bool:
+        """
+        检查节点是否被锁定
+        
+        :param node_id: 节点ID
+        :param current_time: 当前时间（分钟）
+        :return: True表示节点被锁定，False表示节点未锁定
+        """
+        if node_id not in self.latest_info:
+            return False
+        
+        info = self.latest_info[node_id]
+        if not info.get('is_locked', False):
+            return False
+        
+        # 检查锁定是否已过期
+        lock_until = info.get('lock_until', -1)
+        if lock_until >= 0 and current_time > lock_until:
+            # 锁定已过期，自动解锁
+            info['is_locked'] = False
+            info['lock_until'] = -1
+            return False
+        
+        return True
+    
+    def get_unlocked_nodes(self, node_ids: List[int], current_time: int) -> List[int]:
+        """
+        从节点ID列表中筛选出未锁定的节点
+        
+        :param node_ids: 节点ID列表
+        :param current_time: 当前时间（分钟）
+        :return: 未锁定的节点ID列表
+        """
+        unlocked = []
+        for node_id in node_ids:
+            if not self.is_node_locked(node_id, current_time):
+                unlocked.append(node_id)
+        return unlocked
     
     def get_node_info(self, node_id: int) -> Optional[Dict]:
         """

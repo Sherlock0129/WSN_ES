@@ -172,6 +172,9 @@ def create_scheduler(config_manager: ConfigManager, network):
         scheduler = PowerControlScheduler(**scheduler_params)
     elif scheduler_type == "BaselineHeuristic":
         scheduler = BaselineHeuristic(**scheduler_params)
+    elif scheduler_type == "duration_aware" or scheduler_type == "DurationAwareLyapunovScheduler":
+        from scheduling.schedulers import DurationAwareLyapunovScheduler
+        scheduler = DurationAwareLyapunovScheduler(**scheduler_params)
     else:
         raise ValueError(f"未知的调度器类型: {scheduler_type}")
     
