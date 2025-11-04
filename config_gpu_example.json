@@ -1,0 +1,34 @@
+{
+  "simulation": {
+    "use_gpu_acceleration": true,
+    "time_steps": 2000,
+    "round_period": 5,
+    "random_seed": 42,
+    "enable_detailed_plan_log": false,
+    "enable_csv_output": true,
+    "enable_plots": true,
+    "enable_k_adaptation": false,
+    "fixed_k": 1
+  },
+  "network": {
+    "num_nodes": 30,
+    "network_area_width": 5.0,
+    "network_area_height": 5.0,
+    "max_hops": 5,
+    "distribution_mode": "random",
+    "solar_node_ratio": 0.6
+  },
+  "scheduler": {
+    "scheduler_type": "lyapunov",
+    "K": 1,
+    "weight_energy": 1.0,
+    "weight_fairness": 0.5,
+    "weight_efficiency": 0.3
+  },
+  "adcr": {
+    "enable_adcr": true,
+    "enable_intra_cluster_energy_transfer": true,
+    "opportunistic_mode": "info_aware"
+  }
+}
+

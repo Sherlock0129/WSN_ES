@@ -1,0 +1,60 @@
+# DQN调度器配置示例
+# 使用方法：python src/sim/refactored_main.py --config config_dqn_example.yaml
+
+# ========== 调度器配置 ==========
+scheduler:
+  # 启用DQN调度器（优先级最高，会覆盖scheduler_type）
+  enable_dqn: true
+  
+  # DQN模型路径（相对于项目根目录）
+  dqn_model_path: "dqn_model.pth"
+  
+  # 训练模式开关
+  # true: 训练模式（会进行探索和学习）
+  # false: 测试模式（使用已训练模型，不探索）
+  dqn_training_mode: false
+  
+  # DQN超参数
+  dqn_action_dim: 10                # 动作空间：10个离散动作（1-10分钟）
+  dqn_lr: 0.001                     # 学习率
+  dqn_gamma: 0.99                   # 折扣因子
+  dqn_tau: 0.005                    # 软更新系数
+  dqn_buffer_capacity: 10000        # 经验回放缓冲区容量
+  dqn_epsilon_start: 1.0            # 初始探索率（训练时）
+  dqn_epsilon_end: 0.01             # 最终探索率
+  dqn_epsilon_decay: 0.995          # 探索率衰减
+  
+  # 传统调度器配置（当enable_dqn=false时使用）
+  scheduler_type: "LyapunovScheduler"
+  lyapunov_v: 0.5
+  lyapunov_k: 3
+
+# ========== 仿真配置 ==========
+simulation:
+  time_steps: 1000                  # 仿真时长（分钟）
+  enable_energy_sharing: true       # 启用能量共享
+  enable_k_adaptation: false        # 禁用K自适应（DQN自己决策）
+  fixed_k: 1                        # 固定K值
+  
+  # 智能被动传能（可选）
+  passive_mode: true                # 启用智能被动传能
+  check_interval: 10                # 检查间隔（分钟）
+  critical_ratio: 0.2               # 临界比例
+  
+# ========== 网络配置 ==========
+network:
+  num_nodes: 20                     # 网络节点数
+  distribution_mode: "random"       # 节点分布模式
+  enable_physical_center: true      # 启用物理中心节点
+  
+# ========== 节点配置 ==========
+node:
+  energy_char: 500.0                # 每分钟可传输能量（焦耳）
+  capacity: 3.5                     # 电池容量（安时）
+  voltage: 3.7                      # 电压（伏特）
+  
+# ========== EETOR路由配置 ==========
+eetor:
+  enable_info_aware_routing: true   # 启用信息感知路由
+  info_reward_factor: 0.3           # 信息奖励系数
+

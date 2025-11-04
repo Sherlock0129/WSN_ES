@@ -164,7 +164,9 @@ class SchedulerConfig:
     - DurationAwareLyapunovScheduler：传输时长优化的Lyapunov调度器，将传输时长作为优化维度，支持节点锁定机制。
     """
 
-    scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
+    # scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
+
+    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
@@ -199,6 +201,32 @@ class SchedulerConfig:
     duration_w_aoi: float = 0.1              # AoI惩罚权重（传输时间越长，AoI增长越多，惩罚越大）
     duration_w_info: float = 0.05            # 信息量奖励权重（鼓励信息搭便车，传输时长越长可能累积更多信息）
     duration_info_rate: float = 10000.0      # 信息采集速率（bits/分钟），用于计算传输期间累积的信息量
+
+    # DQN深度强化学习调度器超参数（离散动作空间：1-10分钟）
+    enable_dqn: bool = False                  # 是否启用DQN调度器
+    dqn_model_path: str = "dqn_model.pth"    # DQN模型文件路径
+    dqn_training_mode: bool = False           # 是否处于训练模式（False=使用已训练模型）
+    dqn_training_episodes: int = 50          # 训练回合数（仅训练模式）
+    dqn_save_interval: int = 10              # 模型保存间隔（每N回合保存一次）
+    dqn_action_dim: int = 10                 # 动作空间维度（10=1-10分钟）
+    dqn_lr: float = 3e-4                     # DQN学习率（降低以提高稳定性）
+    dqn_gamma: float = 0.99                  # DQN折扣因子
+    dqn_tau: float = 0.005                   # DQN软更新系数
+    dqn_buffer_capacity: int = 10000         # DQN经验回放缓冲区容量
+    dqn_epsilon_start: float = 1.0           # DQN初始探索率
+    dqn_epsilon_end: float = 0.01            # DQN最终探索率
+    dqn_epsilon_decay: float = 0.995         # DQN探索率衰减
+
+    # DDPG深度强化学习调度器超参数（连续动作空间：1.0-5.0分钟）
+    enable_ddpg: bool = False                # 是否启用DDPG调度器
+    ddpg_model_path: str = "ddpg_model.pth"  # DDPG模型文件路径
+    ddpg_training_mode: bool = False         # 是否处于训练模式
+    ddpg_action_dim: int = 1                 # DDPG动作维度（1=传输时长）
+    ddpg_actor_lr: float = 1e-4              # Actor学习率
+    ddpg_critic_lr: float = 1e-3             # Critic学习率
+    ddpg_gamma: float = 0.99                 # 折扣因子
+    ddpg_tau: float = 0.001                  # 软更新系数
+    ddpg_buffer_capacity: int = 10000        # 经验回放容量
 
     # 若策略内部也采用 K 自适应，可在此设置其上限与权重（与 SimulationConfig 的 K 互不冲突）
     adaptive_k_max: int = 24
