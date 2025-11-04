@@ -164,9 +164,7 @@ class SchedulerConfig:
     - DurationAwareLyapunovScheduler：传输时长优化的Lyapunov调度器，将传输时长作为优化维度，支持节点锁定机制。
     """
 
-    # scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
-
-    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
+    scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
@@ -723,7 +721,7 @@ class ConfigManager:
     
     def create_adcr_link_layer(self, network):
         """创建ADCRLinkLayerVirtual对象"""
-        from acdr.adcr_link_layer import ADCRLinkLayerVirtual
+        from info_collection.adcr_link_layer import ADCRLinkLayerVirtual
         return ADCRLinkLayerVirtual(
             network=network,
             # 核心算法参数
