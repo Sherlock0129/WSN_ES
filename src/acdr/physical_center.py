@@ -518,14 +518,16 @@ class NodeInfoManager:
                 
                 # 计算donor消耗（使用InfoNode计算）
                 # energy_consumption = E_elec * B + epsilon_amp * B * d^tau + sensor_energy
-                # 如果 transfer_WET=True，还要加上 E_char
+                # 如果 transfer_WET=True，还要加上 E_char × duration（WET模块能耗需要乘以duration）
                 B = donor_info.bit_rate
                 d = donor_info.distance_to(receiver_info)
                 E_tx = donor_info.energy_elec * B + donor_info.epsilon_amp * B * (d ** donor_info.path_loss_exponent)
                 E_rx = donor_info.energy_elec * B
                 E_com = (E_tx + E_rx) / 2  # 双向确认通信，平均
                 E_sen = donor_info.sensor_energy
-                energy_consumed = E_com + E_sen + donor_info.E_char  # 加上WET开销
+                # WET模块能耗需要乘以duration（因为传输了duration分钟）
+                wet_consumption = donor_info.E_char * duration
+                energy_consumed = E_com + E_sen + wet_consumption  # 加上WET开销（乘以duration）
                 
                 # 记录能量变化
                 if donor_id not in energy_changes:
@@ -569,7 +571,9 @@ class NodeInfoManager:
                     E_sen = sender_info.sensor_energy
                     energy_consumed = E_com + E_sen
                     if transfer_WET:
-                        energy_consumed += sender_info.E_char  # WET开销
+                        # WET模块能耗需要乘以duration（因为传输了duration分钟）
+                        energy_consumed += sender_info.E_char * duration  # WET开销（乘以duration）
+                    # 注意：中间跳的通信能耗不乘以duration（因为是瞬时转发）
                     
                     # 记录能量变化
                     if sender_id not in energy_changes:

@@ -887,7 +887,14 @@ class Network:
                 energy_received = energy_sent * eta
                 energy_loss = energy_sent - energy_received
 
-                donor.current_energy -= donor.energy_consumption(receiver, transfer_WET=True)
+                # 能耗计算：WET模块能耗需要乘以duration（因为传输了duration分钟）
+                # 通信能耗（E_tx + E_rx）是一次性的，不需要乘以duration
+                # 但WET模块能耗（E_char）是持续传输的，需要乘以duration
+                base_consumption = donor.energy_consumption(receiver, transfer_WET=False)
+                wet_consumption = donor.E_char * duration  # WET模块能耗乘以duration
+                total_consumption = base_consumption + wet_consumption
+                donor.current_energy -= total_consumption
+                
                 receiver.current_energy += energy_received
 
                 donor.transferred_history.append(energy_sent)
@@ -923,7 +930,15 @@ class Network:
 
                     # 发射方消耗能量（包括WET只在第一跳加）
                     transfer_WET = (i == 0)  # 仅donor计算WET模块消耗
-                    sender.current_energy -= sender.energy_consumption(receiver_i, transfer_WET=transfer_WET)
+                    if transfer_WET:
+                        # 第一跳（donor）：WET模块能耗需要乘以duration（因为传输了duration分钟）
+                        base_consumption = sender.energy_consumption(receiver_i, transfer_WET=False)
+                        wet_consumption = sender.E_char * duration  # WET模块能耗乘以duration
+                        total_consumption = base_consumption + wet_consumption
+                        sender.current_energy -= total_consumption
+                    else:
+                        # 中间跳：只消耗通信能耗（瞬时转发，不需要乘以duration）
+                        sender.current_energy -= sender.energy_consumption(receiver_i, transfer_WET=False)
 
                     # 接收方获得能量
                     receiver_i.current_energy += energy_delivered
