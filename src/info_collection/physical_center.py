@@ -1013,8 +1013,11 @@ class NodeInfoManager:
                 # 计算等待时间
                 wait_time = current_time - waiting_since
                 
+                # 获取该节点的等待时间上限（优先使用自适应上限，否则使用固定上限）
+                node_max_wait_time = node_info.get('adaptive_max_wait_time', max_wait_time)
+                
                 # 检查是否超时
-                if wait_time >= max_wait_time:
+                if wait_time >= node_max_wait_time:
                     timeout_nodes.append((node_id, node_info))
         
         # 2. 对超时节点强制上报
@@ -1038,6 +1041,10 @@ class NodeInfoManager:
                     waiting_since = node_info.get('info_waiting_since', -1)
                     wait_time = current_time - waiting_since if waiting_since >= 0 else 0
                     
+                    # 获取该节点的等待时间上限（用于日志显示）
+                    node_max_wait_time = node_info.get('adaptive_max_wait_time', max_wait_time)
+                    is_adaptive = 'adaptive_max_wait_time' in node_info
+                    
                     # 强制单独上报（通过PathBasedInfoCollector）
                     if hasattr(path_collector, '_report_info_to_center'):
                         path_collector._report_info_to_center(node, info_volume)
@@ -1047,14 +1054,18 @@ class NodeInfoManager:
                         self.latest_info[node_id]['info_is_reported'] = True
                         self.latest_info[node_id]['info_volume'] = 0
                         self.latest_info[node_id]['info_waiting_since'] = -1
+                        # 清除自适应等待时间上限（如果存在）
+                        if 'adaptive_max_wait_time' in self.latest_info[node_id]:
+                            del self.latest_info[node_id]['adaptive_max_wait_time']
                     
                     # 记录强制上报统计
                     if not hasattr(self, 'forced_reports_count'):
                         self.forced_reports_count = 0
                     self.forced_reports_count += 1
                     
+                    wait_mode = "自适应" if is_adaptive else "固定"
                     self._log(f"[NodeInfoManager] 超时强制上报 - 节点 {node_id}, "
-                             f"信息量: {info_volume} bits, 等待时间: {wait_time} 分钟")
+                             f"信息量: {info_volume} bits, 等待时间: {wait_time}/{node_max_wait_time} 分钟 ({wait_mode}上限)")
         
         return len(timeout_nodes)
     

@@ -378,9 +378,14 @@ class PathCollectorConfig:
     # 机会主义信息传递参数
     enable_opportunistic_info_forwarding: bool = True  # 是否启用机会主义信息传递
     enable_delayed_reporting: bool = True               # 是否启用延迟上报（False为立即上报）
-    max_wait_time: int = 5000                              # 最大等待时间（分钟），超时强制上报
+    max_wait_time: int = 500                              # 最大等待时间（分钟），超时强制上报（固定模式或自适应模式的基础值）
     min_info_volume_threshold: int = 1                   # 最小信息量阈值（节点数），低于此值不等待
     max_info_volume: int = 1000000                         # 信息量最大值（bits），超过此值强制上报，None表示无限制
+    
+    # 自适应等待时间参数
+    enable_adaptive_wait_time: bool = True  # 是否启用自适应等待时间上限（True：信息量越大，等待时间上限越低；False：使用固定的max_wait_time）
+    wait_time_scale_factor: float = None   # 自适应等待时间的缩放因子（None时自动计算为 base_data_size * 10）
+                                            # 公式：adaptive_max_wait_time = max_wait_time / (1 + info_volume / scale_factor)
     
     # 优化选项
     batch_update: bool = True  # 是否批量更新虚拟中心（减少开销）
@@ -789,7 +794,9 @@ class ConfigManager:
             enable_delayed_reporting=self.path_collector_config.enable_delayed_reporting,
             max_wait_time=self.path_collector_config.max_wait_time,
             min_info_volume_threshold=self.path_collector_config.min_info_volume_threshold,
-            max_info_volume=self.path_collector_config.max_info_volume
+            max_info_volume=self.path_collector_config.max_info_volume,
+            enable_adaptive_wait_time=self.path_collector_config.enable_adaptive_wait_time,
+            wait_time_scale_factor=self.path_collector_config.wait_time_scale_factor
         )
     
     def __str__(self) -> str:

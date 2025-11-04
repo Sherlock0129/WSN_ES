@@ -64,7 +64,10 @@ class PathBasedInfoCollector:
         enable_delayed_reporting: bool = True,
         max_wait_time: int = 10,
         min_info_volume_threshold: int = 1,
-        max_info_volume: int = None):
+        max_info_volume: int = None,
+        # 自适应等待时间参数
+        enable_adaptive_wait_time: bool = True,
+        wait_time_scale_factor: float = None):
         """
         初始化路径信息收集器
         
@@ -82,9 +85,12 @@ class PathBasedInfoCollector:
                                               False: 信息量 = base_data_size（固定，不累积）
         :param enable_opportunistic_info_forwarding: 是否启用机会主义信息传递
         :param enable_delayed_reporting: 是否启用延迟上报（False为立即上报）
-        :param max_wait_time: 最大等待时间（分钟），超时强制上报
+        :param max_wait_time: 最大等待时间（分钟），超时强制上报（固定模式或自适应模式的基础值）
         :param min_info_volume_threshold: 最小信息量阈值（节点数），低于此值不等待
         :param max_info_volume: 信息量最大值（bits），超过此值强制上报，None表示无限制
+        :param enable_adaptive_wait_time: 是否启用自适应等待时间上限（True：信息量越大，等待时间上限越低；False：使用固定的max_wait_time）
+        :param wait_time_scale_factor: 自适应等待时间的缩放因子（None时自动计算为 base_data_size * 10）
+                                      公式：adaptive_max_wait_time = max_wait_time / (1 + info_volume / scale_factor)
         """
         self.vc = virtual_center
         self.physical_center = physical_center
@@ -103,6 +109,14 @@ class PathBasedInfoCollector:
         self.min_info_volume_threshold = min_info_volume_threshold
         self.max_info_volume = max_info_volume  # 信息量最大值（bits）
         
+        # 自适应等待时间参数
+        self.enable_adaptive_wait_time = enable_adaptive_wait_time
+        # 自动计算缩放因子（如果未提供）
+        if wait_time_scale_factor is None:
+            self.wait_time_scale_factor = base_data_size * 10
+        else:
+            self.wait_time_scale_factor = wait_time_scale_factor
+        
         # 统计信息
         self.total_collections = 0
         self.total_real_info = 0
@@ -110,9 +124,12 @@ class PathBasedInfoCollector:
         self.total_energy_consumed = 0.0  # 总能量消耗
         
         info_volume_mode = "累积模式" if enable_info_volume_accumulation else "固定模式"
+        wait_time_mode = f"自适应(缩放因子={self.wait_time_scale_factor})" if enable_adaptive_wait_time else "固定"
         self._log(f"[PathCollector] 初始化完成 - 能量模式={energy_mode}, "
                  f"数据包大小={base_data_size}bits (固定), "
                  f"信息量={info_volume_mode}, "
+                 f"等待时间上限={wait_time_mode}, "
+                 f"最大等待时间={max_wait_time}分钟, "
                  f"衰减率={decay_rate}J/min, 太阳能模型={'启用' if use_solar_model else '禁用'}")
     
     def _log(self, message: str):
@@ -265,10 +282,29 @@ class PathBasedInfoCollector:
         
         # 3. 如果有节点携带信息，实现"搭便车"
         if nodes_with_info:
-            # 计算路径上的总信息量（包括新路径信息和搭载的信息）
-            total_info_volume = path_info_volume
+            # 获取所有搭载信息节点的来源列表（用于去重）
+            all_carried_source_nodes = set()
             for node, node_info in nodes_with_info:
-                total_info_volume += node_info.get('info_volume', 0)
+                carried_source_nodes = set(node_info.get('info_source_nodes', []))
+                all_carried_source_nodes |= carried_source_nodes
+            
+            # 获取接收节点已有的来源列表
+            receiver_existing_sources = set(self.vc.latest_info.get(receiver.node_id, {}).get('info_source_nodes', []))
+            
+            # 计算新路径中的真正新节点（不在任何已有列表中的节点）
+            path_node_ids = set([node.node_id for node in path])
+            new_node_ids = path_node_ids - all_carried_source_nodes - receiver_existing_sources
+            
+            # 只计算新节点的信息量（避免重复累积）
+            if self.enable_info_volume_accumulation:
+                new_path_info_volume = self.base_data_size * len(new_node_ids)
+            else:
+                new_path_info_volume = self.base_data_size if new_node_ids else 0
+            
+            # 计算路径上的总信息量（包括新路径信息和搭载的信息）
+            total_info_volume = new_path_info_volume  # 新路径的新节点信息量
+            for node, node_info in nodes_with_info:
+                total_info_volume += node_info.get('info_volume', 0)  # 搭载的信息量（已去重）
             
             # 检查是否超过最大值（优先检查，超过最大值必须立即上报）
             if self.max_info_volume is not None and total_info_volume > self.max_info_volume:
@@ -282,12 +318,14 @@ class PathBasedInfoCollector:
                         self.vc.latest_info[node.node_id]['info_is_reported'] = True
                         self.vc.latest_info[node.node_id]['info_volume'] = 0
                         self.vc.latest_info[node.node_id]['info_waiting_since'] = -1
+                        # 清空来源节点列表（已上报）
+                        self.vc.latest_info[node.node_id]['info_source_nodes'] = []
                 
                 # 新路径终点也清零（因为已上报）
                 self._clear_receiver_info_volume(receiver)
                 
                 self._log(f"[PathCollector] 搭便车时信息量超过最大值 ({total_info_volume} > {self.max_info_volume})，强制上报 - "
-                         f"搭载信息量: {total_info_volume - path_info_volume} bits, 总信息量: {total_info_volume} bits")
+                         f"搭载信息量: {total_info_volume - new_path_info_volume} bits, 新路径信息量: {new_path_info_volume} bits, 总信息量: {total_info_volume} bits")
             else:
                 # 未超过最大值，正常处理搭便车
                 # 在路径终点上报总信息量（消耗能量）
@@ -300,16 +338,19 @@ class PathBasedInfoCollector:
                         self.vc.latest_info[node.node_id]['info_is_reported'] = True
                         self.vc.latest_info[node.node_id]['info_volume'] = 0
                         self.vc.latest_info[node.node_id]['info_waiting_since'] = -1
+                        # 清空来源节点列表（已上报）
+                        self.vc.latest_info[node.node_id]['info_source_nodes'] = []
                 
                 # 更新新路径终点的信息量（延迟上报模式）
+                # 注意：这里传递的是去重后的新信息量，而不是原始path_info_volume
                 if self.enable_delayed_reporting:
-                    self._set_receiver_info_volume(receiver, path_info_volume, path, current_time)
+                    self._set_receiver_info_volume(receiver, new_path_info_volume, path, current_time)
                 else:
                     # 立即上报模式：信息量清零
                     self._clear_receiver_info_volume(receiver)
                 
-                self._log(f"[PathCollector] 搭便车成功 - 搭载信息量: {total_info_volume - path_info_volume} bits, "
-                         f"总信息量: {total_info_volume} bits")
+                self._log(f"[PathCollector] 搭便车成功 - 搭载信息量: {total_info_volume - new_path_info_volume} bits, "
+                         f"新路径信息量: {new_path_info_volume} bits, 总信息量: {total_info_volume} bits")
         else:
             # 没有节点携带信息，正常处理新路径
             if self.enable_delayed_reporting:
@@ -355,10 +396,33 @@ class PathBasedInfoCollector:
             self.vc.latest_info[receiver.node_id]['info_is_reported'] = True
             self.vc.latest_info[receiver.node_id]['info_source_nodes'] = []
         
-        # 检查信息量阈值和最大值
+        # 信息去重：计算新路径中的新节点（不在已有来源列表中的节点）
+        existing_source_nodes = set(self.vc.latest_info[receiver.node_id].get('info_source_nodes', []))
+        path_node_ids = set([node.node_id for node in path])
+        new_node_ids = path_node_ids - existing_source_nodes  # 新节点（去重）
+        
+        # 只计算新节点的信息量（避免重复累积）
+        if self.enable_info_volume_accumulation:
+            # 新信息量 = base_data_size × 新节点数
+            new_info_volume = self.base_data_size * len(new_node_ids)
+        else:
+            # 固定模式：如果有新节点，信息量为base_data_size，否则为0
+            new_info_volume = self.base_data_size if new_node_ids else 0
+        
+        # 累积信息量（只加上新节点的信息量）
         current_volume = self.vc.latest_info[receiver.node_id]['info_volume']
-        new_volume = current_volume + path_info_volume
+        new_volume = current_volume + new_info_volume
         threshold_volume = self.base_data_size * self.min_info_volume_threshold
+        
+        # 更新信息来源节点列表（合并新节点）
+        if new_node_ids:
+            updated_source_nodes = list(existing_source_nodes | path_node_ids)
+            self.vc.latest_info[receiver.node_id]['info_source_nodes'] = updated_source_nodes
+        
+        # 检查节点是否已经在等待中
+        is_already_waiting = (not self.vc.latest_info[receiver.node_id].get('info_is_reported', True) 
+                             and current_volume > 0 
+                             and self.vc.latest_info[receiver.node_id].get('info_waiting_since', -1) >= 0)
         
         # 检查是否超过最大值（优先检查，超过最大值必须立即上报）
         if self.max_info_volume is not None and new_volume > self.max_info_volume:
@@ -368,14 +432,29 @@ class PathBasedInfoCollector:
             self._clear_receiver_info_volume(receiver)
             self._log(f"[PathCollector] 信息量超过最大值 ({new_volume} > {self.max_info_volume})，强制上报 - 节点 {receiver.node_id}")
         elif new_volume >= threshold_volume:
-            # 达到阈值，进入等待状态
+            # 达到阈值，进入或继续等待状态
             self.vc.latest_info[receiver.node_id]['info_volume'] = new_volume
-            self.vc.latest_info[receiver.node_id]['info_waiting_since'] = current_time
-            self.vc.latest_info[receiver.node_id]['info_is_reported'] = False
-            # 记录信息来源节点
-            if 'info_source_nodes' not in self.vc.latest_info[receiver.node_id]:
-                self.vc.latest_info[receiver.node_id]['info_source_nodes'] = []
-            self.vc.latest_info[receiver.node_id]['info_source_nodes'].extend([n.node_id for n in path])
+            
+            # 如果节点尚未在等待中，设置等待开始时间
+            if not is_already_waiting:
+                self.vc.latest_info[receiver.node_id]['info_waiting_since'] = current_time
+                self.vc.latest_info[receiver.node_id]['info_is_reported'] = False
+            
+            # 计算并存储自适应等待时间上限（如果启用）
+            # 注意：信息量增加时，需要重新计算自适应等待时间上限
+            if self.enable_adaptive_wait_time:
+                # 使用反比例函数：adaptive_max_wait_time = max_wait_time / (1 + info_volume / scale_factor)
+                # 信息量越大，等待时间上限越低
+                adaptive_max_wait_time = self.max_wait_time / (1 + new_volume / self.wait_time_scale_factor)
+                # 确保至少为1分钟（避免过小导致频繁上报）
+                adaptive_max_wait_time = max(1, int(adaptive_max_wait_time))
+                self.vc.latest_info[receiver.node_id]['adaptive_max_wait_time'] = adaptive_max_wait_time
+            else:
+                # 固定模式：使用全局的max_wait_time
+                self.vc.latest_info[receiver.node_id]['adaptive_max_wait_time'] = self.max_wait_time
+            
+            # 记录信息来源节点（已在前面去重逻辑中更新，这里不需要重复处理）
+            # 注意：info_source_nodes 已在前面通过 set 运算更新（第395-396行），保证无重复
         else:
             # 未达到阈值，立即上报
             if self.energy_mode == "full" and self.physical_center:
@@ -394,10 +473,15 @@ class PathBasedInfoCollector:
                 self.vc.latest_info[node_id]['info_volume'] = 0
                 self.vc.latest_info[node_id]['info_waiting_since'] = -1
                 self.vc.latest_info[node_id]['info_is_reported'] = True
+                self.vc.latest_info[node_id]['info_source_nodes'] = []
             else:
                 self.vc.latest_info[node_id]['info_volume'] = 0
                 self.vc.latest_info[node_id]['info_waiting_since'] = -1
                 self.vc.latest_info[node_id]['info_is_reported'] = True
+                self.vc.latest_info[node_id]['info_source_nodes'] = []  # 清空来源节点列表
+            # 清除自适应等待时间上限（如果存在）
+            if 'adaptive_max_wait_time' in self.vc.latest_info[node_id]:
+                del self.vc.latest_info[node_id]['adaptive_max_wait_time']
     
     def _report_info_to_center(self, node: SensorNode, info_volume: int):
         """
