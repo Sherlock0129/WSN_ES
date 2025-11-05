@@ -27,27 +27,34 @@ class Actor(nn.Module):
     Actor网络：策略网络，输出动作（传输时长）
     
     输入：状态向量
-    输出：传输时长（连续值，1-5分钟）
+    输出：传输时长（连续值，可配置范围）
     """
-    def __init__(self, state_dim, action_dim, hidden_dim=256):
+    def __init__(self, state_dim, action_dim, hidden_dim=256, 
+                 action_min=1.0, action_max=10.0):
         super(Actor, self).__init__()
+        
+        self.action_min = action_min
+        self.action_max = action_max
+        self.action_range = action_max - action_min
         
         self.fc1 = nn.Linear(state_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.fc3 = nn.Linear(hidden_dim, action_dim)
         
-        # 参数初始化
-        self.fc1.weight.data.uniform_(-3e-3, 3e-3)
-        self.fc2.weight.data.uniform_(-3e-3, 3e-3)
-        self.fc3.weight.data.uniform_(-3e-3, 3e-3)
+        # He初始化（适合ReLU）
+        nn.init.kaiming_normal_(self.fc1.weight, mode='fan_in', nonlinearity='relu')
+        nn.init.kaiming_normal_(self.fc2.weight, mode='fan_in', nonlinearity='relu')
+        # 输出层小权重初始化
+        nn.init.uniform_(self.fc3.weight, -3e-3, 3e-3)
+        nn.init.constant_(self.fc3.bias, 0)
     
     def forward(self, state):
         x = F.relu(self.fc1(state))
         x = F.relu(self.fc2(x))
-        # 使用sigmoid将输出限制在[0,1]，然后映射到[1,5]
-        x = torch.sigmoid(self.fc3(x))
-        # 动作范围：[1, 5]分钟
-        action = 1.0 + 4.0 * x
+        # 使用tanh将输出限制在[-1,1]，然后映射到[action_min, action_max]
+        x = torch.tanh(self.fc3(x))
+        # 动作范围：[action_min, action_max]分钟（可配置）
+        action = self.action_min + (x + 1.0) / 2.0 * self.action_range
         return action
 
 
@@ -68,10 +75,12 @@ class Critic(nn.Module):
         self.fc2 = nn.Linear(hidden_dim + action_dim, hidden_dim)
         self.fc3 = nn.Linear(hidden_dim, 1)
         
-        # 参数初始化
-        self.fc1.weight.data.uniform_(-3e-3, 3e-3)
-        self.fc2.weight.data.uniform_(-3e-3, 3e-3)
-        self.fc3.weight.data.uniform_(-3e-3, 3e-3)
+        # He初始化（适合ReLU）
+        nn.init.kaiming_normal_(self.fc1.weight, mode='fan_in', nonlinearity='relu')
+        nn.init.kaiming_normal_(self.fc2.weight, mode='fan_in', nonlinearity='relu')
+        # 输出层小权重初始化
+        nn.init.uniform_(self.fc3.weight, -3e-3, 3e-3)
+        nn.init.constant_(self.fc3.bias, 0)
     
     def forward(self, state, action):
         x = F.relu(self.fc1(state))
@@ -156,7 +165,8 @@ class DDPGAgent:
                  actor_lr=1e-4, critic_lr=1e-3,
                  gamma=0.99, tau=0.001,
                  buffer_capacity=10000,
-                 hidden_dim=256):
+                 hidden_dim=256,
+                 action_min=1.0, action_max=10.0):
         """
         :param state_dim: 状态空间维度
         :param action_dim: 动作空间维度
@@ -166,15 +176,23 @@ class DDPGAgent:
         :param tau: 软更新系数
         :param buffer_capacity: 经验回放缓冲区容量
         :param hidden_dim: 隐藏层维度
+        :param action_min: 动作最小值（分钟）
+        :param action_max: 动作最大值（分钟）
         """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"[DDPG] 使用设备: {self.device}")
+        if torch.cuda.is_available():
+            print(f"[DDPG] GPU设备名称: {torch.cuda.get_device_name(0)}")
+            print(f"[DDPG] GPU内存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
         
+        self.action_min = action_min
+        self.action_max = action_max
         self.gamma = gamma
         self.tau = tau
         
-        # Actor网络
-        self.actor = Actor(state_dim, action_dim, hidden_dim).to(self.device)
-        self.actor_target = Actor(state_dim, action_dim, hidden_dim).to(self.device)
+        # Actor网络（传入action范围）
+        self.actor = Actor(state_dim, action_dim, hidden_dim, action_min, action_max).to(self.device)
+        self.actor_target = Actor(state_dim, action_dim, hidden_dim, action_min, action_max).to(self.device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=actor_lr)
         
@@ -208,8 +226,8 @@ class DDPGAgent:
         if add_noise:
             noise = self.noise.sample()
             action = action + noise
-            # 限制在[1, 5]范围内
-            action = np.clip(action, 1.0, 5.0)
+            # 限制在配置的动作范围内
+            action = np.clip(action, self.action_min, self.action_max)
         
         return action
     
@@ -313,7 +331,8 @@ class DDPGScheduler(BaseScheduler):
                  actor_lr=1e-4, critic_lr=1e-3,
                  gamma=0.99, tau=0.001,
                  buffer_capacity=10000,
-                 training_mode=True):
+                 training_mode=True,
+                 action_min=1.0, action_max=10.0):
         """
         :param node_info_manager: 节点信息管理器
         :param K: 每个receiver最多接受的donor数量
@@ -326,10 +345,14 @@ class DDPGScheduler(BaseScheduler):
         :param tau: 软更新系数
         :param buffer_capacity: 经验回放缓冲区容量
         :param training_mode: 是否处于训练模式
+        :param action_min: 动作最小值（分钟），让DDPG自己探索最优时长
+        :param action_max: 动作最大值（分钟），扩大动作空间
         """
         BaseScheduler.__init__(self, node_info_manager, K, max_hops)
         
         self.training_mode = training_mode
+        self.action_min = action_min
+        self.action_max = action_max
         
         # 状态维度（将在第一次plan时确定）
         self.state_dim = state_dim
@@ -346,6 +369,7 @@ class DDPGScheduler(BaseScheduler):
         # 历史状态（用于经验回放）
         self.prev_state = None
         self.prev_action = None
+        self.prev_energies = None
         
         # 训练统计
         self.episode_count = 0
@@ -402,7 +426,7 @@ class DDPGScheduler(BaseScheduler):
     
     def _compute_reward(self, prev_energies, current_energies, plans) -> float:
         """
-        计算奖励函数
+        计算奖励函数（归一化版本，范围约为-50到+50）
         
         奖励组成：
         1. 能量均衡改善奖励（方差减小）
@@ -413,15 +437,17 @@ class DDPGScheduler(BaseScheduler):
         :param prev_energies: 上一步的节点能量
         :param current_energies: 当前节点能量
         :param plans: 传输计划
-        :return: 奖励值
+        :return: 奖励值（归一化到合理范围）
         """
         if prev_energies is None or len(prev_energies) == 0:
             return 0.0
         
-        # 1. 能量均衡奖励（方差减小是好的）
-        prev_std = np.std(prev_energies)
-        current_std = np.std(current_energies)
-        balance_reward = (prev_std - current_std) * 10.0  # 方差减小越多，奖励越大
+        max_energy = 50000.0  # 归一化基准
+        
+        # 1. 能量均衡奖励（归一化方差）
+        prev_std_norm = np.std(prev_energies) / max_energy
+        current_std_norm = np.std(current_energies) / max_energy
+        balance_reward = (prev_std_norm - current_std_norm) * 10.0  # -10到+10
         
         # 2. 传输效率奖励
         efficiency_reward = 0.0
@@ -430,23 +456,31 @@ class DDPGScheduler(BaseScheduler):
             total_loss = sum([p.get('loss', 0) for p in plans])
             if total_delivered + total_loss > 0:
                 efficiency = total_delivered / (total_delivered + total_loss)
-                efficiency_reward = efficiency * 5.0  # 效率越高，奖励越大
+                efficiency_reward = efficiency * 2.0  # 0到2
         
-        # 3. 低能量节点惩罚
+        # 3. 低能量节点惩罚（归一化）
         mean_energy = np.mean(current_energies)
-        low_energy_count = np.sum(current_energies < mean_energy * 0.3)
-        low_energy_penalty = -low_energy_count * 2.0
+        low_energy_ratio = np.sum(current_energies < mean_energy * 0.3) / len(current_energies)
+        low_energy_penalty = -low_energy_ratio * 5.0  # -5到0
         
-        # 4. 死亡节点惩罚
-        dead_nodes = np.sum(current_energies <= 0)
-        death_penalty = -dead_nodes * 20.0
+        # 4. 死亡节点惩罚（严重惩罚）
+        dead_ratio = np.sum(current_energies <= 0) / len(current_energies)
+        death_penalty = -dead_ratio * 20.0  # -20到0
         
         # 5. 网络存活奖励
-        survival_reward = 1.0 if dead_nodes == 0 else 0.0
+        survival_reward = 1.0 if dead_ratio == 0 else 0.0
         
-        # 总奖励
+        # 6. 最小能量奖励（鼓励提升最弱节点）
+        min_energy_norm = np.min(current_energies) / max_energy
+        min_energy_reward = min_energy_norm * 2.0  # 0到2
+        
+        # 总奖励（范围约为-30到+15）
         total_reward = (balance_reward + efficiency_reward + 
-                       low_energy_penalty + death_penalty + survival_reward)
+                       low_energy_penalty + death_penalty + 
+                       survival_reward + min_energy_reward)
+        
+        # 裁剪到合理范围
+        total_reward = np.clip(total_reward, -50.0, 50.0)
         
         return total_reward
     
@@ -478,8 +512,11 @@ class DDPGScheduler(BaseScheduler):
                 critic_lr=self.critic_lr,
                 gamma=self.gamma,
                 tau=self.tau,
-                buffer_capacity=self.buffer_capacity
+                buffer_capacity=self.buffer_capacity,
+                action_min=self.action_min,
+                action_max=self.action_max
             )
+            print(f"[DDPG] 动作空间范围: [{self.action_min:.1f}, {self.action_max:.1f}] 分钟")
         
         # 获取节点信息
         info_nodes = self.nim.get_info_nodes()
@@ -550,12 +587,13 @@ class DDPGScheduler(BaseScheduler):
                 if eta < 0.1:
                     continue
                 
-                # 使用DDPG策略选择传输时长
+                # 使用DDPG策略选择传输时长（自动探索最优值）
                 # 这里简化：对每个donor-receiver对使用相同的策略
                 duration_action = self.agent.select_action(current_state, add_noise=self.training_mode)
                 duration = float(duration_action[0])  # 取第一个动作值
-                duration = np.clip(duration, 1.0, 5.0)  # 限制在[1, 5]范围
-                duration = int(np.round(duration))  # 四舍五入到整数
+                # 动作已在Actor网络中限制到[action_min, action_max]
+                # 四舍五入到整数或保留小数（根据需要）
+                duration = max(1.0, min(self.action_max, duration))  # 安全限制
                 
                 # 计算能量传输
                 E_char = getattr(d, "E_char", 300.0)

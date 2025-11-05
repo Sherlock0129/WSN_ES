@@ -45,13 +45,16 @@ def main():
     
     # 判断逻辑（与create_scheduler相同）
     if sched_config.enable_dqn:
-        print("  ✓ DQN调度器（深度强化学习）")
+        print("  ✓ DQN调度器（深度强化学习 - 离散动作空间）")
         print(f"    - 训练模式: {sched_config.dqn_training_mode}")
         print(f"    - 模型路径: {sched_config.dqn_model_path}")
+        print(f"    - 动作空间: {sched_config.dqn_action_dim}个离散选项（1-{sched_config.dqn_action_dim}分钟）")
     elif sched_config.enable_ddpg:
-        print("  ✓ DDPG调度器（深度强化学习）")
+        print("  ✓ DDPG调度器（深度强化学习 - 连续动作空间，自主探索）")
         print(f"    - 训练模式: {sched_config.ddpg_training_mode}")
         print(f"    - 模型路径: {sched_config.ddpg_model_path}")
+        print(f"    - 动作范围: [{sched_config.ddpg_action_min:.1f}, {sched_config.ddpg_action_max:.1f}] 分钟")
+        print(f"    - 特点: 可输出任意实数（如5.23分钟），完全自主探索")
     else:
         scheduler_type = sched_config.scheduler_type
         

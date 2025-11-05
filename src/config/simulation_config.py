@@ -117,7 +117,7 @@ class SimulationConfig:
     - use_gpu_acceleration 控制是否使用 GPU（CuPy）加速统计/距离矩阵等并行计算。
     """
 
-    time_steps: int = 10080             # 总时间步数（分钟），默认 7 天
+    time_steps: int = 10080            # 总时间步数（分钟），默认 7 天
     energy_transfer_interval: int = 60   # 传能/调度触发间隔（分钟）
     # 注意：当前实现中触发条件写死为 `if t % 60 == 0`，未读取该配置值；后续可将其接入。
     output_dir: str = "data"             # 仿真输出根目录，由 OutputManager 管理会话子目录
@@ -203,9 +203,9 @@ class SchedulerConfig:
     duration_info_rate: float = 10000.0      # 信息采集速率（bits/分钟），用于计算传输期间累积的信息量
 
     # DQN深度强化学习调度器超参数（离散动作空间：1-10分钟）
-    enable_dqn: bool = False                  # 是否启用DQN调度器
+    enable_dqn: bool = False                 # 是否启用DQN调度器
     dqn_model_path: str = "dqn_model.pth"    # DQN模型文件路径
-    dqn_training_mode: bool = False           # 是否处于训练模式（False=使用已训练模型）
+    dqn_training_mode: bool = False          # 是否处于训练模式（False=使用已训练模型）
     dqn_training_episodes: int = 50          # 训练回合数（仅训练模式）
     dqn_save_interval: int = 10              # 模型保存间隔（每N回合保存一次）
     dqn_action_dim: int = 10                 # 动作空间维度（10=1-10分钟）
@@ -217,11 +217,15 @@ class SchedulerConfig:
     dqn_epsilon_end: float = 0.01            # DQN最终探索率
     dqn_epsilon_decay: float = 0.995         # DQN探索率衰减
 
-    # DDPG深度强化学习调度器超参数（连续动作空间：1.0-5.0分钟）
-    enable_ddpg: bool = False                # 是否启用DDPG调度器
+    # DDPG深度强化学习调度器超参数（连续动作空间：可自定义范围）
+    enable_ddpg: bool = False                 # 是否启用DDPG调度器
     ddpg_model_path: str = "ddpg_model.pth"  # DDPG模型文件路径
-    ddpg_training_mode: bool = False         # 是否处于训练模式
+    ddpg_training_mode: bool = True          # 是否处于训练模式（True=训练，False=使用已训练模型）
+    ddpg_training_episodes: int = 100        # 训练回合数（仅训练模式）
+    ddpg_save_interval: int = 10             # 模型保存间隔（每N回合保存一次）
     ddpg_action_dim: int = 1                 # DDPG动作维度（1=传输时长）
+    ddpg_action_min: float = 1.0             # 动作最小值（分钟），让DDPG自己探索
+    ddpg_action_max: float = 10.0            # 动作最大值（分钟），扩大探索空间
     ddpg_actor_lr: float = 1e-4              # Actor学习率
     ddpg_critic_lr: float = 1e-3             # Critic学习率
     ddpg_gamma: float = 0.99                 # 折扣因子

@@ -125,9 +125,10 @@ def create_scheduler(config_manager: ConfigManager, network):
             raise ImportError("DDPG调度器已启用但PyTorch未安装。请安装: pip install torch")
         
         logger.info("=" * 60)
-        logger.info("使用DDPG深度强化学习调度器（连续动作空间：1.0-5.0分钟）")
+        logger.info("使用DDPG深度强化学习调度器（连续动作空间：自主探索）")
         logger.info(f"  - 训练模式: {sched_config.ddpg_training_mode}")
         logger.info(f"  - 模型路径: {sched_config.ddpg_model_path}")
+        logger.info(f"  - 动作范围: [{sched_config.ddpg_action_min:.1f}, {sched_config.ddpg_action_max:.1f}] 分钟")
         logger.info("=" * 60)
         
         scheduler = DDPGScheduler(
@@ -140,7 +141,9 @@ def create_scheduler(config_manager: ConfigManager, network):
             gamma=sched_config.ddpg_gamma,
             tau=sched_config.ddpg_tau,
             buffer_capacity=sched_config.ddpg_buffer_capacity,
-            training_mode=sched_config.ddpg_training_mode
+            training_mode=sched_config.ddpg_training_mode,
+            action_min=sched_config.ddpg_action_min,
+            action_max=sched_config.ddpg_action_max
         )
         
         # 如果是测试模式，加载已训练模型
@@ -228,19 +231,22 @@ def _run_training_loop(config_manager: ConfigManager, config_file: str = None):
         training_episodes = sched_config.dqn_training_episodes
         save_interval = sched_config.dqn_save_interval
         model_path = sched_config.dqn_model_path
+        action_info = f"离散动作空间：{sched_config.dqn_action_dim}个选项"
     else:
         mode_name = "DDPG"
-        training_episodes = getattr(sched_config, 'ddpg_training_episodes', 100)
-        save_interval = getattr(sched_config, 'ddpg_save_interval', 10)
+        training_episodes = sched_config.ddpg_training_episodes
+        save_interval = sched_config.ddpg_save_interval
         model_path = sched_config.ddpg_model_path
+        action_info = f"连续动作空间：[{sched_config.ddpg_action_min:.1f}, {sched_config.ddpg_action_max:.1f}]分钟"
     
     logger.info("=" * 80)
-    logger.info(f"{mode_name} 训练模式")
+    logger.info(f"{mode_name} 训练模式 - 自主探索最优传输时长")
     logger.info("=" * 80)
     logger.info(f"训练回合数: {training_episodes}")
     logger.info(f"每回合步数: {config_manager.simulation_config.time_steps}")
     logger.info(f"模型保存间隔: 每{save_interval}回合")
     logger.info(f"模型保存路径: {model_path}")
+    logger.info(f"动作空间: {action_info}")
     logger.info("=" * 80)
     
     # 训练循环
@@ -285,10 +291,19 @@ def _run_training_loop(config_manager: ConfigManager, config_file: str = None):
         if hasattr(scheduler, 'get_training_stats'):
             stats = scheduler.get_training_stats()
             logger.info(f"训练统计:")
-            logger.info(f"  - 平均损失: {stats.get('avg_loss', 0):.4f}")
-            logger.info(f"  - 探索率ε: {stats.get('epsilon', 0):.4f}")
-            logger.info(f"  - 缓冲区: {stats.get('buffer_size', 0)}")
-            logger.info(f"  - 更新次数: {stats.get('update_count', 0)}")
+            
+            # DQN统计
+            if 'avg_loss' in stats:
+                logger.info(f"  - 平均损失: {stats['avg_loss']:.4f}")
+                logger.info(f"  - 探索率ε: {stats.get('epsilon', 0):.4f}")
+                logger.info(f"  - 缓冲区: {stats.get('buffer_size', 0)}")
+                logger.info(f"  - 更新次数: {stats.get('update_count', 0)}")
+            
+            # DDPG统计
+            if 'avg_actor_loss' in stats:
+                logger.info(f"  - Actor损失: {stats['avg_actor_loss']:.4f}")
+                logger.info(f"  - Critic损失: {stats['avg_critic_loss']:.4f}")
+                logger.info(f"  - 缓冲区: {stats.get('buffer_size', 0)}")
         
         # 定期保存模型
         if (episode + 1) % save_interval == 0:
