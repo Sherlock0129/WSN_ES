@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 from typing import List, Dict, TYPE_CHECKING
+import math
 
 if TYPE_CHECKING:
     from core.SensorNode import SensorNode
@@ -67,7 +68,9 @@ class PathBasedInfoCollector:
         max_info_volume: int = None,
         # 自适应等待时间参数
         enable_adaptive_wait_time: bool = True,
-        wait_time_scale_factor: float = None):
+        wait_time_scale_factor: float = None,
+        # 信息价值计算参数
+        info_value_decay_rate: float = 0.02):
         """
         初始化路径信息收集器
         
@@ -91,6 +94,8 @@ class PathBasedInfoCollector:
         :param enable_adaptive_wait_time: 是否启用自适应等待时间上限（True：信息量越大，等待时间上限越低；False：使用固定的max_wait_time）
         :param wait_time_scale_factor: 自适应等待时间的缩放因子（None时自动计算为 base_data_size * 10）
                                       公式：adaptive_max_wait_time = max_wait_time / (1 + info_volume / scale_factor)
+        :param info_value_decay_rate: 信息价值衰减率（指数衰减模型：info_value = info_volume × e^(-decay_rate × waiting_age)）
+                                      推荐值：0.01-0.05，值越大衰减越快
         """
         self.vc = virtual_center
         self.physical_center = physical_center
@@ -117,6 +122,9 @@ class PathBasedInfoCollector:
         else:
             self.wait_time_scale_factor = wait_time_scale_factor
         
+        # 信息价值计算参数
+        self.info_value_decay_rate = info_value_decay_rate
+        
         # 统计信息
         self.total_collections = 0
         self.total_real_info = 0
@@ -136,6 +144,41 @@ class PathBasedInfoCollector:
         """内部日志方法"""
         if self.enable_logging:
             print(message)
+    
+    # ==================== 信息价值计算 ====================
+    
+    def calculate_info_value(self, node_info: Dict, current_time: int) -> float:
+        """
+        计算信息价值（结合信息量和等待时间）
+        
+        公式：info_value = info_volume × e^(-decay_rate × waiting_age)
+        
+        其中：
+        - info_volume: 累积的信息量（bits）
+        - waiting_age: 等待时间（分钟）= current_time - waiting_since
+        - decay_rate: 衰减率参数
+        
+        :param node_info: 节点信息字典
+        :param current_time: 当前时间（分钟）
+        :return: 信息价值（无量纲，用于比较）
+        """
+        info_volume = node_info.get('info_volume', 0)
+        if info_volume == 0:
+            return 0.0
+        
+        waiting_since = node_info.get('info_waiting_since', -1)
+        if waiting_since < 0:
+            # 未开始等待，使用record_time计算信息年龄
+            record_time = node_info.get('record_time', current_time)
+            waiting_age = current_time - record_time
+        else:
+            waiting_age = current_time - waiting_since
+        
+        # 指数衰减：info_value = info_volume × e^(-decay_rate × waiting_age)
+        decay_factor = math.exp(-self.info_value_decay_rate * waiting_age)
+        info_value = info_volume * decay_factor
+        
+        return info_value
     
     # ==================== 核心方法 ====================
     
@@ -259,16 +302,18 @@ class PathBasedInfoCollector:
         receiver = path[-1]  # 终点节点
         
         # 1. 检查路径中是否有节点携带未上报信息（搭便车检查）
+        # 使用信息价值（info_value）而非信息量（info_volume）进行判断
         nodes_with_info = []
         for node in path:
             node_info = self.vc.get_node_info(node.node_id)
             if node_info:
-                info_volume = node_info.get('info_volume', 0)
                 is_reported = node_info.get('info_is_reported', True)
                 
-                # 检查是否有未上报的信息量
-                if not is_reported and info_volume > 0:
-                    nodes_with_info.append((node, node_info))
+                # 使用信息价值判断是否有未上报信息（考虑时间衰减）
+                if not is_reported:
+                    info_value = self.calculate_info_value(node_info, current_time)
+                    if info_value > 0:
+                        nodes_with_info.append((node, node_info))
         
         # 2. 计算整条路径的信息量（独立于数据包大小）
         # 注意：数据包大小始终固定为 base_data_size（不变）
@@ -424,16 +469,28 @@ class PathBasedInfoCollector:
                              and current_volume > 0 
                              and self.vc.latest_info[receiver.node_id].get('info_waiting_since', -1) >= 0)
         
+        # 更新信息量（先更新，再计算信息价值用于判断）
+        self.vc.latest_info[receiver.node_id]['info_volume'] = new_volume
+        
+        # 计算信息价值（用于阈值判断）
+        updated_node_info = self.vc.latest_info[receiver.node_id].copy()
+        # 如果节点尚未在等待中，设置等待开始时间（用于计算信息价值）
+        if not is_already_waiting:
+            updated_node_info['info_waiting_since'] = current_time
+        info_value = self.calculate_info_value(updated_node_info, current_time)
+        threshold_value = threshold_volume  # 阈值仍然基于信息量（初始阈值）
+        
         # 检查是否超过最大值（优先检查，超过最大值必须立即上报）
+        # 注意：max_info_volume 是物理限制，仍然使用 info_volume 判断
         if self.max_info_volume is not None and new_volume > self.max_info_volume:
             # 超过最大值，强制立即上报
             if self.energy_mode == "full" and self.physical_center:
                 self._report_info_to_center(receiver, new_volume)
             self._clear_receiver_info_volume(receiver)
             self._log(f"[PathCollector] 信息量超过最大值 ({new_volume} > {self.max_info_volume})，强制上报 - 节点 {receiver.node_id}")
-        elif new_volume >= threshold_volume:
-            # 达到阈值，进入或继续等待状态
-            self.vc.latest_info[receiver.node_id]['info_volume'] = new_volume
+        elif info_value >= threshold_value:
+            # 达到阈值（基于信息价值），进入或继续等待状态
+            # 注意：info_volume 已在前面更新（第473行）
             
             # 如果节点尚未在等待中，设置等待开始时间
             if not is_already_waiting:
