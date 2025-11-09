@@ -691,13 +691,21 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         aoi_penalty = self.w_aoi * aoi_cost * Q_normalized
         
         # 信息量奖励项（传输时间越长，可能携带更多信息，减少后续上报）
-        # 检查receiver是否有未上报信息
+        # 检查receiver是否有未上报信息（使用信息价值而非信息量）
         receiver_info = self.nim.get_node_info(receiver.node_id)
         has_info = False
+        info_value = 0.0
         if receiver_info:
-            info_volume = receiver_info.get('info_volume', 0)
             is_reported = receiver_info.get('info_is_reported', True)
-            has_info = (not is_reported and info_volume > 0)
+            if not is_reported:
+                # 优先使用信息价值（如果path_collector可用）
+                if hasattr(self, 'path_collector') and self.path_collector:
+                    info_value = self.path_collector.calculate_info_value(receiver_info, self.current_time)
+                    has_info = (info_value > 0)
+                else:
+                    # 后备方案：使用信息量（如果没有path_collector）
+                    info_volume = receiver_info.get('info_volume', 0)
+                    has_info = (info_volume > 0)
         
         # 信息奖励策略：
         # - 如果有未上报信息：全额奖励（鼓励搭便车）
@@ -719,6 +727,9 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         对每个donor-receiver对，尝试不同的传输时长（1-5分钟），
         选择综合得分最高的时长
         """
+        # 保存当前时间，用于信息价值计算
+        self.current_time = t
+        
         # 从信息表创建InfoNode
         info_nodes = self.nim.get_info_nodes()
         id2node = {n.node_id: n for n in network.nodes}

@@ -430,7 +430,9 @@ def select_forwarder_prefix_energy_aware(u_id: int,
                                          node_dict: Dict[int, NodeType],
                                          energy_state_aware: bool = True,
                                          config=None,
-                                         node_info_manager=None) -> Tuple[float, List[int], float]:
+                                         node_info_manager=None,
+                                         path_collector=None,
+                                         current_time: int = 0) -> Tuple[float, List[int], float]:
     """
     能量感知的前缀选择：考虑路径总效率和节点能量状态
     
@@ -472,24 +474,39 @@ def select_forwarder_prefix_energy_aware(u_id: int,
             v_penalty = get_energy_state_penalty(node_dict[v_id], config=config)
             C_v *= v_penalty
         
-        # 信息感知路由：考虑节点的信息量（info_volume）
+        # 信息感知路由：考虑节点的信息价值（info_value，结合信息量和等待时间）
         info_bonus = 1.0  # 默认无奖励
         if config and config.enable_info_aware_routing and node_info_manager:
             node_info = node_info_manager.get_node_info(v_id)
             if node_info:
-                info_volume = node_info.get('info_volume', 0)
                 is_reported = node_info.get('info_is_reported', True)
                 
-                # 如果节点有未上报的信息量，给予奖励（降低代价）
-                if not is_reported and info_volume > 0:
-                    # 信息奖励：信息量越大，奖励越大
-                    # info_reward_factor 控制奖励强度（0~1）
-                    # 归一化信息量（假设最大信息量为 base_data_size × max_hops）
-                    max_info_volume = 1000000  # 默认最大值（可从配置获取）
-                    normalized_volume = min(info_volume / max_info_volume, 1.0)
-                    info_bonus = 1.0 - (config.info_reward_factor * normalized_volume)
-                    # bonus < 1 表示降低代价（优先选择）
-                    C_v *= info_bonus
+                # 如果节点有未上报的信息，给予奖励（降低代价）
+                if not is_reported:
+                    # 优先使用信息价值（如果path_collector可用）
+                    if path_collector and hasattr(path_collector, 'calculate_info_value'):
+                        info_value = path_collector.calculate_info_value(node_info, current_time)
+                        if info_value > 0:
+                            # 信息奖励：信息价值越大，奖励越大
+                            # info_reward_factor 控制奖励强度（0~1）
+                            # 归一化信息价值（假设最大信息量为 base_data_size × max_hops）
+                            max_info_volume = 1000000  # 默认最大值（可从配置获取）
+                            normalized_value = min(info_value / max_info_volume, 1.0)
+                            info_bonus = 1.0 - (config.info_reward_factor * normalized_value)
+                            # bonus < 1 表示降低代价（优先选择）
+                            C_v *= info_bonus
+                    else:
+                        # 后备方案：使用信息量（如果没有path_collector）
+                        info_volume = node_info.get('info_volume', 0)
+                        if info_volume > 0:
+                            # 信息奖励：信息量越大，奖励越大
+                            # info_reward_factor 控制奖励强度（0~1）
+                            # 归一化信息量（假设最大信息量为 base_data_size × max_hops）
+                            max_info_volume = 1000000  # 默认最大值（可从配置获取）
+                            normalized_volume = min(info_volume / max_info_volume, 1.0)
+                            info_bonus = 1.0 - (config.info_reward_factor * normalized_volume)
+                            # bonus < 1 表示降低代价（优先选择）
+                            C_v *= info_bonus
         
         # 综合评分：效率 × (1 / 代价)
         # 效率高的节点优先，代价低的节点优先
@@ -543,7 +560,9 @@ def compute_energy_transfer_costs(nodes: List,
                                    min_efficiency: float = None,
                                    energy_state_aware: bool = None,
                                    config=None,
-                                   node_info_manager=None) -> Tuple[Dict[int, float], Dict[int, List[int]]]:
+                                   node_info_manager=None,
+                                   path_collector=None,
+                                   current_time: int = 0) -> Tuple[Dict[int, float], Dict[int, List[int]]]:
     """
     计算网络中所有节点到目标节点的能量传输期望代价
     
@@ -619,7 +638,9 @@ def compute_energy_transfer_costs(nodes: List,
                 node_dict=node_dict,
                 energy_state_aware=energy_state_aware,
                 config=config,
-                node_info_manager=node_info_manager
+                node_info_manager=node_info_manager,
+                path_collector=path_collector,
+                current_time=current_time
             )
             
             # 如果代价降低，更新
@@ -645,7 +666,9 @@ def find_energy_transfer_path(nodes: List,
                               min_efficiency: float = None,
                               energy_state_aware: bool = None,
                               config=None,
-                              node_info_manager=None) -> Optional[List]:
+                              node_info_manager=None,
+                              path_collector=None,
+                              current_time: int = 0) -> Optional[List]:
     """
     从源节点到目标节点查找能量传输路径
     
@@ -687,7 +710,9 @@ def find_energy_transfer_path(nodes: List,
         min_efficiency=min_efficiency,
         energy_state_aware=energy_state_aware,
         config=config,
-        node_info_manager=node_info_manager
+        node_info_manager=node_info_manager,
+        path_collector=path_collector,
+        current_time=current_time
     )
     
     # 构建节点字典（用于查找）
@@ -739,7 +764,9 @@ def find_energy_transfer_path_adaptive(nodes: List,
                                        target_neighbors: int = None,
                                        energy_state_aware: bool = None,
                                        config=None,
-                                       node_info_manager=None) -> Optional[List]:
+                                       node_info_manager=None,
+                                       path_collector=None,
+                                       current_time: int = 0) -> Optional[List]:
     """
     自适应版本的能量传输路径查找（兼容现有调度器接口）
     
@@ -779,7 +806,9 @@ def find_energy_transfer_path_adaptive(nodes: List,
         min_efficiency=config.min_efficiency,
         energy_state_aware=energy_state_aware,
         config=config,
-        node_info_manager=node_info_manager
+        node_info_manager=node_info_manager,
+        path_collector=path_collector,
+        current_time=current_time
     )
 
 
@@ -822,7 +851,9 @@ def eetor_find_path_adaptive(nodes: List,
                               dest_node,
                               max_hops: int = 5,
                               target_neighbors: int = 6,
-                              node_info_manager=None) -> Optional[List]:
+                              node_info_manager=None,
+                              path_collector=None,
+                              current_time: int = 0) -> Optional[List]:
     """
     EETOR自适应路径查找接口（兼容EEOR接口）
     
@@ -848,6 +879,8 @@ def eetor_find_path_adaptive(nodes: List,
         dest_node=dest_node,
         max_hops=max_hops,
         target_neighbors=target_neighbors,
+        path_collector=path_collector,
+        current_time=current_time,
         energy_state_aware=True,  # 默认启用能量状态感知
         node_info_manager=node_info_manager
     )

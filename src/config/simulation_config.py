@@ -391,6 +391,10 @@ class PathCollectorConfig:
     wait_time_scale_factor: float = None   # 自适应等待时间的缩放因子（None时自动计算为 base_data_size * 10）
                                             # 公式：adaptive_max_wait_time = max_wait_time / (1 + info_volume / scale_factor)
     
+    # 信息价值计算参数
+    info_value_decay_rate: float = 0.02    # 信息价值衰减率（指数衰减模型：info_value = info_volume × e^(-decay_rate × waiting_age)）
+                                           # 推荐值：0.01-0.05，值越大衰减越快
+    
     # 优化选项
     batch_update: bool = True  # 是否批量更新虚拟中心（减少开销）
     
@@ -800,7 +804,8 @@ class ConfigManager:
             min_info_volume_threshold=self.path_collector_config.min_info_volume_threshold,
             max_info_volume=self.path_collector_config.max_info_volume,
             enable_adaptive_wait_time=self.path_collector_config.enable_adaptive_wait_time,
-            wait_time_scale_factor=self.path_collector_config.wait_time_scale_factor
+            wait_time_scale_factor=self.path_collector_config.wait_time_scale_factor,
+            info_value_decay_rate=self.path_collector_config.info_value_decay_rate
         )
     
     def __str__(self) -> str:
