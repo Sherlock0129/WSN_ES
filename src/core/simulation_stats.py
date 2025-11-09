@@ -34,6 +34,10 @@ class SimulationStats:
         # 能量统计
         self.energy_averages: List[float] = []
         self.energy_standards: List[float] = []
+        
+        # 反馈分数统计
+        self.feedback_scores: List[Dict[str, Any]] = []  # 记录每次调度的反馈分数
+        self.feedback_times: List[int] = []  # 记录对应的时间步
     
     def compute_step_stats(self, plans: List[Dict], pre_energies: np.ndarray, 
                           pre_received_total: float, network) -> Dict[str, float]:
@@ -88,6 +92,27 @@ class SimulationStats:
         self.energy_averages.append(energy_avg)
         self.energy_standards.append(energy_std)
     
+    def record_feedback_score(self, time_step: int, score: float, details: Dict[str, Any]) -> None:
+        """
+        记录反馈分数
+        
+        Args:
+            time_step: 时间步
+            score: 反馈分数
+            details: 详细信息字典
+        """
+        self.feedback_times.append(time_step)
+        feedback_record = {
+            'time_step': time_step,
+            'total_score': score,
+            'balance_score': details.get('balance_score', 0.0),
+            'survival_score': details.get('survival_score', 0.0),
+            'efficiency_score': details.get('efficiency_score', 0.0),
+            'energy_score': details.get('energy_score', 0.0),
+            'impact': details.get('impact', '未知')
+        }
+        self.feedback_scores.append(feedback_record)
+    
     def print_statistics(self, network, additional_info: dict = None) -> Dict[str, float]:
         """
         打印仿真统计信息并保存到文件
@@ -119,6 +144,24 @@ class SimulationStats:
             'total_sent_energy': total_sent_energy,
             'total_received_energy': total_received_energy
         }
+        
+        # 添加反馈分数统计信息
+        if self.feedback_scores:
+            total_scores = [record['total_score'] for record in self.feedback_scores]
+            positive_count = sum(1 for score in total_scores if score > 1)
+            negative_count = sum(1 for score in total_scores if score < -1)
+            neutral_count = len(total_scores) - positive_count - negative_count
+            
+            stats['feedback'] = {
+                'avg_score': np.mean(total_scores),
+                'max_score': np.max(total_scores),
+                'min_score': np.min(total_scores),
+                'std_score': np.std(total_scores),
+                'positive_count': positive_count,
+                'negative_count': negative_count,
+                'neutral_count': neutral_count,
+                'total_count': len(total_scores)
+            }
 
         # 使用 StatisticsLogger 打印并保存统计信息
         stats_logger = get_statistics_logger(self.session_dir)
@@ -259,3 +302,116 @@ class SimulationStats:
         plt.legend(loc="upper right", bbox_to_anchor=(1.15, 1))
         plt.grid(True)
         plt.show()
+    
+    def plot_feedback_scores(self) -> None:
+        """
+        绘制反馈分数随时间变化的图表
+        
+        展示：
+        1. 总体反馈分数随时间变化
+        2. 各维度分数的堆叠图
+        3. 正/负影响的分布统计
+        """
+        if not self.feedback_scores:
+            print("没有反馈分数数据可供绘制")
+            return
+        
+        # 提取数据
+        time_steps = [record['time_step'] for record in self.feedback_scores]
+        total_scores = [record['total_score'] for record in self.feedback_scores]
+        balance_scores = [record['balance_score'] for record in self.feedback_scores]
+        survival_scores = [record['survival_score'] for record in self.feedback_scores]
+        efficiency_scores = [record['efficiency_score'] for record in self.feedback_scores]
+        energy_scores = [record['energy_score'] for record in self.feedback_scores]
+        
+        # 创建图表（3行1列）
+        fig, axes = plt.subplots(3, 1, figsize=(14, 12))
+        
+        # 1. 总体反馈分数随时间变化
+        ax1 = axes[0]
+        ax1.plot(time_steps, total_scores, marker='o', linestyle='-', linewidth=2, markersize=4, color='blue')
+        ax1.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+        ax1.axhline(y=5, color='green', linestyle=':', linewidth=1, alpha=0.5, label='显著改善阈值')
+        ax1.axhline(y=-5, color='red', linestyle=':', linewidth=1, alpha=0.5, label='显著恶化阈值')
+        ax1.fill_between(time_steps, 0, total_scores, 
+                         where=[s >= 0 for s in total_scores], 
+                         color='green', alpha=0.2, interpolate=True)
+        ax1.fill_between(time_steps, 0, total_scores, 
+                         where=[s < 0 for s in total_scores], 
+                         color='red', alpha=0.2, interpolate=True)
+        ax1.set_title('调度反馈分数随时间变化 (Overall Feedback Score)', fontsize=12, fontweight='bold')
+        ax1.set_xlabel('时间步 (Time Step)', fontsize=10)
+        ax1.set_ylabel('反馈分数 (Score)', fontsize=10)
+        ax1.legend(loc='best')
+        ax1.grid(True, linestyle='--', alpha=0.5)
+        
+        # 2. 各维度分数堆叠图
+        ax2 = axes[1]
+        ax2.plot(time_steps, balance_scores, marker='s', linestyle='-', 
+                 linewidth=1.5, markersize=3, label='能量均衡性 (Balance)', alpha=0.8)
+        ax2.plot(time_steps, survival_scores, marker='^', linestyle='-', 
+                 linewidth=1.5, markersize=3, label='网络存活率 (Survival)', alpha=0.8)
+        ax2.plot(time_steps, efficiency_scores, marker='o', linestyle='-', 
+                 linewidth=1.5, markersize=3, label='传输效率 (Efficiency)', alpha=0.8)
+        ax2.plot(time_steps, energy_scores, marker='d', linestyle='-', 
+                 linewidth=1.5, markersize=3, label='能量水平 (Energy Level)', alpha=0.8)
+        ax2.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+        ax2.set_title('各维度分数变化 (Dimensional Scores)', fontsize=12, fontweight='bold')
+        ax2.set_xlabel('时间步 (Time Step)', fontsize=10)
+        ax2.set_ylabel('分数 (Score)', fontsize=10)
+        ax2.legend(loc='best', ncol=2)
+        ax2.grid(True, linestyle='--', alpha=0.5)
+        
+        # 3. 正/负/中性影响分布统计（柱状图）
+        ax3 = axes[2]
+        positive_count = sum(1 for score in total_scores if score > 1)
+        negative_count = sum(1 for score in total_scores if score < -1)
+        neutral_count = len(total_scores) - positive_count - negative_count
+        
+        categories = ['正相关\n(Positive)', '中性\n(Neutral)', '负相关\n(Negative)']
+        counts = [positive_count, neutral_count, negative_count]
+        colors_bar = ['green', 'gray', 'red']
+        
+        bars = ax3.bar(categories, counts, color=colors_bar, alpha=0.7, edgecolor='black')
+        
+        # 在柱子上标注数值和百分比
+        total_count = len(total_scores)
+        for bar, count in zip(bars, counts):
+            height = bar.get_height()
+            percentage = (count / total_count * 100) if total_count > 0 else 0
+            ax3.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{int(count)}\n({percentage:.1f}%)',
+                    ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        ax3.set_title('调度影响分布统计 (Impact Distribution)', fontsize=12, fontweight='bold')
+        ax3.set_ylabel('次数 (Count)', fontsize=10)
+        ax3.set_ylim(0, max(counts) * 1.2 if max(counts) > 0 else 1)
+        ax3.grid(True, axis='y', linestyle='--', alpha=0.5)
+        
+        # 添加总体统计信息文本框
+        avg_score = np.mean(total_scores)
+        max_score = np.max(total_scores)
+        min_score = np.min(total_scores)
+        
+        stats_text = f'统计摘要 (Statistics):\n'
+        stats_text += f'平均分 (Avg): {avg_score:.2f}\n'
+        stats_text += f'最高分 (Max): {max_score:.2f}\n'
+        stats_text += f'最低分 (Min): {min_score:.2f}\n'
+        stats_text += f'总次数 (Total): {total_count}'
+        
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        ax3.text(0.98, 0.97, stats_text, transform=ax3.transAxes, fontsize=9,
+                verticalalignment='top', horizontalalignment='right', bbox=props)
+        
+        # 调整布局并保存
+        plt.tight_layout()
+        feedback_plot_path = OutputManager.get_file_path(self.session_dir, 'feedback_scores.png')
+        plt.savefig(feedback_plot_path, dpi=150)
+        print(f"反馈分数图表已保存到: {feedback_plot_path}")
+        plt.show()
+        
+        # 保存反馈分数数据到CSV
+        df = pd.DataFrame(self.feedback_scores)
+        feedback_csv_path = OutputManager.get_file_path(self.session_dir, 'feedback_scores.csv')
+        df.to_csv(feedback_csv_path, index=False, encoding='utf-8-sig')
+        print(f"反馈分数数据已保存到: {feedback_csv_path}")

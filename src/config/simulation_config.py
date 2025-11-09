@@ -218,7 +218,7 @@ class SchedulerConfig:
     dqn_epsilon_decay: float = 0.995         # DQN探索率衰减
 
     # DDPG深度强化学习调度器超参数（连续动作空间：可自定义范围）
-    enable_ddpg: bool = False                 # 是否启用DDPG调度器
+    enable_ddpg: bool = True              # 是否启用DDPG调度器
     ddpg_model_path: str = "ddpg_model.pth"  # DDPG模型文件路径
     ddpg_training_mode: bool = True          # 是否处于训练模式（True=训练，False=使用已训练模型）
     ddpg_training_episodes: int = 100        # 训练回合数（仅训练模式）

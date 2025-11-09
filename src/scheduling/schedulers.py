@@ -64,6 +64,118 @@ class BaseScheduler(object):
         """返回路由/传能计划列表：[{receiver, donor, path, distance, (可选)energy_sent}, ...]"""
         raise NotImplementedError
 
+    def compute_network_feedback_score(self, pre_state, post_state, stats):
+        """
+        计算整体网络反馈分数，评估本次调度对网络的影响
+        
+        评分维度：
+        1. 能量均衡性改善（标准差变化）：权重 0.4
+        2. 网络存活率变化（死亡节点比例）：权重 0.3
+        3. 能量传输效率（delivered/sent）：权重 0.2
+        4. 整体能量水平变化：权重 0.1
+        
+        :param pre_state: 调度前的网络状态字典 {
+            'energies': 节点能量数组,
+            'alive_nodes': 存活节点数,
+            'total_energy': 总能量,
+            'std': 能量标准差
+        }
+        :param post_state: 调度后的网络状态字典（同上）
+        :param stats: 调度统计信息（来自compute_step_stats）
+        :return: (总分, 详细评分字典)
+            - 总分：正值表示正向影响，负值表示负向影响，0表示无影响
+            - 详细评分：包含各维度的具体分数和说明
+        """
+        feedback_score = 0.0
+        details = {}
+        
+        # 1. 能量均衡性改善（标准差变化）- 权重 0.4
+        # 标准差减少是好的（正分），标准差增加是坏的（负分）
+        pre_std = pre_state.get('std', 0.0)
+        post_std = post_state.get('std', 0.0)
+        std_change = pre_std - post_std  # 正值表示标准差减少（改善）
+        
+        # 归一化：相对于调度前标准差的变化百分比
+        if pre_std > 0:
+            std_change_ratio = std_change / pre_std
+        else:
+            std_change_ratio = 0.0
+        
+        balance_score = std_change_ratio * 0.4 * 100  # 乘以100使分数更直观
+        feedback_score += balance_score
+        details['balance_score'] = balance_score
+        details['std_change'] = std_change
+        details['std_change_ratio'] = std_change_ratio
+        
+        # 2. 网络存活率变化 - 权重 0.3
+        # 存活节点增加是好的，减少是坏的
+        pre_alive = pre_state.get('alive_nodes', 0)
+        post_alive = post_state.get('alive_nodes', 0)
+        alive_change = post_alive - pre_alive
+        
+        total_nodes = len(pre_state.get('energies', []))
+        if total_nodes > 0:
+            alive_change_ratio = float(alive_change) / total_nodes
+        else:
+            alive_change_ratio = 0.0
+        
+        survival_score = alive_change_ratio * 0.3 * 100
+        feedback_score += survival_score
+        details['survival_score'] = survival_score
+        details['alive_change'] = alive_change
+        details['alive_change_ratio'] = alive_change_ratio
+        
+        # 3. 能量传输效率 - 权重 0.2
+        # 传输效率越高越好
+        delivered = stats.get('delivered_total', 0.0)
+        sent = delivered + stats.get('total_loss', 0.0)
+        
+        if sent > 0:
+            efficiency = delivered / sent
+        else:
+            efficiency = 0.0
+        
+        # 效率分数：效率范围[0, 1]，映射到[-20, +20]
+        # 效率高于50%得正分，低于50%得负分
+        efficiency_score = (efficiency - 0.5) * 0.2 * 100
+        feedback_score += efficiency_score
+        details['efficiency_score'] = efficiency_score
+        details['efficiency'] = efficiency
+        
+        # 4. 整体能量水平变化 - 权重 0.1
+        # 总能量增加是好的（考虑采集），减少是坏的
+        pre_total = pre_state.get('total_energy', 0.0)
+        post_total = post_state.get('total_energy', 0.0)
+        energy_change = post_total - pre_total
+        
+        if pre_total > 0:
+            energy_change_ratio = energy_change / pre_total
+        else:
+            energy_change_ratio = 0.0
+        
+        energy_score = energy_change_ratio * 0.1 * 100
+        feedback_score += energy_score
+        details['energy_score'] = energy_score
+        details['energy_change'] = energy_change
+        details['energy_change_ratio'] = energy_change_ratio
+        
+        # 综合评价
+        if feedback_score > 5:
+            impact = "正相关（显著改善）"
+        elif feedback_score > 1:
+            impact = "正相关（轻微改善）"
+        elif feedback_score > -1:
+            impact = "中性（影响很小）"
+        elif feedback_score > -5:
+            impact = "负相关（轻微恶化）"
+        else:
+            impact = "负相关（显著恶化）"
+        
+        details['total_score'] = feedback_score
+        details['impact'] = impact
+        
+        return feedback_score, details
+
     def post_step(self, network, t, feedback):
         """在一步传能后（拿到 stats）做自更新，可选"""
         pass

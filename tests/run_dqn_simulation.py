@@ -102,13 +102,16 @@ def train_dqn(episodes=50, save_path="dqn_model.pth"):
         scheduler.prev_action = None
         scheduler.episode_count = episode + 1
         
-        # 运行仿真（静默模式）
+        # 运行仿真（静默模式，启用被动传能）
         simulation = EnergySimulation(
             network=network,
             time_steps=config.simulation_config.time_steps,
             scheduler=scheduler,
             enable_energy_sharing=True,
-            passive_mode=False
+            passive_mode=True,           # ✅ 训练时也使用智能被动传能
+            check_interval=10,
+            critical_ratio=0.2,
+            cooldown_period=30
         )
         
         import io
@@ -181,7 +184,7 @@ def test_dqn(model_path="dqn_model.pth"):
     print(f"  [OK] 模型已加载: {model_path}")
     
     # 运行仿真
-    print("\n[3] 运行仿真（200步）...")
+    print("\n[3] 运行仿真（200步，启用智能被动传能）...")
     print("-" * 80)
     
     simulation = EnergySimulation(
@@ -189,7 +192,11 @@ def test_dqn(model_path="dqn_model.pth"):
         time_steps=200,
         scheduler=scheduler,
         enable_energy_sharing=True,
-        passive_mode=False
+        passive_mode=True,           # ✅ 启用智能被动传能
+        check_interval=10,           # ✅ 每10分钟检查一次
+        critical_ratio=0.2,          # ✅ 低能量节点比例阈值20%
+        energy_variance_threshold=0.3,  # ✅ 能量方差阈值
+        cooldown_period=30           # ✅ 冷却期30分钟
     )
     
     simulation.simulate()
@@ -228,6 +235,17 @@ def test_dqn(model_path="dqn_model.pth"):
     print(f"  - 平均能量: {np.mean(final_energies):.0f}J")
     print(f"  - 能量标准差: {np.std(final_energies):.0f}J")
     print(f"  - 能量CV: {np.std(final_energies)/np.mean(final_energies):.4f}")
+    
+    # 被动传能统计
+    if hasattr(simulation, 'passive_manager'):
+        passive_stats = simulation.passive_manager.get_statistics()
+        print(f"\n  智能被动传能统计:")
+        print(f"  - 触发次数: {passive_stats['trigger_count']}次（200步中）")
+        print(f"  - 触发频率: {passive_stats['trigger_count']/200*100:.1f}%")
+        if passive_stats['trigger_reasons']:
+            print(f"  - 触发原因:")
+            for reason, count in passive_stats['trigger_reasons'].items():
+                print(f"    · {reason}: {count}次")
     
     print("\n[SUCCESS] 测试完成！")
 

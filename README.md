@@ -986,6 +986,7 @@ python src/sim/parallel_executor.py \
 ### 问题解决
 - [DQN传能过频问题修复指南](./DQN传能过频问题修复指南.md)
 - [DQN训练损失修复说明](./DQN训练损失修复说明.md)
+- [DQN测试模式被动传能配置说明](./docs/DQN测试模式被动传能配置说明.md) ⭐ 新增
 
 ---
 

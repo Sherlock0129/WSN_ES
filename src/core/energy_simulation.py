@@ -142,6 +142,14 @@ class EnergySimulation:
                 # 记录能量统计
                 node_energies = [node.current_energy for node in self.network.nodes]
                 self.stats.record_energy_stats(node_energies)
+                
+                # 【反馈机制】收集调度前的网络状态
+                pre_state = {
+                    'energies': pre_energies,
+                    'alive_nodes': sum(1 for e in pre_energies if e > 0),
+                    'total_energy': float(np.sum(pre_energies)),
+                    'std': float(np.std(pre_energies))
+                }
             
                 # 检查是否启用能量传输
                 if self.enable_energy_sharing:
@@ -219,6 +227,29 @@ class EnergySimulation:
             
                 # 计算统计信息
                 stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, self.network)
+                
+                # 【反馈机制】收集调度后的网络状态并计算反馈分数
+                post_energies = np.array([n.current_energy for n in self.network.nodes], dtype=float)
+                post_state = {
+                    'energies': post_energies,
+                    'alive_nodes': sum(1 for e in post_energies if e > 0),
+                    'total_energy': float(np.sum(post_energies)),
+                    'std': float(np.std(post_energies))
+                }
+                
+                # 计算反馈分数
+                feedback_score = 0.0
+                feedback_details = {}
+                if self.scheduler is not None:
+                    feedback_score, feedback_details = self.scheduler.compute_network_feedback_score(
+                        pre_state, post_state, stats
+                    )
+                    # 记录反馈分数到统计信息
+                    self.stats.record_feedback_score(t, feedback_score, feedback_details)
+                    
+                    # 打印反馈信息
+                    impact = feedback_details.get('impact', '未知')
+                    print(f"[反馈] 本次调度影响: {impact}, 综合分数: {feedback_score:.2f}")
             
                 # 记录该时间步的计划、候选信息和节点能量，供可视化使用
                 try:
@@ -227,7 +258,9 @@ class EnergySimulation:
                     self.plans_by_time[t] = {
                         "plans": plans, 
                         "candidates": cand,
-                        "node_energies": node_energies
+                        "node_energies": node_energies,
+                        "feedback_score": feedback_score,  # 添加反馈分数
+                        "feedback_details": feedback_details  # 添加详细信息
                     }
                 except Exception:
                     pass
@@ -255,6 +288,10 @@ class EnergySimulation:
         if not getattr(self, 'training_mode', False):
             K_history, K_timestamps, _ = self.k_adaptation.get_K_history()
             self.stats.plot_K_history(K_history, K_timestamps)
+            
+            # 绘制反馈分数图表（如果有记录）
+            if self.stats.feedback_scores:
+                self.stats.plot_feedback_scores()
         
         # 获取信息传输能量消耗统计（如果可用）
         info_transmission_stats = None

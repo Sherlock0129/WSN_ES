@@ -1,0 +1,74 @@
+## Core latex/pdflatex auxiliary files:
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+.*.lb
+
+## Intermediate documents:
+*.dvi
+*.xdv
+*-converted-to.*
+
+## Bibliography auxiliary files:
+*.bbl
+*.bcf
+*.blg
+*-blx.aux
+*-blx.bib
+*.run.xml
+
+## Build tool auxiliary files:
+*.fdb_latexmk
+*.synctex
+*.synctex(busy)
+*.synctex.gz
+*.synctex.gz(busy)
+*.pdfsync
+
+## Build tool directories
+.texpadtmp/
+
+## Auxiliary and intermediate files from other packages:
+*.nav
+*.snm
+*.vrb
+
+## makeindex
+*.idx
+*.ilg
+*.ind
+
+## glossaries
+*.acn
+*.acr
+*.glg
+*.glo
+*.gls
+*.glsdefs
+*.lzo
+*.lzs
+
+## hyperref
+*.brf
+
+## knitr
+*-concordance.tex
+
+## latexindent backup files
+*.bak[0-9]
+
+## PDF output (uncomment if you want to ignore PDF files)
+# *.pdf
+
+## OS files
+.DS_Store
+Thumbs.db
+
