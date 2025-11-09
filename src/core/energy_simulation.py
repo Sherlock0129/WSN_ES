@@ -250,6 +250,14 @@ class EnergySimulation:
                     # 打印反馈信息
                     impact = feedback_details.get('impact', '未知')
                     print(f"[反馈] 本次调度影响: {impact}, 综合分数: {feedback_score:.2f}")
+                    
+                    # 调用调度器的post_step方法（用于自适应调度器）
+                    if hasattr(self.scheduler, 'post_step'):
+                        feedback_data = {
+                            'total_score': feedback_score,
+                            'details': feedback_details
+                        }
+                        self.scheduler.post_step(self.network, t, feedback_data)
             
                 # 记录该时间步的计划、候选信息和节点能量，供可视化使用
                 try:

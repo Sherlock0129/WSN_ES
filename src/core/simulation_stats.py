@@ -305,15 +305,15 @@ class SimulationStats:
     
     def plot_feedback_scores(self) -> None:
         """
-        绘制反馈分数随时间变化的图表
+        Plot feedback scores over time
         
-        展示：
-        1. 总体反馈分数随时间变化
-        2. 各维度分数的堆叠图
-        3. 正/负影响的分布统计
+        Displays:
+        1. Overall feedback score over time
+        2. Dimensional scores breakdown
+        3. Positive/negative impact distribution
         """
         if not self.feedback_scores:
-            print("没有反馈分数数据可供绘制")
+            print("No feedback score data available for plotting")
             return
         
         # 提取数据
@@ -331,34 +331,34 @@ class SimulationStats:
         ax1 = axes[0]
         ax1.plot(time_steps, total_scores, marker='o', linestyle='-', linewidth=2, markersize=4, color='blue')
         ax1.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
-        ax1.axhline(y=5, color='green', linestyle=':', linewidth=1, alpha=0.5, label='显著改善阈值')
-        ax1.axhline(y=-5, color='red', linestyle=':', linewidth=1, alpha=0.5, label='显著恶化阈值')
+        ax1.axhline(y=5, color='green', linestyle=':', linewidth=1, alpha=0.5, label='Significant Improvement')
+        ax1.axhline(y=-5, color='red', linestyle=':', linewidth=1, alpha=0.5, label='Significant Degradation')
         ax1.fill_between(time_steps, 0, total_scores, 
                          where=[s >= 0 for s in total_scores], 
                          color='green', alpha=0.2, interpolate=True)
         ax1.fill_between(time_steps, 0, total_scores, 
                          where=[s < 0 for s in total_scores], 
                          color='red', alpha=0.2, interpolate=True)
-        ax1.set_title('调度反馈分数随时间变化 (Overall Feedback Score)', fontsize=12, fontweight='bold')
-        ax1.set_xlabel('时间步 (Time Step)', fontsize=10)
-        ax1.set_ylabel('反馈分数 (Score)', fontsize=10)
+        ax1.set_title('Overall Feedback Score Over Time', fontsize=12, fontweight='bold')
+        ax1.set_xlabel('Time Step', fontsize=10)
+        ax1.set_ylabel('Feedback Score', fontsize=10)
         ax1.legend(loc='best')
         ax1.grid(True, linestyle='--', alpha=0.5)
         
         # 2. 各维度分数堆叠图
         ax2 = axes[1]
         ax2.plot(time_steps, balance_scores, marker='s', linestyle='-', 
-                 linewidth=1.5, markersize=3, label='能量均衡性 (Balance)', alpha=0.8)
+                 linewidth=1.5, markersize=3, label='Balance Score', alpha=0.8)
         ax2.plot(time_steps, survival_scores, marker='^', linestyle='-', 
-                 linewidth=1.5, markersize=3, label='网络存活率 (Survival)', alpha=0.8)
+                 linewidth=1.5, markersize=3, label='Survival Score', alpha=0.8)
         ax2.plot(time_steps, efficiency_scores, marker='o', linestyle='-', 
-                 linewidth=1.5, markersize=3, label='传输效率 (Efficiency)', alpha=0.8)
+                 linewidth=1.5, markersize=3, label='Efficiency Score', alpha=0.8)
         ax2.plot(time_steps, energy_scores, marker='d', linestyle='-', 
-                 linewidth=1.5, markersize=3, label='能量水平 (Energy Level)', alpha=0.8)
+                 linewidth=1.5, markersize=3, label='Energy Level Score', alpha=0.8)
         ax2.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
-        ax2.set_title('各维度分数变化 (Dimensional Scores)', fontsize=12, fontweight='bold')
-        ax2.set_xlabel('时间步 (Time Step)', fontsize=10)
-        ax2.set_ylabel('分数 (Score)', fontsize=10)
+        ax2.set_title('Dimensional Scores Over Time', fontsize=12, fontweight='bold')
+        ax2.set_xlabel('Time Step', fontsize=10)
+        ax2.set_ylabel('Score', fontsize=10)
         ax2.legend(loc='best', ncol=2)
         ax2.grid(True, linestyle='--', alpha=0.5)
         
@@ -368,7 +368,7 @@ class SimulationStats:
         negative_count = sum(1 for score in total_scores if score < -1)
         neutral_count = len(total_scores) - positive_count - negative_count
         
-        categories = ['正相关\n(Positive)', '中性\n(Neutral)', '负相关\n(Negative)']
+        categories = ['Positive', 'Neutral', 'Negative']
         counts = [positive_count, neutral_count, negative_count]
         colors_bar = ['green', 'gray', 'red']
         
@@ -383,8 +383,8 @@ class SimulationStats:
                     f'{int(count)}\n({percentage:.1f}%)',
                     ha='center', va='bottom', fontsize=10, fontweight='bold')
         
-        ax3.set_title('调度影响分布统计 (Impact Distribution)', fontsize=12, fontweight='bold')
-        ax3.set_ylabel('次数 (Count)', fontsize=10)
+        ax3.set_title('Impact Distribution Statistics', fontsize=12, fontweight='bold')
+        ax3.set_ylabel('Count', fontsize=10)
         ax3.set_ylim(0, max(counts) * 1.2 if max(counts) > 0 else 1)
         ax3.grid(True, axis='y', linestyle='--', alpha=0.5)
         
@@ -393,11 +393,11 @@ class SimulationStats:
         max_score = np.max(total_scores)
         min_score = np.min(total_scores)
         
-        stats_text = f'统计摘要 (Statistics):\n'
-        stats_text += f'平均分 (Avg): {avg_score:.2f}\n'
-        stats_text += f'最高分 (Max): {max_score:.2f}\n'
-        stats_text += f'最低分 (Min): {min_score:.2f}\n'
-        stats_text += f'总次数 (Total): {total_count}'
+        stats_text = f'Statistics Summary:\n'
+        stats_text += f'Average: {avg_score:.2f}\n'
+        stats_text += f'Maximum: {max_score:.2f}\n'
+        stats_text += f'Minimum: {min_score:.2f}\n'
+        stats_text += f'Total: {total_count}'
         
         props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
         ax3.text(0.98, 0.97, stats_text, transform=ax3.transAxes, fontsize=9,
@@ -407,7 +407,7 @@ class SimulationStats:
         plt.tight_layout()
         feedback_plot_path = OutputManager.get_file_path(self.session_dir, 'feedback_scores.png')
         plt.savefig(feedback_plot_path, dpi=150)
-        print(f"反馈分数图表已保存到: {feedback_plot_path}")
+        print(f"Feedback scores chart saved to: {feedback_plot_path}")
         plt.show()
         
         # 保存反馈分数数据到CSV

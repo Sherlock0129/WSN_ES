@@ -61,6 +61,13 @@ def main():
         if scheduler_type == "LyapunovScheduler":
             print("  ✓ 标准 Lyapunov 调度器")
             print("    - 特点: 基于能量队列的机会传输")
+        elif scheduler_type == "AdaptiveLyapunovScheduler":
+            print("  ✓ 自适应参数 Lyapunov 调度器（推荐）")
+            print("    - 特点: V参数自动调整，基于4维反馈")
+            print(f"    - 初始V: {sched_config.adaptive_lyapunov_v}")
+            print(f"    - V范围: [{sched_config.adaptive_v_min}, {sched_config.adaptive_v_max}]")
+            print(f"    - 调整速率: {sched_config.adaptive_adjust_rate*100:.0f}%")
+            print(f"    - 反馈窗口: {sched_config.adaptive_window_size}")
         elif scheduler_type == "AdaptiveDurationLyapunovScheduler":
             print("  ✓ 自适应时长 Lyapunov 调度器")
             print("    - 特点: 纯能量优化，选择最优传输时长")

@@ -158,19 +158,36 @@ class SchedulerConfig:
 
     通过 `scheduler_type` 切换策略，不同策略读取不同字段：
     - LyapunovScheduler：排队长度/能量差驱动的机会捐能匹配；
+    - AdaptiveLyapunovScheduler：基于反馈自适应调整V参数的Lyapunov调度器（推荐）；
     - ClusterScheduler：类似 LEACH 的轮换簇首与簇内均衡；
     - PredictionScheduler：基于能量趋势/滑动估计的前瞻调度；
     - PowerControlScheduler：以达成目标效率 `target_eta` 为导向的功率/送能控制；
     - DurationAwareLyapunovScheduler：传输时长优化的Lyapunov调度器，将传输时长作为优化维度，支持节点锁定机制。
     """
 
-    scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
-
-    # scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
+    # scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
+    # scheduler_type: str = "AdaptiveLyapunovScheduler"  # 默认调度器类型
+    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
     lyapunov_k: int = 3                      # 基线 K（可与全局 K 自适应结合/对比）
+
+    # AdaptiveLyapunovScheduler 超参数（基于反馈自适应调整V参数）
+    # 
+    # 核心特性：自适应参数调整
+    # - 继承标准Lyapunov的决策逻辑，但V参数会根据反馈自动调整
+    # - 基于4维反馈（能量均衡40%、存活率30%、传输效率20%、总能量10%）
+    # - 诊断问题并自适应：效率低→增大V，均衡差→减小V，存活率降→减小V
+    # - 内置重置机制，避免陷入局部最优
+    #
+    adaptive_lyapunov_v: float = 0.5         # 初始V参数（会自动调整）
+    adaptive_lyapunov_k: int = 3             # 基线K（每个receiver最多的donor数）
+    adaptive_window_size: int = 10           # 反馈窗口大小（记忆最近N次反馈，5-20）
+    adaptive_v_min: float = 0.1              # V的最小值（不建议<0.05，避免过度传输）
+    adaptive_v_max: float = 2.0              # V的最大值（不建议>3.0，避免过度保守）
+    adaptive_adjust_rate: float = 0.1        # 参数调整速率（0.05-0.2，越大响应越快）
+    adaptive_sensitivity: float = 2.0        # 反馈敏感度（触发调整的阈值，1.0-3.0，越小越敏感）
 
     # ClusterScheduler 超参数
     cluster_round_period: int = 360          # 轮换簇首周期（分钟）
@@ -218,7 +235,7 @@ class SchedulerConfig:
     dqn_epsilon_decay: float = 0.995         # DQN探索率衰减
 
     # DDPG深度强化学习调度器超参数（连续动作空间：可自定义范围）
-    enable_ddpg: bool = True              # 是否启用DDPG调度器
+    enable_ddpg: bool = False              # 是否启用DDPG调度器
     ddpg_model_path: str = "ddpg_model.pth"  # DDPG模型文件路径
     ddpg_training_mode: bool = True          # 是否处于训练模式（True=训练，False=使用已训练模型）
     ddpg_training_episodes: int = 100        # 训练回合数（仅训练模式）
@@ -576,6 +593,17 @@ class ConfigManager:
                 "V": self.scheduler_config.lyapunov_v,
                 "K": self.scheduler_config.lyapunov_k,
                 "max_hops": self.network_config.max_hops
+            }
+        elif scheduler_type == "AdaptiveLyapunovScheduler":
+            return {
+                "V": self.scheduler_config.adaptive_lyapunov_v,
+                "K": self.scheduler_config.adaptive_lyapunov_k,
+                "max_hops": self.network_config.max_hops,
+                "window_size": self.scheduler_config.adaptive_window_size,
+                "V_min": self.scheduler_config.adaptive_v_min,
+                "V_max": self.scheduler_config.adaptive_v_max,
+                "adjust_rate": self.scheduler_config.adaptive_adjust_rate,
+                "sensitivity": self.scheduler_config.adaptive_sensitivity
             }
         elif scheduler_type == "ClusterScheduler":
             return {

@@ -240,6 +240,19 @@ class ParallelSimulationExecutor:
                 K=config_manager.scheduler_config.lyapunov_k,
                 max_hops=config_manager.network_config.max_hops
             )
+        elif scheduler_type == "AdaptiveLyapunovScheduler":
+            from scheduling.schedulers import AdaptiveLyapunovScheduler
+            scheduler = AdaptiveLyapunovScheduler(
+                node_info_manager=node_info_manager,
+                V=config_manager.scheduler_config.adaptive_lyapunov_v,
+                K=config_manager.scheduler_config.adaptive_lyapunov_k,
+                max_hops=config_manager.network_config.max_hops,
+                window_size=config_manager.scheduler_config.adaptive_window_size,
+                V_min=config_manager.scheduler_config.adaptive_v_min,
+                V_max=config_manager.scheduler_config.adaptive_v_max,
+                adjust_rate=config_manager.scheduler_config.adaptive_adjust_rate,
+                sensitivity=config_manager.scheduler_config.adaptive_sensitivity
+            )
         elif scheduler_type == "ClusterScheduler":
             from scheduling.schedulers import ClusterScheduler
             scheduler = ClusterScheduler(

@@ -167,6 +167,15 @@ def create_scheduler(config_manager: ConfigManager, network):
     if scheduler_type == "LyapunovScheduler":
         scheduler = LyapunovScheduler(**scheduler_params)
         logger.info("✓ 使用标准 Lyapunov 调度器")
+    elif scheduler_type == "AdaptiveLyapunovScheduler":
+        from scheduling.schedulers import AdaptiveLyapunovScheduler
+        scheduler = AdaptiveLyapunovScheduler(**scheduler_params)
+        logger.info("✓ 使用自适应参数 Lyapunov 调度器 (AdaptiveLyapunovScheduler)")
+        logger.info(f"  - 初始V: {scheduler_params.get('V', 0.5)}")
+        logger.info(f"  - V范围: [{scheduler_params.get('V_min', 0.1)}, {scheduler_params.get('V_max', 2.0)}]")
+        logger.info(f"  - 调整速率: {scheduler_params.get('adjust_rate', 0.1)*100:.0f}%")
+        logger.info(f"  - 反馈窗口: {scheduler_params.get('window_size', 10)}")
+        logger.info(f"  - 特性: V参数自动调整，基于4维反馈（均衡、效率、存活率、总能量）")
     elif scheduler_type == "AdaptiveDurationLyapunovScheduler":
         scheduler = AdaptiveDurationLyapunovScheduler(**scheduler_params)
         logger.info("✓ 使用自适应时长 Lyapunov 调度器")
@@ -424,6 +433,13 @@ def _run_single_simulation(config_manager: ConfigManager, config_file: str = Non
         
         simulation.simulate()
         logger.info("仿真完成")
+        
+        # 如果使用自适应调度器，打印自适应摘要
+        from scheduling.schedulers import AdaptiveLyapunovScheduler
+        if isinstance(scheduler, AdaptiveLyapunovScheduler):
+            logger.info("\n" + "=" * 80)
+            scheduler.print_adaptation_summary()
+            logger.info("=" * 80)
         
         # 强制刷新虚拟中心归档
         if hasattr(network, 'adcr_link') and network.adcr_link is not None:
