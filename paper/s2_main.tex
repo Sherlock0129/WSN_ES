@@ -53,18 +53,49 @@ email@university.edu}
 \end{IEEEkeywords}
 
 \section{Introduction}
-% Phase 2: Problem background, economic-first perspective, motivation to expand Pareto frontier, contributions.
+无线传感器网络（WSN）广泛部署于环境监测、工业物联网与智慧城市等场景，但长期运行受制于节点能量约束与信息时效性的双重瓶颈。传统以工程优化为中心的做法（如仅最小化能量方差或传输损耗）在固定约束下往往只能在既有的静态帕累托边界上做内部权衡，难以通过机制性改造拓展系统可达的效率—公平解集。本文转向以经济学为先导的设计路径：将信息的新鲜度与价值显式纳入资源配置，利用“能量信息年龄（Age of Energy Information, AOEI）”作为价格信号驱动能量共享时机与强度，通过数字孪生化的 InfoNode 提升市场透明度与状态可得性，并辅以传输路由与时长的自适应调控，从而在不改变物理资源总量的前提下，实现从静态到动态帕累托边界的外推。
+
+具体而言，我们建立一套“AOEI 作为价格信号、InfoNode 作为信息孪生账户、机会主义信息上报作为交易规则”的能量共享经济机制：
+（1）AOEI 驱动的触发机制在信息价值高、紧急性强时优先引发传能行为；
+（2）InfoNode 以数字孪生方式维护节点多层状态（当前/历史/预测），配合信息去重与动态等待，保障市场的高可得性与低开销透明度；
+（3）能量传输专用路由（如 EETOR）在效率阈值与多跳损耗间进行抑制性选择，减少低效路径；
+（4）在帕累托视角下给出机制性证据，表明系统解集由静态边界外移至动态边界，兼顾效率与公平。
+
+本文的主要贡献包括：
+\begin{itemize}
+    \item 提出以 AOEI 为价格信号的能量共享触发机制，将信息新鲜度—价值—紧急性纳入系统性决策；
+    \item 构建 InfoNode 数字孪生，以信息去重与动态等待实现高可得性、低冗余的状态透明；
+    \item 结合能量传输专用路由的效率阈值与多跳抑制策略，降低无效损耗并保护脆弱节点；
+    \item 从帕累托边界视角分析机制带来的动态外移与效率—公平权衡改善。
+\end{itemize}
 
 \section{Related Work}
-% Phase 2: Categorize prior work (efficiency/variance-focused vs. mechanism interpretability), identify gaps.
+相关研究可概括为四类：（i）面向效率/方差的能量共享优化，典型目标是降低能量不均衡或传输损耗；（ii）以 Lyapunov/凸优化为代表的均衡方法，提供收敛性与稳定性保证；（iii）基于深度强化学习（如 DQN/DDPG）的自适应调度，在复杂状态下学习近似最优策略；（iv）围绕市场机制/信息价值/AoI/数字孪生的资源分配思想，强调机制解释性与状态可得性。
+
+上述路径在不同侧面取得进展，但仍存在三点不足。其一，多数方法将“信息新鲜度—价值—紧急性”作为外生变量处理，触发传能与配给强度缺乏可解释的价格信号；其二，系统状态的可得性与透明度不足，导致策略依赖静态或周期性上报，时效性与开销难以兼顾；其三，路由常以通用通信准则设计，未充分体现能量传输的效率阈值与多跳抑制规律。本文从经济学机制切入，以 AOEI 价格信号与 InfoNode 数字孪生为核心，联合专用路由与自适应等待/时长，构造“可解释—可获取—低开销”的一体化机制，并在帕累托视角下讨论动态边界外移的系统性收益。为保证篇幅重点，本文仅择要对标“无共享、Lyapunov、DurationAware、DQN、DDPG”五类基线，不展开冗长综述。
 
 \section{Modeling}
 \subsection{Node and Scenario Modeling}
-% Phase 2: Node energy, harvesting, communication, mobility; physical center; topology assumptions.
+本节给出实体与场景建模（不涉及代码细节）。
+
+节点建模：网络包含普通传感器节点与物理中心节点（ID=0，作为信息汇聚，不参与传能）。普通节点具备能量存储、采集与消耗三类过程：感知/计算/通信消耗，及（可选的）太阳能采集补给。节点可为静止或移动，其位置决定可行邻居与路径损耗。每个节点在信息空间上对应一个 InfoNode（见下一小节），用于管理多层状态。
+
+场景建模：考虑多种拓扑与分布（均匀、随机、含能量空洞等），规模取典型数量级（如 10–100 节点）。环境层面，太阳能采集随日间时刻呈周期性变化，体现“白天富余、夜间紧缺”的时变供给；链路层面，能量传输效率随距离衰减，存在显著多跳损耗累积；管理层面，可配置最大跳数与效率阈值，避免极低效路径。上述设定为后续机制与实验提供统一语义空间。
 \subsection{Economic Interpretation and AOEI}
-% Phase 2: AOEI as price signal; InfoNode as market account; transparency via opportunistic reporting.
+经济学解释以“价格信号—账户—交易规则”三元组展开。首先，AOEI 作为价格信号，将信息新鲜度与价值显性化：当某节点的关键信息陈旧且影响系统目标（寿命/公平/效率）时，AOEI 升高，相当于“愿付更高价格”以换取及时能量支持，触发优先传能。其次，InfoNode 是节点在信息市场中的“数字孪生账户”，维护多层状态（当前、历史、预测/不确定度），并提供统一查询接口。再次，机会主义信息上报在执行能量传输时“搭载”路径所经节点信息，辅以信息去重与动态等待：信息量小则延迟上报以聚合，信息量大则缩短等待以保新鲜；在不增加通信开销的前提下维持较高透明度与可得性。
+
+在此机制下，价格信号决定“何时/对谁/以多大强度”传能，账户保障“看得见的状态”，交易规则降低“获取状态的边际成本”。结合能量传输专用路由的效率阈值与多跳抑制，可以在局部理性决策下达成全局可解释的资源再分配。
 \subsection{Objectives and Constraints}
-% Phase 2: Efficiency, balance, fairness, freshness; no code-level details.
+系统目标与约束包括：
+\begin{itemize}
+    \item 网络寿命最大化（首个节点死亡时间）；
+    \item 能量均衡与公平（如方差/变异系数 CV 降低、低能节点受保护）；
+    \item 能量效率提升（有效接收能量占比提高、无效损耗降低）；
+    \item 信息新鲜度提升（关键状态的时效性保障）；
+    \item 约束：效率阈值、最大跳数、预算与调度频率等系统性限制。
+\end{itemize}
+
+从帕累托视角，静态边界对应在给定约束下的最优效率—公平权衡；通过 AOEI 价格信号、数字孪生与交易规则的机制性改造，可获得对可行集的外推，表现为在同等资源条件下实现更优的目标组合（动态边界外移）。本文在实验部分给出相应证据与对标结果。
 
 \section{Problems and Mechanism Design}
 % Phase 3: Map economic problems to technical levers; design of AOEI triggers, InfoNode/Digital Twin, routing policy, adaptive waiting/length; avoid code specifics.
