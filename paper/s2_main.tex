@@ -1,0 +1,103 @@
+% IEEE conference paper skeleton for S2 manuscript (separate from main.tex)
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{CJKutf8}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% Temporary switch: use inline bibliography to avoid BibTeX errors during skeleton phase.
+% Set to \draftbibfalse later to switch back to BibTeX.
+\newif\ifdraftbib
+\draftbibtrue
+\ifdraftbib
+\makeatletter
+\AtBeginDocument{%
+  \immediate\write\@auxout{\string\bibstyle{IEEEtran}}%
+  \immediate\write\@auxout{\string\bibdata{references}}%
+  \immediate\write\@auxout{\string\citation{placeholder2025}}%
+}
+\makeatother
+\fi
+
+\begin{document}
+
+\begin{CJK}{UTF8}{gbsn}
+
+% 中文题名
+\title{融合AOEI驱动与数字孪生技术的能量共享经济机制研究}
+
+\author{\IEEEauthorblockN{Author Name}
+\IEEEauthorblockA{\textit{Department/School} \\
+\textit{University Name}\\
+City, Country \\
+email@university.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+% Placeholder: to be written in Phase 2 after consensus on scope and claims.
+\end{abstract}
+
+\begin{IEEEkeywords}
+无线传感器网络，能量共享，AOEI，数字孪生，经济机制
+\end{IEEEkeywords}
+
+\section{Introduction}
+% Phase 2: Problem background, economic-first perspective, motivation to expand Pareto frontier, contributions.
+
+\section{Related Work}
+% Phase 2: Categorize prior work (efficiency/variance-focused vs. mechanism interpretability), identify gaps.
+
+\section{Modeling}
+\subsection{Node and Scenario Modeling}
+% Phase 2: Node energy, harvesting, communication, mobility; physical center; topology assumptions.
+\subsection{Economic Interpretation and AOEI}
+% Phase 2: AOEI as price signal; InfoNode as market account; transparency via opportunistic reporting.
+\subsection{Objectives and Constraints}
+% Phase 2: Efficiency, balance, fairness, freshness; no code-level details.
+
+\section{Problems and Mechanism Design}
+% Phase 3: Map economic problems to technical levers; design of AOEI triggers, InfoNode/Digital Twin, routing policy, adaptive waiting/length; avoid code specifics.
+
+\section{Experiments}
+\subsection{Setup}
+% Phase 4: Scenarios (sizes, area, models), toggles.
+\subsection{Metrics}
+% Phase 4: Lifetime, CV, efficiency, death rate, freshness.
+\subsection{Baselines}
+% Phase 4: No-sharing, Lyapunov, DurationAware, DQN, DDPG.
+\subsection{Ablation Studies}
+% Phase 4: Remove AOEI, dedup/waiting, fixed duration.
+\subsection{Visualization}
+% Phase 4: Topology heatmap, paths, time series, dynamic K, Pareto frontier.
+
+\section{Conclusion}
+% Phase 5: Findings, implications, limitations.
+\subsection{Future Work}
+% Phase 5: Multi-agent, mobility, harvesting integration, transferability.
+
+\ifdraftbib
+\begin{thebibliography}{1}
+\bibitem{placeholder2025}
+T.~B.~Decided, ``Placeholder Reference for Compilation,'' 2025.
+\end{thebibliography}
+\else
+\nocite{placeholder2025}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+\fi
+
+\end{CJK}
+\end{document}
+
+
