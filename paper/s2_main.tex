@@ -10,6 +10,7 @@
 \usepackage{xcolor}
 \usepackage{hyperref}
 \usepackage{CJKutf8}
+\usepackage{enumitem}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
@@ -44,7 +45,7 @@ email@university.edu}
 
 \maketitle
 \begin{abstract}
-本文面向无线传感器网络（WSN）能量受限与信息时效性不足的双重挑战，提出一套以经济学机制为先导、以工程技术为落地的一体化能量共享框架。核心思想是将“能量信息年龄（Age of Energy Information, AOEI）”内生化为价格信号，驱动“何时/对谁/以何强度”触发传能；并以数字孪生化的 InfoNode 提升状态可得性与市场透明度，配合机会主义信息上报、去重与动态等待以降低通信能耗与冗余开销；同时采用面向能量传输的专用路由 EETOR（效率阈值 + 最大跳数 + 弱势保护）抑制低效多跳，再结合传输时长/额度的自适应决策与预算清算、分位数阈值与动态预算等非平稳鲁棒策略。该机制在不改变物理资源总量的前提下，通过价格化触发、状态可得性与路径外部性治理，协同实现效率、均衡/公平、时效与寿命四维度的联合提升，并在理论与实证上呈现“动态帕累托边界外移”。在规则网格、均匀随机与含能量空洞三类拓扑、\(N\in\{15,30,60,100\}\) 的设置下，本文与“无共享、Lyapunov、DurationAware、DQN、DDPG”等基线对比并开展系统化消融。结果显示：首个节点死亡时间、能量效率、CV 以及弱势服务覆盖均获得统计显著改进，低效多跳占比明显下降，通信能耗与冗余上报同步降低。上述证据验证了“经济学机制—技术实现”的可解释设计在 WSN 能量共享中的有效性与普适价值。
+本文面向无线传感器网络（WSN）能量受限与信息时效性不足的双重挑战，提出一套以经济学机制为先导、以工程技术为落地的一体化能量共享框架。核心思想是将“能量信息年龄（Age of Energy Information, AOEI）”内生化为价格信号，驱动“何时/对谁/以何强度”触发传能；并以数字孪生化的 InfoNode 提升状态可得性与市场透明度，配合机会主义信息上报、去重与动态等待以降低通信能耗与冗余开销；同时采用面向能量传输的专用路由 EETOR（效率阈值 + 最大跳数 + 弱势保护）抑制低效多跳，再结合传输时长/额度的自适应决策与预算清算、分位数阈值与动态预算等非平稳鲁棒策略。该机制在不改变物理资源总量的前提下，通过价格化触发、状态可得性与路径外部性治理，协同实现效率、均衡/公平、时效与寿命四维度的联合提升，并在理论与实证上呈现“动态帕累托边界外移”。在多类典型拓扑与网络规模设置下，我们与“无共享、Lyapunov、DurationAware、DQN、DDPG”等代表性基线进行对比并开展系统化消融；结果显示：在寿命、能量效率与均衡/公平等核心指标上取得统计显著改进，低效多跳占比与通信开销显著降低。上述证据验证了“经济学机制—技术实现”的可解释设计在 WSN 能量共享中的有效性与普适价值。
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -72,9 +73,9 @@ email@university.edu}
 \end{itemize}
 
 \section{Related Work}
-现有研究可大致分为四条主线。其一，面向效率或方差的能量共享优化方法，典型目标在于降低能量不均衡、减少传输损耗或提高能量利用率\cite{energyBalSurvey}；这类方法通常建立在确定性或近似静态的约束集合之上，强调工程可实现性，但往往将信息时效性与价值视为外部条件。其二，以 Lyapunov 或凸优化为代表的均衡框架，能够在理论上给出收敛性与稳定性保证\cite{lyapunovEnergy}，具有较强的分析可解释性；然而，这类方法的触发与强度决策依赖预先设定的权衡参数，对于非平稳环境与异质场景的自适应能力受限。其三，基于深度强化学习（如 DQN、DDPG）的自适应调度在高维与非线性场景中显示出策略学习优势\cite{drlSurvey}，能够端到端地近似最优策略；但其政策可解释性相对不足，且对状态可得性与信息时效性较为敏感\cite{aoiSurvey}。其四，围绕市场机制、信息价值、AoI/AoEI 与数字孪生的资源分配思想，提出以价格信号与制度设计提升系统可达解集的设想\cite{marketMechanismWSN,digitalTwinSurvey}。总体而言，前述多数工作仍停留于算法或度量层面：AoI/AoEI 常作为性能指标而非内生价格信号\cite{aoiSurvey}；数字孪生多用于监测/仿真而未与资源分配闭环\cite{digitalTwinSurvey}；路由多遵循通用通信准则而缺少针对能量传输效率阈值与多跳外部性的制度化治理。与之区别，本文强调“机制—行为—结果”的可解释链条。
+现有研究可大致分为四条主线。其一，面向效率或方差的能量共享优化方法，典型目标在于降低能量不均衡、减少传输损耗或提高能量利用率\cite{energyBalSurvey}；这类方法通常建立在确定性或近似静态的约束集合之上，强调工程可实现性，但往往将信息时效性与价值视为外部条件。其二，以 Lyapunov 或凸优化为代表的均衡框架，能够在理论上给出收敛性与稳定性保证\cite{lyapunovEnergy}，具有较强的分析可解释性；然而，这类方法的触发与强度决策依赖预先设定的权衡参数，对于非平稳环境与异质场景的自适应能力受限。其三，基于深度强化学习（如 DQN、DDPG）的自适应调度在高维与非线性场景中显示出策略学习优势\cite{drlSurvey}，能够端到端地近似最优策略；但其政策可解释性相对不足，且对状态可得性与信息时效性较为敏感\cite{aoiSurvey}。其四，零散研究分别探讨市场化资源分配、AOEI 度量或数字孪生在网络管理中的应用\cite{marketMechanismWSN,digitalTwinSurvey}，但多停留于概念或局部方法，尚未形成“价格信号—账户—交易规则—路径治理”的制度化一体框架，更未将其用于扩展系统可达解集。总体而言，前述多数工作仍停留于算法或度量层面：AOEI 常作为性能指标而非内生价格信号\cite{aoiSurvey}；数字孪生多用于监测/仿真而未与资源分配闭环\cite{digitalTwinSurvey}；路由多遵循通用通信准则而缺少针对能量传输效率阈值与多跳外部性的制度化治理。与之区别，本文强调“机制—行为—结果”的可解释链条。
 
-综合观之，尚存三方面关键缺口：（i）“信息新鲜度—价值—紧急性”缺乏统一的价格化建模，触发传能的时机与强度难以与系统目标同构（机制层缺位）；（ii）状态可得性与透明度不足，常见的静态或周期上报在时效性与通信开销之间难以兼顾（账户与交易规则未成体系）；（iii）路径治理多沿用通用通信路由原则，未充分体现能量传输的效率阈值与多跳外部性（缺少外部性治理）。对此，本文在统一框架下将 AOEI→价格信号、InfoNode→数字账户、机会主义上报→交易规则、EETOR→路径治理、弱势权重/动态预算→公平与鲁棒性，组织为一套“低开销—高时效—强可解释”的一体化机制，并以“帕累托边界外移”作为统一评估主张。为凸显机制贡献并控制篇幅，本文仅与“无共享、Lyapunov、DurationAware、DQN、DDPG”五类基线进行对标，不展开冗长综述。
+综合观之，尚存三方面关键缺口：（i）“信息新鲜度—价值—紧急性”缺乏统一的经济学刻画与决策映射建模，触发传能的时机与强度难以与系统目标同构（机制层缺位）；（ii）状态可得性与透明度不足：普遍依赖静态或周期性上报，难以在时效性与通信开销之间取得可验证的平衡（信息上报与同步机制缺失或滞后）；（iii）治理与路径外部性：一方面，多沿用通用通信路由原则，未充分体现能量传输的效率阈值与多跳外部性；另一方面，缺少面向系统层的宏观调控与治理机制（可类比“经济普查/监管—激励—约束”的统筹），难以跨周期维持一致性规则。对此，本文在统一框架下将 AOEI→价格信号、InfoNode→数字账户、机会主义上报→交易规则、EETOR→路径治理、弱势权重/动态预算→公平与鲁棒性，组织为一套“低开销—高时效—强可解释”的一体化机制，并以“帕累托边界外移”作为统一评估主张。为确保比较的代表性与可复现性，本文选取“无共享、Lyapunov、DurationAware、DQN、DDPG”五类具有代表性的基线进行对标，不展开冗长综述。
 
 
 
@@ -82,43 +83,77 @@ email@university.edu}
 \subsection{Node and Scenario Modeling}
 本章建立不依赖具体实现细节的抽象化模型。
 
-\textbf{节点建模：}网络由普通传感器节点与物理中心节点组成。物理中心节点（\texttt{ID=0}）不参与能量传输，其职责在于信息汇聚与全网状态维护（\texttt{NodeInfoManager}）。普通节点\(i \in \mathcal{N}\)具备以下关键属性与动态过程：
+\textbf{节点建模：}网络由普通传感器节点与物理中心节点组成。物理中心节点不参与能量传输，其职责在于信息汇聚与全网状态维护。普通节点\(i \in \mathcal{N}\)具备以下关键属性与动态过程：
 \begin{itemize}
-    \item \emph{能量状态}：电池容量\(C_i\)（典型值3.5~mAh, 3.7~V，对应\texttt{capacity}与\texttt{voltage}参数），当前能量\(E_i(t)\)（\texttt{current\_energy}），低/高阈值\(\theta_i^{\text{low}}, \theta_i^{\text{high}}\)（\texttt{low\_threshold\_energy}, \texttt{high\_threshold\_energy}）。
-    \item \emph{能量采集}（\texttt{energy\_harvest(t)}）：若启用太阳能（\texttt{has\_solar=True}），基于日内辐照度模型\(G(t) = G_{\max} \sin(\pi(t-t_{\text{rise}})/(t_{\text{set}}-t_{\text{rise}}))\)采集能量，转换效率\(\eta_{\text{solar}}=0.2\)，面板面积\(A=0.1~\text{m}^2\)。
-    \item \emph{能量消耗}（\texttt{energy\_consumption(target, transfer\_WET)}）：感知能耗\(E_{\text{sen}}=0.1~\text{J}\)，通信能耗\(E_{\text{com}} = E_{\text{elec}} B + \epsilon_{\text{amp}} B d^{\tau}\)（其中\(B\)为比特率，\(d\)为距离，\(\tau=2\)为路径损耗指数）。
-    \item \emph{能量传输效率}（\texttt{energy\_transfer\_efficiency(target)}）：距离\(d\)处的无线能量传输效率\(\eta(d) = \eta_0 / d^{\gamma}\)（\(\eta_0=0.6\), \(\gamma=2.0\)，对应1米处最大效率60\%）。
+    \item \emph{能量状态}：电池容量\(C_i\)（典型值3.5~mAh, 3.7~V），当前能量\(E_i(t)\)，低/高阈值\(\theta_i^{\text{low}}, \theta_i^{\text{high}}\)。
+    \item \emph{能量采集}：若启用太阳能，基于日内辐照度模型\(G(t) = G_{\max} \sin(\pi(t-t_{\text{rise}})/(t_{\text{set}}-t_{\text{rise}}))\)采集能量，转换效率\(\eta_{\text{solar}}=0.2\)，面板面积\(A=0.1~\text{m}^2\)。
+    \item \emph{能量消耗}：感知能耗\(E_{\text{sen}}=0.1~\text{J}\)，通信能耗\(E_{\text{com}} = E_{\text{elec}} B + \epsilon_{\text{amp}} B d^{\tau}\)（其中\(B\)为比特率，\(d\)为距离，\(\tau=2\)为路径损耗指数）。
+    \item \emph{能量传输效率}：距离\(d\)处的无线能量传输效率\(\eta(d) = \eta_0 / d^{\gamma}\)（\(\eta_0=0.6\), \(\gamma=2.0\)，对应1米处最大效率60\%）。
 \end{itemize}
-每个物理节点在信息空间一一映射为轻量级代理\texttt{InfoNode}，用于调度器与路由算法访问，避免"上帝视角"。
+每个物理节点在信息空间一一映射为轻量级信息节点（InfoNode），用于调度与路由过程中的状态访问与推理，从而弱化对全局完美信息假设的依赖。
 
 \textbf{场景建模：}从网络结构、环境供给与链路特性三个层面描述：
 \begin{itemize}
-    \item \emph{网络结构：}考虑均匀、随机与含能量空洞的多种空间分布，网络规模典型取值为 10–100 节点；可选启用节点移动以反映动态拓扑。
-    \item \emph{环境供给：}太阳能采集呈显著的日内周期性变化，白天富余、夜间紧缺；可通过时变参数刻画非平稳能量供给。
-    \item \emph{链路特性：}能量传输效率随距离衰减，多跳累积损耗显著；系统设置最大跳数与效率阈值以抑制极低效路径，保障全局能量效率与公平。
+    \item \emph{网络结构：}设节点集合为 \(\mathcal{N}=\{1,\dots,N\}\)，物理中心节点记为 0 且不参与 WET。节点 \(i\) 在时刻 \(t\) 的二维位置为 \(\mathbf{x}_i(t)\in\mathbb{R}^2\)。部署分布支持：
+    \begin{enumerate}[label=(\alph*), leftmargin=1.35em]
+        \item 均匀随机：\(\mathbf{x}_i(0)\sim \mathcal{U}([0,L]\times[0,L])\)；
+        \item 规则网格：\(\mathbf{x}_i(0)\) 等间距栅格；
+        \item 能量空洞：存在子域 \(\Omega_{\text{hole}}\subset [0,L]^2\)，使得 \(\mathbb{P}(\mathbf{x}_i(0)\in \Omega_{\text{hole}})\) 降低，且 \(\mathbb{E}[E_i(0)\mid \mathbf{x}_i(0)\in \Omega_{\text{hole}}]\) 偏低。
+    \end{enumerate}
+    典型规模 \(N\in[10,100]\)。可选启用移动：
+    \[
+    \mathbf{x}_i(t+\Delta t)=\mathbf{x}_i(t)+\mathbf{v}_i(t)\,\Delta t,\qquad \|\mathbf{v}_i(t)\|\le v_{\max},
+    \]
+    其中 \(\mathbf{v}_i(t)\) 可取直线、往返或随机游走模型，以反映动态拓扑。
+    \item \emph{环境供给：}若节点 \(i\) 具备采集能力（标识 \(s_i\in\{0,1\}\)），其单位时间采集量建模为
+    \[
+    E_{h,i}(t)= s_i\cdot \eta_{\text{solar}} A_i\cdot G(t)\cdot \Delta t,
+    \]
+    其中转换效率 \(\eta_{\text{solar}}\in(0,1)\)、面板面积 \(A_i\)，日内辐照度 \(G(t)=G_{\max}\cdot \max\{0,\sin(\pi(t-t_{\text{rise}})/(t_{\text{set}}-t_{\text{rise}}))\}\cdot \zeta(t)\)，\(\zeta(t)\) 刻画天气扰动（如 \(\mathbb{E}[\zeta]=1\) 的有界噪声）。非平稳性由 \((t_{\text{rise}},t_{\text{set}})\) 与 \(\zeta(t)\) 共同引入。
+    \item \emph{链路特性：}节点对 \((i,j)\) 的距离 \(d_{ij}(t)=\|\mathbf{x}_i(t)-\mathbf{x}_j(t)\|_2\)。能量传输效率
+    \[
+    \eta(d_{ij})=\min\Big\{1,\max\big\{0,\tfrac{\eta_0}{d_{ij}^{\gamma}}\big\}\Big\},\quad \eta_0\in(0,1),\ \gamma\in[2,4].
+    \]
+    多跳路径 \(\mathcal{P}= (i=v_0\to v_1\to\cdots\to v_H=j)\) 的总效率 \(\eta_{\mathcal{P}}=\prod_{k=0}^{H-1}\eta(d_{v_k v_{k+1}})\)。
+    通信能耗采用常用模型（发送/接收）
+    \[
+    \begin{aligned}
+    E_{\text{tx}}&=E_{\text{elec}}\,B+\epsilon_{\text{amp}}\,B\cdot d_{ij}^{\tau},\\
+    E_{\text{rx}}&=E_{\text{elec}}\,B,
+    \end{aligned}
+    \]
+    其中 \(\tau\) 为路径损耗指数、\(\epsilon_{\text{amp}}>0\)。单次 WET 发送量 \(E_{\text{send}}\) 的有效接收
+    \[
+    E_{\text{recv}}=\eta_{\mathcal{P}}\cdot E_{\text{send}},\qquad E_{\text{loss}}=E_{\text{send}}-E_{\text{recv}}.
+    \]
+    系统施加最大跳数 \(H_{\max}\) 与效率阈值 \(\eta_{\text{th}}\)，仅允许 \(\eta_{\mathcal{P}}\ge \eta_{\text{th}}\) 且 \(H\le H_{\max}\) 的路径，以抑制极低效路径并保障全局能效与公平。
 \end{itemize}
-该三层刻画共同定义了机制运行的语义空间与外生扰动来源，为后续决策与评估提供统一背景。
+在能量守恒下，节点能量演化为
+\[
+E_i(t+\Delta t)=\min\!\Big\{C_i,\ E_i(t)-E_{\text{sen},i}(t)-E_{\text{com},i}(t)-E_{\text{send},i}(t)+E_{h,i}(t)+E_{\text{recv},i}(t)\Big\},
+\]
+其中 \(C_i\) 为电池容量，\(E_{\text{sen},i}\) 为感知/计算能耗，\(E_{\text{com},i}\) 为通信能耗。上述三层（结构/供给/链路）与能量演化共同定义机制运行的语义空间与外生扰动，为后续决策与评估提供统一背景与可检验假设。
 
-\subsection{Economic Interpretation and AOI as Price Signal}
+\subsection{Economic Interpretation and AOEI as Price Signal}
 经济学解释围绕"价格信号—数字账户—交易规则"的结构展开。核心价格信号采用 AOEI 描述信息新鲜度（越新越有价值），用于触发与排序；在经济学层面与具体实现中，可结合\emph{信息价值}（由 AOEI 的时效性维度与\emph{信息量}维度共同构成）作为参考，以更精细地表达“支付意愿”与时机强度。
 
-\textbf{（1）AOI 作为价格信号：}信息年龄\(\text{AOI}_i(t)\)定义为信息到达物理中心后的时间：
+\textbf{（1）AOEI 作为价格信号：}信息年龄\(\text{AOEI}_i(t)\)定义为信息到达物理中心后的时间：
 \begin{equation}
-\text{AOI}_i(t) = t - t_{\text{arrival},i}
+\text{AOEI}_i(t) = t - t_{\text{arrival},i}
 \end{equation}
-其经济学含义类似于\emph{资产折旧}或\emph{商品保质期}：节点\(i\)的能量状态信息随时间"过时"，决策质量下降。当\(\text{AOI}_i(t)\)较大时，表明该节点的能量信息陈旧，可能处于低能状态却未及时触发传能，导致"逆向选择"；因此，应提高价格信号（优先级）以吸引供能节点。信息价值的时间衰减可建模为：
+其经济学含义类似于\emph{资产折旧}或\emph{商品保质期}：节点\(i\)的能量状态信息随时间"过时"，决策质量下降。当\(\text{AOEI}_i(t)\)较大时，表明该节点的能量信息陈旧，可能处于低能状态却未及时触发传能，导致"逆向选择"；因此，应提高价格信号（优先级）以吸引供能节点。信息价值的时间衰减可建模为：
 \begin{equation}
-V_{\text{info},i}(t) = V_0 \cdot e^{-\lambda \cdot \text{AOI}_i(t)}
+V_{\text{info},i}(t) = V_0 \cdot e^{-\lambda \cdot \text{AOEI}_i(t)}
 \end{equation}
-其中\(\lambda\)为衰减率（类似金融学的折现率），\(V_0\)为新鲜状态下的基础价值。在需要时，信息量可作为放大因子或加法收益项并入“信息价值”指标。在决策函数中，AOI以惩罚项形式内生化：
+其中\(\lambda\)为衰减率（类似金融学的折现率），\(V_0\)为新鲜状态下的基础价值。在需要时，信息量可作为放大因子或加法收益项并入“信息价值”指标。在决策函数中，AOEI 以惩罚项形式内生化：
 \begin{equation}
-C_{\text{AOI},i}(\tau) = w_{\text{aoi}} \cdot \tau \cdot Q_i
+C_{\text{AOEI},i}(\tau) = w_{\text{aoei}} \cdot \tau \cdot Q_i
 \end{equation}
-其中\(\tau\)为传输时长（导致AOI增量），\(Q_i\)为节点\(i\)的能量虚拟队列长度（需求紧迫度），\(w_{\text{aoi}}\)为权重系数（默认0.1）。
+其中\(\tau\)为传输时长（导致 AOEI 增量），\(Q_i\)为节点\(i\)的能量虚拟队列长度（需求紧迫度），\(w_{\text{aoei}}\)为权重系数（默认0.1）。
 
 \textbf{（2）InfoNode 数字账户：}维护三级缓存架构：
 \begin{itemize}
-    \item \emph{L1-最新状态表}：\texttt{latest\_info[node\_id] = \{energy, aoi, position, is\_solar, ...\}}，支持\(O(1)\)查询。
+    \item \emph{L1-最新状态表}：维护能量、AOEI、位置、是否太阳能等关键字段，支持快速查询。
     \item \emph{L2-近期历史}：固定大小1000的FIFO队列，用于趋势分析与异常检测。
     \item \emph{L3-长期归档}：CSV批量写入，支持离线分析与模型训练。
 \end{itemize}
@@ -132,15 +167,26 @@ C_{\text{AOI},i}(\tau) = w_{\text{aoi}} \cdot \tau \cdot Q_i
 
 本文将多节点能量共享建模为\emph{合作博弈}，每个节点在"保守能量"与"参与共享"之间进行策略选择。
 
-\textbf{博弈模型：}设局中人集合为\(\mathcal{N} = \{1,2,\ldots,N\}\)。节点\(i\)的策略空间包括：（i）作为需求方，通过AOI信号表达"支付意愿"\(p_i(t) = f(\text{AOI}_i, E_i, \theta_i)\)；（ii）作为供给方，决定是否响应传能请求及传输时长\(\tau_i \in [0, \tau_{\max}]\)。收益函数为：
+\textbf{博弈模型：}设局中人集合为\(\mathcal{N} = \{1,2,\ldots,N\}\)。节点\(i\)的策略空间包括：（i）作为需求方，通过 AOEI 信号表达"支付意愿"\(p_i(t) = f(\text{AOEI}_i, E_i, \theta_i)\)；（ii）作为供给方，决定是否响应传能请求及传输时长\(\tau_i \in [0, \tau_{\max}]\)。收益函数为：
 \begin{equation}
-u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent},i} - \alpha_3 \text{AOI}_i \cdot \tau
+u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent},i} - \alpha_3 \text{AOEI}_i \cdot \tau
 \end{equation}
-其中\(E_{\text{received},i}\)为节点\(i\)接收的净能量，\(E_{\text{sent},i}\)为作为供能方发送的能量（含损耗），\(\text{AOI}_i \cdot \tau\)为传能时长导致的信息过时成本。
+其中\(E_{\text{received},i}\)为节点\(i\)接收的净能量，\(E_{\text{sent},i}\)为作为供能方发送的能量（含损耗），\(\text{AOEI}_i \cdot \tau\)为传能时长导致的信息过时成本。
 
-\textbf{准纳什均衡：}在AOI价格信号与弱势保护机制下，系统存在\emph{准纳什均衡}（Quasi-Nash Equilibrium），满足：（i）\emph{个体理性}（Individual Rationality）——每个节点的收益不低于不参与合作的收益；（ii）\emph{预算平衡}（Budget Balance）——系统总能量守恒；（iii）\emph{激励相容}（Incentive Compatibility）——节点通过InfoNode如实报告能量状态是其最优策略（因信息透明化消除了隐藏信息的收益）。
+\textbf{准纳什均衡：}在 AOEI 价格信号与弱势保护机制下，系统存在\emph{准纳什均衡}（Quasi-Nash Equilibrium），满足：
+\begin{enumerate}[label=(\roman*), leftmargin=1.6em]
+    \item \emph{个体理性}（Individual Rationality）：每个节点的收益不低于不参与合作的收益；
+    \item \emph{预算平衡}（Budget Balance）：系统总能量守恒；
+    \item \emph{激励相容}（Incentive Compatibility）：节点通过 InfoNode 如实报告能量状态是其最优策略（因信息透明化消除了隐藏信息的收益）。
+\end{enumerate}
 
-\textbf{帕累托改进与边界外移：}传统静态均衡下，系统位于固定的帕累托前沿\(\mathcal{F}_{\text{static}}\)。本文通过三类机制性改造实现\emph{动态帕累托边界外移}：（a）价格内生化——将外生的"谁需要能量"转化为内生的市场定价（AOI驱动），减少信息不对称；（b）信息透明化——InfoNode数字孪生降低逆向选择与道德风险；（c）外部性治理——能量传输专用路由的效率阈值与跳数限制抑制低效多跳的负外部性。形式化地，可达解集满足\(\mathcal{F}_{\text{dynamic}} \supset \mathcal{F}_{\text{static}}\)，即在相同资源约束下，存在\((\eta, \phi) \in \mathcal{F}_{\text{dynamic}}\)使得效率\(\eta\)与公平度\(\phi\)同时优于静态基线。该主张的实证验证见第五章。
+\textbf{帕累托改进与边界外移：}传统静态均衡下，系统位于固定的帕累托前沿 \(\mathcal{F}_{\text{static}}\)。本文通过三类机制性改造实现\emph{动态帕累托边界外移}：
+\begin{enumerate}[label=(\alph*), leftmargin=1.6em]
+    \item 价格内生化：将外生的“谁需要能量”转化为内生的市场定价（AOEI 驱动），减少信息不对称；
+    \item 信息透明化：InfoNode 数字孪生降低逆向选择与道德风险；
+    \item 外部性治理：能量传输专用路由的效率阈值与跳数限制抑制低效多跳的负外部性。
+\end{enumerate}
+形式化地，可达解集满足 \(\mathcal{F}_{\text{dynamic}} \supset \mathcal{F}_{\text{static}}\)，即在相同资源约束下，存在 \((\eta, \phi) \in \mathcal{F}_{\text{dynamic}}\) 使得效率 \(\eta\) 与公平度 \(\phi\) 同时优于静态基线。该主张的实证验证见第五章。
 
 \subsection{Objectives and Constraints}
 系统目标与约束定义如下：
@@ -159,7 +205,7 @@ u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent
 \subsection{问题—映射—目标框架}
 设时刻 \(t\) 的状态包含节点能量、拓扑与链路特性、环境供给与信息状态等。记 AOEI 为 \(A_i(t)\)，InfoNode 状态集为 \(S_i(t)\)，路径效率为 \(\eta(\cdot)\)，传输时长为 \(\tau\)。我们的目标向量包括：（i）效率——提升有效接收能量占比、降低无效损耗；（ii）均衡/公平——降低方差或变异系数（CV），对低能分位或关键任务节点提供保护；（iii）时效——提升关键状态的新鲜度；（iv）寿命——延长首个节点死亡时间。映射原则为：将信息新鲜度—价值—紧急性价格化（内生化）为触发与排序依据；在需要时参考“信息价值”指标（由 AOEI 与信息量综合刻画）；以数字孪生账户提高状态可得性与透明度\cite{digitalTwinSurvey}；通过路径治理抑制负外部性（低效多跳）；在预算与阈值约束下进行强度匹配与公平保护；对非平稳供给实施鲁棒调节\cite{marketMechanismWSN}。
 
-\subsection{E1：信息价值定价缺失 \texorpdfstring{$\rightarrow$}{→} T1：触发/排序/预算清算 \texorpdfstring{$\rightarrow$}{→} M1：AOI定价与智能触发}
+\subsection{E1：信息价值定价缺失 \texorpdfstring{$\rightarrow$}{→} T1：触发/排序/预算清算 \texorpdfstring{$\rightarrow$}{→} M1：AOEI定价与智能触发}
 \textbf{经济学问题（E1）}：缺乏可解释的价格信号会导致传能时机与对象选择失准，出现"该救的不救、该等的不等"的资源错配与市场失灵。
 
 \textbf{技术问题（T1）}：如何将信息新鲜度、节点能量紧迫性与系统均衡需求内生化为触发与排序的价格化规则？
@@ -296,7 +342,7 @@ u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent
 & 拓扑类型 & 网格/随机/能量空洞 \\
 & 通信半径 & 30 m \\
 \hline
-\multicolumn{3}{l}{\emph{能量参数（\texttt{SensorNode}）}} \\
+\multicolumn{3}{l}{\emph{能量参数（节点）}} \\
 & 初始能量 & 20000 J \\
 & 电池容量 & 3.5 mAh \\
 & 电压 & 3.7 V \\
@@ -312,19 +358,19 @@ u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent
 & 日照时段 & 6:00-18:00 \\
 & 辐照模型 & \(G(t) = G_{\max}\sin(\pi(t-360)/720)\) \\
 \hline
-\multicolumn{3}{l}{\emph{被动传能（\texttt{PassiveTransferManager}）}} \\
+\multicolumn{3}{l}{\emph{被动传能}} \\
 & 检查间隔 \(T_{\text{check}}\) & 10 分钟 \\
 & 临界比例 \(r_{\text{crit}}\) & 0.2 \\
 & 能量方差阈值 \(\text{CV}_{\text{th}}\) & 0.3 \\
 & 冷却期 \(T_{\text{cool}}\) & 30 分钟 \\
 \hline
-\multicolumn{3}{l}{\emph{动态K值（\texttt{lookahead}）}} \\
+\multicolumn{3}{l}{\emph{动态K值（前瞻优化）}} \\
 & 前瞻窗口 \(T_h\) & 60 分钟 \\
 & 滞回阈值 \(h\) & 0.05 \\
 & \(K_{\max}\) & 5 \\
 \hline
-\multicolumn{3}{l}{\emph{AOI与调度（\texttt{DurationAwareLyapunovScheduler}）}} \\
-& AOI权重 \(w_{\text{aoi}}\) & 0.1 \\
+\multicolumn{3}{l}{\emph{AOEI与调度（Lyapunov变体）}} \\
+& AOEI权重 \(w_{\text{aoei}}\) & 0.1 \\
 & 信息量权重 \(w_{\text{info}}\) & 0.05 \\
 & Lyapunov参数 \(V\) & 100.0 \\
 \hline
@@ -345,7 +391,7 @@ u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent
 
 \textbf{能量采集与负载：}启用日内太阳能供给的时变模型（6:00-18:00正弦曲线），设置常规感知/通信负载，体现非平稳供需\cite{energyHarvestSurvey}。
 
-\textbf{路由与调度：}被动传能触发以AOI与能量紧迫度主导；能量传输专用路由限定最大跳数5跳、效率阈值0.05；前瞻K值优化窗口60分钟。
+\textbf{路由与调度：}被动传能触发以 AOEI 与能量紧迫度主导；能量传输专用路由限定最大跳数5跳、效率阈值0.05；前瞻K值优化窗口60分钟。
 
 \subsection{Metrics：评估指标}
 为全面评估各机制在多目标下的效益，本文报告：
@@ -355,7 +401,7 @@ u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent
     \item \textbf{能量效率}（有效接收/总消耗）：越高越好；同时报告单位能量收益（接收/发送）；
     \item \textbf{传输效率}（路径效率分布与低效路径占比）：越高越好、低效占比越低越好；
     \item \textbf{公平性}（弱势保护指标）：低能分位节点的服务覆盖率/最低服务频度；
-    \item \textbf{信息新鲜度}（AoEI/AoI相关）：越新鲜越好（越低龄越好）；必要时报告\emph{信息价值}（AOEI×信息量）作为参考；
+    \item \textbf{信息新鲜度}（AOEI相关）：越新鲜越好（越低龄越好）；必要时报告\emph{信息价值}（AOEI×信息量）作为参考；
     \item \textbf{稳健性}（昼/夜分段表现、振荡幅度、重配频率）：越稳健越好。
 \end{itemize}
 
@@ -371,31 +417,31 @@ u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent
 \hline
 \textbf{基线} & \textbf{核心特征} & \textbf{实现} \\
 \hline
-无能量共享 & 仅依赖太阳能采集与自然消耗，下界参考 & \texttt{enable\_sharing=False} \\
+无能量共享 & 仅依赖太阳能采集与自然消耗，下界参考 & 关闭能量共享 \\
 \hline
-Lyapunov & 虚拟队列优化，最小化能量方差：\(Q_i(t+1) = [Q_i + \theta_i - E_i]^+\)，传能决策：\(\max \sum Q_j \Delta E_j\) & \texttt{LyapunovScheduler} \\
+Lyapunov & 虚拟队列优化，最小化能量方差：\(Q_i(t+1) = [Q_i + \theta_i - E_i]^+\)，传能决策：\(\max \sum Q_j \Delta E_j\) & Lyapunov 调度器 \\
 \hline
-DurationAware & Lyapunov + 时长成本惩罚：\(C = Q_j E_j - V \cdot \text{loss} - w_{\tau} \tau\) & \texttt{DurationAwareLyapunovScheduler} \\
+DurationAware & Lyapunov + 时长成本惩罚：\(C = Q_j E_j - V \cdot \text{loss} - w_{\tau} \tau\) & 时长感知 Lyapunov 调度器 \\
 \hline
-DQN & 离散动作空间：\(a \in \{0,1,\ldots,K_{\max}\}\)；状态：\((E, \text{CV}, \text{AOI})\)；奖励：\(r = -\text{CV} + 0.1 E_{\text{eff}}\)；训练1000轮，\(\epsilon\)-greedy=0.1 & PyTorch实现 \\
+DQN & 离散动作空间：\(a \in \{0,1,\ldots,K_{\max}\}\)；状态：\((E, \text{CV}, \text{AOEI})\)；奖励：\(r = -\text{CV} + 0.1 E_{\text{eff}}\)；训练1000轮，\(\epsilon\)-greedy=0.1 & PyTorch实现 \\
 \hline
 DDPG & 连续动作空间：\(a \in [0, \tau_{\max}]\)；Actor-Critic架构；奖励同DQN；Ornstein-Uhlenbeck噪声；训练1000轮 & PyTorch实现 \\
 \hline
-\textbf{本文方法} & Lyapunov + AOI + InfoNode + PassiveTransfer + EETOR + lookahead + 弱势保护 & \textbf{全模块集成} \\
+\textbf{本文方法} & Lyapunov + AOEI + InfoNode + PassiveTransfer + EETOR + lookahead + 弱势保护 & \textbf{全模块集成} \\
 \hline
 \end{tabular}
 \end{table}
 
-\textbf{公平性保障：}所有方法使用相同的能量模型（传输效率、消耗、采集）、拓扑配置（节点位置、初始能量）、评估指标（寿命、CV、效率、AOI）及随机种子（10次重复）。深度学习基线（DQN/DDPG）的训练与测试协议统一：训练集为前5000分钟，测试集为后5080分钟；超参数遵循各方法的标准设置\cite{drlSurvey}。
+\textbf{公平性保障：}所有方法使用相同的能量模型（传输效率、消耗、采集）、拓扑配置（节点位置、初始能量）、评估指标（寿命、CV、效率、AOEI）及随机种子（10次重复）。深度学习基线（DQN/DDPG）的训练与测试协议统一：训练集为前5000分钟，测试集为后5080分钟；超参数遵循各方法的标准设置\cite{drlSurvey}。
 
 \subsection{Ablation Studies：消融与变体}
 为洞察各机制贡献，设计如下消融实验：
 \begin{itemize}
-    \item \textbf{去除AOI价格信号}：以固定或静态阈值替代价格化触发（即不使用\texttt{PassiveTransferManager}的AOI相关逻辑），考察触发准确度与效率变化；
+    \item \textbf{去除AOEI价格信号}：以固定或静态阈值替代价格化触发（即不启用被动触发逻辑的 AOEI 因子），考察触发准确度与效率变化；
     \item \textbf{去除InfoNode/机会主义上报}：改为周期上报（如每30分钟）或无上报，考察通信能耗与冗余变化；若同时去除 InfoNode，会降低信息可得性；
-    \item \textbf{去除去重/动态等待}：禁用信息去重与动态等待上限（\texttt{PathBasedInfoCollector}中的相关逻辑），计算信息冗余与上报负载对性能的影响；
+    \item \textbf{去除去重/动态等待}：禁用信息去重与动态等待上限（路径搭载采集组件中的相关逻辑），计算信息冗余与上报负载对性能的影响；
     \item \textbf{去除路由约束}（无效率阈值/最大跳数）：允许任意低效路径，观察低效多跳比例与系统能效变化；
-    \item \textbf{固定K值}：替换前瞻性K值优化（\texttt{lookahead}）为固定值\(K=3\)，对比单位能量收益与自适应性能；
+    \item \textbf{固定K值}：替换前瞻性K值优化为固定值\(K=3\)，对比单位能量收益与自适应性能；
     \item \textbf{去除弱势权重/保护规则}：不对低能节点进行优先保护，考察公平性（CV、最低能量）与最低服务频度的变化；
     \item \textbf{静态预算/阈值}：替换分位数阈值与动态预算为静态配置，观察昼/夜鲁棒性与振荡幅度。
 \end{itemize}
@@ -404,7 +450,7 @@ DDPG & 连续动作空间：\(a \in [0, \tau_{\max}]\)；Actor-Critic架构；�
 可视化与前沿分析用于直观呈现机制影响：
 \begin{itemize}
     \item \textbf{拓扑与路径图}：展示传能路径分布、低效多跳抑制效果与弱势保护的空间特征；
-    \item \textbf{时序曲线}：平均/最小能量、CV、效率、触发频率、预算使用率、AoEI 指标的时间演化；
+    \item \textbf{时序曲线}：平均/最小能量、CV、效率、触发频率、预算使用率、AOEI 指标的时间演化；
     \item \textbf{效率分布与占比}：路径效率直方图与低效区间占比（随消融/基线比较）；
     \item \textbf{Pareto 图}：以（效率、均衡/公平）、（寿命、效率）、（新鲜度、开销）等二维组合绘制前沿，展示相对基线的边界外移\cite{paretoFrontier}。
 \end{itemize}
