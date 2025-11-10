@@ -698,9 +698,9 @@ class AdaptiveDurationLyapunovScheduler(BaseScheduler):
     
     def _compute_duration_score(self, donor, receiver, path, eta, E_bar, Q_r, duration):
         """
-        计算特定传输时长的Lyapunov得分（纯能量优化）
+        计算特定传输时长的Lyapunov得分（考虑信息价值）
         
-        得分 = delivered × Q[r] - V × loss
+        得分 = delivered × Q[r] - V × loss + 信息价值奖励
         
         :param duration: 传输时长（分钟）
         :return: (score, energy_delivered, energy_loss)
@@ -715,8 +715,25 @@ class AdaptiveDurationLyapunovScheduler(BaseScheduler):
         # Lyapunov得分计算
         Q_normalized = Q_r / E_bar if E_bar > 0 else 0
         
-        # 得分 = 能量收益 - 能量损耗惩罚
-        score = energy_delivered * Q_normalized - self.V * energy_loss
+        # 基础得分 = 能量收益 - 能量损耗惩罚
+        base_score = energy_delivered * Q_normalized - self.V * energy_loss
+        
+        # 信息价值奖励（如果可用）
+        info_bonus = 0.0
+        if hasattr(self, 'path_collector') and self.path_collector and hasattr(self, 'current_time'):
+            receiver_info = self.nim.get_node_info(receiver.node_id)
+            if receiver_info:
+                is_reported = receiver_info.get('info_is_reported', True)
+                if not is_reported:
+                    # 使用信息价值判断是否有未上报信息
+                    info_value = self.path_collector.calculate_info_value(receiver_info, self.current_time)
+                    if info_value > 0:
+                        # 信息价值奖励：信息价值越大，奖励越大（归一化）
+                        max_info_volume = 1000000  # 默认最大值
+                        normalized_value = min(info_value / max_info_volume, 1.0)
+                        info_bonus = normalized_value * 0.1 * Q_normalized  # 信息价值奖励系数
+        
+        score = base_score + info_bonus
         
         return score, energy_delivered, energy_loss
     
@@ -727,6 +744,9 @@ class AdaptiveDurationLyapunovScheduler(BaseScheduler):
         对每个donor-receiver对，尝试不同的传输时长（1-5分钟），
         选择Lyapunov得分最高的时长
         """
+        # 保存当前时间，用于信息价值计算
+        self.current_time = t
+        
         # 从信息表创建InfoNode
         info_nodes = self.nim.get_info_nodes()
         id2node = {n.node_id: n for n in network.nodes}

@@ -328,6 +328,7 @@ class DQNScheduler(BaseScheduler):
         4. 平均能量
         5. 最小能量
         6. 时间步（归一化）
+        7. 所有节点的归一化信息价值（如果可用）
         
         :return: 状态向量
         """
@@ -353,14 +354,27 @@ class DQNScheduler(BaseScheduler):
         # 时间步（归一化，假设最大10080分钟=7天）
         normalized_time = min(t / 10080.0, 1.0)
         
+        # 信息价值（如果可用）
+        normalized_info_values = np.zeros(len(nodes))
+        if hasattr(self, 'path_collector') and self.path_collector:
+            max_info_volume = 1000000  # 默认最大值
+            for i, node in enumerate(nodes):
+                node_info = self.nim.get_node_info(node.node_id)
+                if node_info:
+                    is_reported = node_info.get('info_is_reported', True)
+                    if not is_reported:
+                        info_value = self.path_collector.calculate_info_value(node_info, t)
+                        normalized_info_values[i] = min(info_value / max_info_volume, 1.0)
+        
         # 构建状态向量
         state = np.concatenate([
-            normalized_energies,  # 各节点能量
-            [mean_energy],        # 平均能量
-            [std_energy],         # 能量标准差
-            [min_energy],         # 最小能量
-            [low_energy_ratio],   # 低能量节点比例
-            [normalized_time]     # 时间步
+            normalized_energies,      # 各节点能量
+            [mean_energy],            # 平均能量
+            [std_energy],             # 能量标准差
+            [min_energy],             # 最小能量
+            [low_energy_ratio],       # 低能量节点比例
+            [normalized_time],        # 时间步
+            normalized_info_values   # 各节点信息价值（归一化）
         ])
         
         return state
