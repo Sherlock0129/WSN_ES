@@ -128,16 +128,21 @@ class BaseScheduler(object):
         # 3. 能量传输效率 - 权重 0.2
         # 传输效率越高越好
         delivered = stats.get('delivered_total', 0.0)
-        sent = delivered + stats.get('total_loss', 0.0)
+        sent = stats.get('sent_total', 0.0)  # 直接获取发送总能量
         
         if sent > 0:
+            # 有传输：计算效率并评分
             efficiency = delivered / sent
+            # 效率分数：效率范围[0, 1]，映射到[-20, +20]
+            # 效率高于50%得正分，低于50%得负分
+            efficiency_score = (efficiency - 0.5) * 0.2 * 100
         else:
+            # 没有传输：给中性分数（0分）
+            # 原因可能是：网络均衡、所有路径效率<10%、节点锁定等
+            # 这些都是正常情况，不应该惩罚
             efficiency = 0.0
+            efficiency_score = 0.0
         
-        # 效率分数：效率范围[0, 1]，映射到[-20, +20]
-        # 效率高于50%得正分，低于50%得负分
-        efficiency_score = (efficiency - 0.5) * 0.2 * 100
         feedback_score += efficiency_score
         details['efficiency_score'] = efficiency_score
         details['efficiency'] = efficiency
@@ -1015,6 +1020,213 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
                 quota -= 1
         
         return plans, all_candidates
+
+
+class AdaptiveDurationAwareLyapunovScheduler(DurationAwareLyapunovScheduler):
+    """
+    自适应传输时长感知的Lyapunov调度器
+    
+    核心创新：结合两个维度的优化
+    1. 继承DurationAwareLyapunovScheduler的传输时长优化（能量+AoI+信息量多目标）
+    2. 增加自适应参数调整（根据反馈动态调整V参数）
+    3. 多维度自适应：响应均衡性、效率、存活率等多个指标
+    4. 带记忆的平滑调整：避免参数震荡
+    
+    自适应策略：
+    - 效率低 → 增大V（更重视减少损耗，选择更近的路径）
+    - 均衡性差 → 减小V（更重视能量均衡，增加传输量）
+    - 存活率下降 → 减小V（优先救活节点）
+    """
+    
+    def __init__(self, node_info_manager, V=0.5, K=2, max_hops=5,
+                 min_duration=1, max_duration=5,
+                 w_aoi=0.1, w_info=0.05, info_collection_rate=10000.0,
+                 window_size=10, V_min=0.1, V_max=2.0,
+                 adjust_rate=0.1, sensitivity=2.0):
+        """
+        初始化自适应传输时长感知Lyapunov调度器
+        
+        :param node_info_manager: 节点信息管理器
+        :param V: 初始V参数（能量-损耗权衡）
+        :param K: 最大捐能者数量
+        :param max_hops: 最大跳数
+        :param min_duration: 最小传输时长（分钟）
+        :param max_duration: 最大传输时长（分钟）
+        :param w_aoi: AoI惩罚权重
+        :param w_info: 信息量奖励权重
+        :param info_collection_rate: 信息采集速率（bits/分钟）
+        :param window_size: 反馈窗口大小（记忆最近N次）
+        :param V_min: V的最小值（不能太小，避免过度传输）
+        :param V_max: V的最大值（不能太大，避免过度保守）
+        :param adjust_rate: 参数调整速率（0-1，越大调整越快）
+        :param sensitivity: 反馈敏感度（触发调整的阈值）
+        """
+        # 初始化父类（DurationAwareLyapunovScheduler）
+        DurationAwareLyapunovScheduler.__init__(
+            self, node_info_manager, V, K, max_hops,
+            min_duration, max_duration,
+            w_aoi, w_info, info_collection_rate
+        )
+        
+        # 自适应参数（从AdaptiveLyapunovScheduler借鉴）
+        self.V_initial = float(V)
+        self.V_min = float(V_min)
+        self.V_max = float(V_max)
+        self.adjust_rate = float(adjust_rate)
+        self.sensitivity = float(sensitivity)
+        
+        # 反馈历史记录
+        self.window_size = int(window_size)
+        self.recent_feedbacks = []  # 最近N次的总分
+        self.recent_details = []    # 最近N次的详细信息
+        
+        # 统计信息
+        self.total_adjustments = 0  # 总调整次数
+        self.adjustment_history = []  # 调整历史：[(time, old_V, new_V, reason)]
+        
+        # 性能指标
+        self.best_feedback_score = float('-inf')
+        self.worst_feedback_score = float('inf')
+    
+    def post_step(self, network, t, feedback):
+        """
+        接收反馈并自适应调整参数
+        
+        :param network: 网络对象
+        :param t: 当前时间步
+        :param feedback: 反馈信息（来自compute_network_feedback_score）
+        """
+        if feedback is None or not isinstance(feedback, dict):
+            return
+        
+        # 提取反馈分数和详细信息
+        feedback_score = feedback.get('total_score', 0.0)
+        details = feedback.get('details', {}) if 'details' in feedback else feedback
+        
+        # 记录到历史
+        self.recent_feedbacks.append(feedback_score)
+        self.recent_details.append(details)
+        
+        # 维持窗口大小
+        if len(self.recent_feedbacks) > self.window_size:
+            self.recent_feedbacks.pop(0)
+            self.recent_details.pop(0)
+        
+        # 更新最佳/最差记录
+        if feedback_score > self.best_feedback_score:
+            self.best_feedback_score = feedback_score
+        if feedback_score < self.worst_feedback_score:
+            self.worst_feedback_score = feedback_score
+        
+        # 只有积累足够历史后才开始调整
+        if len(self.recent_feedbacks) < min(5, self.window_size):
+            return
+        
+        # 计算平均反馈和趋势
+        avg_feedback = float(np.mean(self.recent_feedbacks))
+        recent_trend = float(np.mean(self.recent_feedbacks[-3:])) if len(self.recent_feedbacks) >= 3 else avg_feedback
+        
+        # 提取关键指标
+        balance_score = details.get('balance_score', 0.0)
+        efficiency_score = details.get('efficiency_score', 0.0)
+        survival_score = details.get('survival_score', 0.0)
+        efficiency = details.get('efficiency', 0.5)
+        
+        # 决策：是否需要调整V
+        old_V = self.V
+        adjustment_reason = None
+        
+        # 策略1：持续负反馈 → 需要调整
+        if avg_feedback < -self.sensitivity:
+            # 诊断问题所在
+            if efficiency_score < -2.0:
+                # 问题：传输效率太低，损耗过大
+                # 解决：增大V，更重视损耗，倾向选择更近的路径
+                self.V = min(self.V_max, self.V * (1.0 + self.adjust_rate))
+                adjustment_reason = f"效率低({efficiency:.2f}) → 增大V(减少损耗)"
+                
+            elif balance_score < -2.0:
+                # 问题：能量分布不均衡
+                # 解决：减小V，更重视均衡，增加给低能量节点的传输
+                self.V = max(self.V_min, self.V * (1.0 - self.adjust_rate))
+                adjustment_reason = f"均衡差(std变化{details.get('std_change', 0):.2f}) → 减小V(增强均衡)"
+                
+            elif survival_score < -1.0:
+                # 问题：节点死亡
+                # 解决：减小V，优先救活节点
+                self.V = max(self.V_min, self.V * (1.0 - self.adjust_rate * 1.5))
+                adjustment_reason = f"节点死亡({details.get('alive_change', 0)}) → 减小V(优先救活)"
+        
+        # 策略2：趋势恶化 → 预防性调整
+        elif recent_trend < avg_feedback - 1.0:
+            # 最近趋势明显下降
+            if efficiency < 0.3:
+                # 效率过低且趋势恶化
+                self.V = min(self.V_max, self.V * (1.0 + self.adjust_rate * 0.5))
+                adjustment_reason = "趋势恶化+效率低 → 轻微增大V"
+        
+        # 策略3：持续正反馈但可以优化 → 微调
+        elif avg_feedback > self.sensitivity:
+            # 表现良好，但检查是否可以进一步优化
+            if efficiency > 0.7 and balance_score > 0:
+                # 效率很高且均衡性好，可以稍微减小V增加吞吐量
+                if self.V > self.V_initial * 0.8:
+                    self.V = max(self.V_min, self.V * (1.0 - self.adjust_rate * 0.3))
+                    adjustment_reason = "表现优秀 → 轻微减小V(增加吞吐)"
+        
+        # 策略4：重置机制 → 如果长期表现不佳，重置到初始值
+        if len(self.recent_feedbacks) >= self.window_size:
+            all_negative = all(score < 0 for score in self.recent_feedbacks[-5:])
+            if all_negative and abs(self.V - self.V_initial) > 0.5:
+                self.V = self.V_initial
+                adjustment_reason = "长期不佳 → 重置V到初始值"
+        
+        # 记录调整
+        if adjustment_reason is not None:
+            self.total_adjustments += 1
+            self.adjustment_history.append((t, old_V, self.V, adjustment_reason))
+            print(f"[自适应@t={t}] V: {old_V:.3f} → {self.V:.3f} | {adjustment_reason}")
+            print(f"           反馈: 总分={feedback_score:.2f}, 均衡={balance_score:.2f}, "
+                  f"效率={efficiency_score:.2f}(η={efficiency:.2f}), 存活={survival_score:.2f}")
+    
+    def get_adaptation_stats(self):
+        """
+        获取自适应统计信息
+        
+        :return: 统计信息字典
+        """
+        return {
+            'current_V': self.V,
+            'initial_V': self.V_initial,
+            'V_min': self.V_min,
+            'V_max': self.V_max,
+            'total_adjustments': self.total_adjustments,
+            'adjustment_history': self.adjustment_history,
+            'recent_feedbacks': list(self.recent_feedbacks),
+            'avg_feedback': float(np.mean(self.recent_feedbacks)) if self.recent_feedbacks else 0.0,
+            'best_feedback': self.best_feedback_score,
+            'worst_feedback': self.worst_feedback_score
+        }
+    
+    def print_adaptation_summary(self):
+        """打印自适应调整摘要"""
+        stats = self.get_adaptation_stats()
+        print("\n" + "="*60)
+        print("自适应时长感知Lyapunov调度器 - 适应性总结")
+        print("="*60)
+        print(f"初始V: {stats['initial_V']:.3f}")
+        print(f"当前V: {stats['current_V']:.3f}")
+        print(f"V范围: [{stats['V_min']:.3f}, {stats['V_max']:.3f}]")
+        print(f"总调整次数: {stats['total_adjustments']}")
+        print(f"平均反馈分数: {stats['avg_feedback']:.2f}")
+        print(f"最佳反馈分数: {stats['best_feedback']:.2f}")
+        print(f"最差反馈分数: {stats['worst_feedback']:.2f}")
+        
+        if stats['adjustment_history']:
+            print(f"\n最近5次调整:")
+            for t, old_v, new_v, reason in stats['adjustment_history'][-5:]:
+                print(f"  t={t}: {old_v:.3f}→{new_v:.3f} | {reason}")
+        print("="*60 + "\n")
 
 
 class PowerControlScheduler(BaseScheduler):

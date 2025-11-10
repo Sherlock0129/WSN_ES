@@ -40,7 +40,7 @@ class SimulationStats:
         self.feedback_times: List[int] = []  # 记录对应的时间步
     
     def compute_step_stats(self, plans: List[Dict], pre_energies: np.ndarray, 
-                          pre_received_total: float, network) -> Dict[str, float]:
+                          pre_received_total: float, pre_transferred_total: float, network) -> Dict[str, float]:
         """
         计算单步统计信息
         
@@ -48,6 +48,7 @@ class SimulationStats:
             plans: 能量传输计划列表
             pre_energies: 传输前的节点能量数组
             pre_received_total: 传输前的总接收能量
+            pre_transferred_total: 传输前的总发送能量
             network: 网络对象
             
         Returns:
@@ -64,14 +65,35 @@ class SimulationStats:
             pre_std = float(np.std(pre_energies))
             post_std = float(np.std(post_energies))
 
-        sent_total = sum(p["donor"].E_char for p in plans)  # 本轮各 donor 实际下发的名义能量
+        # 本轮各 donor 实际下发的能量
+        # 应该从transferred_history获取实际传输的能量，而不是从plans计算
+        # 因为plans中的传输可能因能量不足而被跳过
+        post_transferred_total = sum(sum(n.transferred_history) for n in network.nodes)
+        sent_total = max(0.0, post_transferred_total - pre_transferred_total)  # 本轮实际发送
+        
         post_received_total = sum(sum(n.received_history) for n in network.nodes)
-        delivered_total = max(0.0, post_received_total - pre_received_total)
+        
+        # 计算delivered_total，并检测异常
+        diff = post_received_total - pre_received_total
+        if diff < 0:
+            print(f"[异常] received_history减少了！diff={diff:.2f}J")
+            print(f"  pre_received_total = {pre_received_total:.2f}J")
+            print(f"  post_received_total = {post_received_total:.2f}J")
+        
+        delivered_total = max(0.0, diff)
         total_loss = max(0.0, sent_total - delivered_total)
+        
+        # 检测效率异常：有发送但无接收
+        if sent_total > 0 and delivered_total == 0:
+            print(f"[警告] 效率为0：有发送但无接收！")
+            print(f"  sent_total = {sent_total:.2f}J (来自 {len(plans)} 个计划)")
+            print(f"  delivered_total = {delivered_total:.2f}J")
+            print(f"  可能原因：所有donor能量不足被跳过")
 
         return {
             "pre_std": pre_std,
             "post_std": post_std,
+            "sent_total": sent_total,           # 新增：直接返回发送总能量
             "delivered_total": delivered_total,
             "total_loss": total_loss
         }
@@ -316,13 +338,29 @@ class SimulationStats:
             print("No feedback score data available for plotting")
             return
         
+        # 确保matplotlib使用默认配置，避免颜色被覆盖
+        import matplotlib
+        matplotlib.rcParams.update(matplotlib.rcParamsDefault)
+        
         # 提取数据
         time_steps = [record['time_step'] for record in self.feedback_scores]
         total_scores = [record['total_score'] for record in self.feedback_scores]
-        balance_scores = [record['balance_score'] for record in self.feedback_scores]
-        survival_scores = [record['survival_score'] for record in self.feedback_scores]
-        efficiency_scores = [record['efficiency_score'] for record in self.feedback_scores]
-        energy_scores = [record['energy_score'] for record in self.feedback_scores]
+        balance_scores = [record.get('balance_score', 0.0) for record in self.feedback_scores]
+        survival_scores = [record.get('survival_score', 0.0) for record in self.feedback_scores]
+        efficiency_scores = [record.get('efficiency_score', 0.0) for record in self.feedback_scores]
+        energy_scores = [record.get('energy_score', 0.0) for record in self.feedback_scores]
+        
+        # 打印数据统计（调试用）
+        print(f"\n[Feedback Scores Debug Info]")
+        print(f"Total records: {len(self.feedback_scores)}")
+        print(f"Balance scores - min: {min(balance_scores):.2f}, max: {max(balance_scores):.2f}, avg: {np.mean(balance_scores):.2f}")
+        print(f"  Values: {[round(v, 2) for v in balance_scores[:10]]}{' ...' if len(balance_scores) > 10 else ''}")
+        print(f"Survival scores - min: {min(survival_scores):.2f}, max: {max(survival_scores):.2f}, avg: {np.mean(survival_scores):.2f}")
+        print(f"  Values: {[round(v, 2) for v in survival_scores[:10]]}{' ...' if len(survival_scores) > 10 else ''}")
+        print(f"Efficiency scores - min: {min(efficiency_scores):.2f}, max: {max(efficiency_scores):.2f}, avg: {np.mean(efficiency_scores):.2f}")
+        print(f"  Values: {[round(v, 2) for v in efficiency_scores[:10]]}{' ...' if len(efficiency_scores) > 10 else ''}")
+        print(f"Energy scores - min: {min(energy_scores):.2f}, max: {max(energy_scores):.2f}, avg: {np.mean(energy_scores):.2f}")
+        print(f"  Values: {[round(v, 2) for v in energy_scores[:10]]}{' ...' if len(energy_scores) > 10 else ''}\n")
         
         # 创建图表（3行1列）
         fig, axes = plt.subplots(3, 1, figsize=(14, 12))
@@ -347,20 +385,38 @@ class SimulationStats:
         
         # 2. 各维度分数堆叠图
         ax2 = axes[1]
-        ax2.plot(time_steps, balance_scores, marker='s', linestyle='-', 
-                 linewidth=1.5, markersize=3, label='Balance Score', alpha=0.8)
-        ax2.plot(time_steps, survival_scores, marker='^', linestyle='-', 
-                 linewidth=1.5, markersize=3, label='Survival Score', alpha=0.8)
-        ax2.plot(time_steps, efficiency_scores, marker='o', linestyle='-', 
-                 linewidth=1.5, markersize=3, label='Efficiency Score', alpha=0.8)
-        ax2.plot(time_steps, energy_scores, marker='d', linestyle='-', 
-                 linewidth=1.5, markersize=3, label='Energy Level Score', alpha=0.8)
-        ax2.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+        
+        # 定义明确的颜色和样式
+        colors = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D']
+        markers = ['s', '^', 'o', 'd']
+        labels = ['Balance Score (40%)', 'Survival Score (30%)', 
+                  'Efficiency Score (20%)', 'Energy Level Score (10%)']
+        data_series = [balance_scores, survival_scores, efficiency_scores, energy_scores]
+        
+        # 绘制每条线，使用显式的颜色参数
+        for i, (data, label, color, marker) in enumerate(zip(data_series, labels, colors, markers)):
+            line = ax2.plot(time_steps, data, 
+                           marker=marker, 
+                           linestyle='-', 
+                           linewidth=2.5, 
+                           markersize=5, 
+                           label=label, 
+                           alpha=0.9,
+                           color=color,
+                           zorder=10-i)  # 确保线条分层显示
+            print(f"  Plotted {label} with color {color}")
+        ax2.axhline(y=0, color='black', linestyle='--', linewidth=1.5, alpha=0.7)
         ax2.set_title('Dimensional Scores Over Time', fontsize=12, fontweight='bold')
         ax2.set_xlabel('Time Step', fontsize=10)
         ax2.set_ylabel('Score', fontsize=10)
-        ax2.legend(loc='best', ncol=2)
-        ax2.grid(True, linestyle='--', alpha=0.5)
+        ax2.legend(loc='best', ncol=2, fontsize=9, framealpha=0.9)
+        ax2.grid(True, linestyle='--', alpha=0.3)
+        
+        # 添加注释说明权重
+        info_text = 'Weights: Balance=40%, Survival=30%, Efficiency=20%, Energy=10%'
+        ax2.text(0.02, 0.98, info_text, transform=ax2.transAxes, 
+                fontsize=8, verticalalignment='top', 
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
         
         # 3. 正/负/中性影响分布统计（柱状图）
         ax3 = axes[2]

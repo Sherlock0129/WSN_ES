@@ -102,9 +102,9 @@ class NetworkConfig:
     center_initial_energy_multiplier: float = 10.0  # 物理中心初始能量倍数（相对普通节点）
     
     # 能量分配模式配置
-    energy_distribution_mode: str = "uniform"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
-    center_energy: float = 40000.0      # 中心节点能量（最高，当energy_distribution_mode="center_decreasing"时使用）
-    edge_energy: float = 30000.0        # 边缘节点能量（最低，当energy_distribution_mode="center_decreasing"时使用）
+    energy_distribution_mode: str = "center_decreasing"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
+    center_energy: float = 43000.0      # 中心节点能量（最高，当energy_distribution_mode="center_decreasing"时使用）
+    edge_energy: float = 40000.0        # 边缘节点能量（最低，当energy_distribution_mode="center_decreasing"时使用）
 
 
 @dataclass
@@ -162,12 +162,14 @@ class SchedulerConfig:
     - ClusterScheduler：类似 LEACH 的轮换簇首与簇内均衡；
     - PredictionScheduler：基于能量趋势/滑动估计的前瞻调度；
     - PowerControlScheduler：以达成目标效率 `target_eta` 为导向的功率/送能控制；
-    - DurationAwareLyapunovScheduler：传输时长优化的Lyapunov调度器，将传输时长作为优化维度，支持节点锁定机制。
+    - DurationAwareLyapunovScheduler：传输时长优化的Lyapunov调度器，将传输时长作为优化维度，支持节点锁定机制；
+    - AdaptiveDurationAwareLyapunovScheduler：结合自适应参数调整和传输时长优化的Lyapunov调度器（高级推荐）。
     """
 
     # scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
     # scheduler_type: str = "AdaptiveLyapunovScheduler"  # 默认调度器类型
-    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
+    # scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
+    scheduler_type: str = "AdaptiveDurationAwareLyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
@@ -218,6 +220,19 @@ class SchedulerConfig:
     duration_w_aoi: float = 0.02             # AoI惩罚权重（从0.1降至0.02，减小AoI对长传输的惩罚）
     duration_w_info: float = 0.1             # 信息量奖励权重（从0.05提升至0.1，增强信息奖励）
     duration_info_rate: float = 10000.0      # 信息采集速率（bits/分钟），用于计算传输期间累积的信息量
+    
+    # AdaptiveDurationAwareLyapunovScheduler 超参数（结合自适应参数调整和传输时长优化）
+    # 
+    # 核心特性：融合两个维度的优化
+    # - 继承DurationAwareLyapunovScheduler的传输时长优化（能量+AoI+信息量多目标）
+    # - 增加AdaptiveLyapunovScheduler的自适应参数调整（根据反馈动态调整V参数）
+    # - 多维度自适应：响应均衡性、效率、存活率等多个指标
+    # - 带记忆的平滑调整：避免参数震荡
+    #
+    # 该调度器结合了以下参数：
+    # - adaptive_lyapunov_v, adaptive_lyapunov_k (初始值)
+    # - adaptive_window_size, adaptive_v_min, adaptive_v_max, adaptive_adjust_rate, adaptive_sensitivity (自适应参数)
+    # - duration_min, duration_max, duration_w_aoi, duration_w_info, duration_info_rate (传输时长优化参数)
 
     # DQN深度强化学习调度器超参数（离散动作空间：1-10分钟）
     enable_dqn: bool = False                 # 是否启用DQN调度器
@@ -648,6 +663,26 @@ class ConfigManager:
                 "w_aoi": self.scheduler_config.duration_w_aoi,            # AoI惩罚权重
                 "w_info": self.scheduler_config.duration_w_info,          # 信息量奖励权重
                 "info_collection_rate": self.scheduler_config.duration_info_rate  # 信息采集速率（bits/分钟）
+            }
+        elif scheduler_type == "AdaptiveDurationAwareLyapunovScheduler":
+            # AdaptiveDurationAwareLyapunovScheduler参数（结合自适应和传输时长优化）
+            # 融合AdaptiveLyapunovScheduler和DurationAwareLyapunovScheduler的所有参数
+            return {
+                "V": self.scheduler_config.adaptive_lyapunov_v,           # 初始V参数（会自动调整）
+                "K": self.scheduler_config.adaptive_lyapunov_k,           # 基线K
+                "max_hops": self.network_config.max_hops,
+                # 传输时长优化参数
+                "min_duration": self.scheduler_config.duration_min,       # 最小传输时长（分钟）
+                "max_duration": self.scheduler_config.duration_max,       # 最大传输时长（分钟）
+                "w_aoi": self.scheduler_config.duration_w_aoi,           # AoI惩罚权重
+                "w_info": self.scheduler_config.duration_w_info,         # 信息量奖励权重
+                "info_collection_rate": self.scheduler_config.duration_info_rate,  # 信息采集速率
+                # 自适应参数调整参数
+                "window_size": self.scheduler_config.adaptive_window_size,  # 反馈窗口大小
+                "V_min": self.scheduler_config.adaptive_v_min,            # V的最小值
+                "V_max": self.scheduler_config.adaptive_v_max,            # V的最大值
+                "adjust_rate": self.scheduler_config.adaptive_adjust_rate,  # 参数调整速率
+                "sensitivity": self.scheduler_config.adaptive_sensitivity   # 反馈敏感度
             }
         else:
             raise ValueError(f"未知的调度器类型: {scheduler_type}")

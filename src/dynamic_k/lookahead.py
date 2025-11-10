@@ -1,12 +1,13 @@
 import copy
 import numpy as np
 
-def _compute_stats_for_network(net, plans, pre_energies, pre_received_total):
+def _compute_stats_for_network(net, plans, pre_energies, pre_received_total, pre_transferred_total):
     post_energies = np.array([n.current_energy for n in net.nodes], dtype=float)
     pre_std = float(np.std(pre_energies))
     post_std = float(np.std(post_energies))
-    # 名义发送量：计划中各 donor 的 E_char 之和（与主流程保持一致）
-    sent_total = sum(p.get("donor").E_char for p in plans)
+    # 实际发送量：从transferred_history获取（与主流程保持一致）
+    post_transferred_total = sum(sum(n.transferred_history) for n in net.nodes)
+    sent_total = max(0.0, post_transferred_total - pre_transferred_total)
     post_received_total = sum(sum(n.received_history) for n in net.nodes)
     delivered_total = max(0.0, post_received_total - pre_received_total)
     total_loss = max(0.0, sent_total - delivered_total)
@@ -29,6 +30,7 @@ def _eval_one_candidate(network, scheduler, K_value, t, horizon_minutes, reward_
     # 到 t+horizon 进行一次传能评估
     pre_energies = np.array([n.current_energy for n in net_copy.nodes], dtype=float)
     pre_received_total = sum(sum(n.received_history) for n in net_copy.nodes)
+    pre_transferred_total = sum(sum(n.transferred_history) for n in net_copy.nodes)
 
     # 计划与执行（与主流程口径一致）
     if sched_copy is not None:
@@ -56,7 +58,7 @@ def _eval_one_candidate(network, scheduler, K_value, t, horizon_minutes, reward_
         net_copy.execute_energy_transfer(plans)
 
     pre_std, post_std, delivered_total, total_loss = _compute_stats_for_network(
-        net_copy, plans, pre_energies, pre_received_total
+        net_copy, plans, pre_energies, pre_received_total, pre_transferred_total
     )
     stats = {
         "pre_std": pre_std,

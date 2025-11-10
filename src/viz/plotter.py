@@ -208,10 +208,85 @@ def plot_energy_paths_at_time(network, plans, t, output_path=None):
     out = output_path or OutputManager.get_file_path(session_dir, f'energy_paths_t{t}.png')
     plt.tight_layout(); plt.savefig(out, dpi=200); plt.show()
 
-def plot_energy_over_time(nodes, results, output_dir="data", session_dir=None):
+def _interpolate_energy_changes(energy_data, time_steps, step_duration=60, threshold=500.0):
+    """
+    对能量大幅跳变进行插值，模拟duration>1的逐分钟传输
+    
+    Args:
+        energy_data: {node_id: [energy_values]}
+        time_steps: 原始时间步列表  
+        step_duration: 每个时间步的持续时间（分钟）
+        threshold: 触发插值的能量变化阈值（J）
+    
+    Returns:
+        (interpolated_time_steps, interpolated_energy_data)
+    """
+    # 第一遍：检测所有需要插值的位置和duration
+    interpolation_map = {}  # {step_index: max_duration}
+    
+    for node_id, energies in energy_data.items():
+        for i in range(len(energies) - 1):
+            energy_change = abs(energies[i+1] - energies[i])
+            if energy_change > threshold:
+                # 估算可能的duration（假设每分钟传输约100-300J）
+                estimated_duration = min(step_duration, max(2, int(energy_change / 200)))
+                if i in interpolation_map:
+                    interpolation_map[i] = max(interpolation_map[i], estimated_duration)
+                else:
+                    interpolation_map[i] = estimated_duration
+    
+    if not interpolation_map:
+        # 不需要插值
+        return time_steps, energy_data
+    
+    # 第二遍：为所有节点在相同位置插值
+    interpolated_data = {}
+    interpolated_time = []
+    
+    for node_id, energies in energy_data.items():
+        interpolated_values = []
+        
+        for i in range(len(energies)):
+            if i == 0:
+                # 第一个点直接添加
+                interpolated_values.append(energies[i])
+                if len(interpolated_time) == 0:
+                    interpolated_time.append(time_steps[i])
+            else:
+                # 检查是否需要插值
+                if (i-1) in interpolation_map:
+                    # 需要插值
+                    duration = interpolation_map[i-1]
+                    energy_change = energies[i] - energies[i-1]
+                    step_per_minute = energy_change / duration
+                    
+                    # 生成中间点
+                    for minute in range(1, duration):
+                        interpolated_values.append(energies[i-1] + step_per_minute * minute)
+                        if node_id == list(energy_data.keys())[0]:
+                            # 生成中间时间点
+                            t_start = time_steps[i-1]
+                            t_end = time_steps[i]
+                            t_interp = t_start + (t_end - t_start) * minute / duration
+                            interpolated_time.append(t_interp)
+                
+                # 添加当前点
+                interpolated_values.append(energies[i])
+                if node_id == list(energy_data.keys())[0]:
+                    interpolated_time.append(time_steps[i])
+        
+        interpolated_data[node_id] = interpolated_values
+    
+    return interpolated_time, interpolated_data
+
+
+def plot_energy_over_time(nodes, results, output_dir="data", session_dir=None, interpolate_duration=True):
     """
     Plot the energy change of each node over time using Plotly and save in IEEE style.
     Note: Physical center node (ID=0) is excluded from the plot.
+    
+    Args:
+        interpolate_duration: 是否对duration>1的传输进行插值（逐分钟显示）
     """
     _ensure_dir(output_dir)
 
@@ -226,7 +301,11 @@ def plot_energy_over_time(nodes, results, output_dir="data", session_dir=None):
             # 只记录非物理中心节点的数据
             if node_data["node_id"] != 0 and node_data["node_id"] in energy_data:
                 energy_data[node_data["node_id"]].append(node_data["current_energy"])
-
+    
+    # 如果启用插值，检测能量大幅跳变并进行平滑处理
+    if interpolate_duration:
+        time_steps, energy_data = _interpolate_energy_changes(energy_data, time_steps)
+    
     fig = go.Figure()
     colors = [
         'rgb(31, 119, 180)', 'rgb(255, 127, 14)', 'rgb(44, 160, 44)', 'rgb(214, 39, 40)',

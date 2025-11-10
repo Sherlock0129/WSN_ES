@@ -138,6 +138,7 @@ class EnergySimulation:
                 current_time = start_time + timedelta(minutes=t)
                 pre_energies = np.array([n.current_energy for n in self.network.nodes], dtype=float)
                 pre_received_total = sum(sum(n.received_history) for n in self.network.nodes)
+                pre_transferred_total = sum(sum(n.transferred_history) for n in self.network.nodes)
             
                 # 记录能量统计
                 node_energies = [node.current_energy for node in self.network.nodes]
@@ -226,7 +227,7 @@ class EnergySimulation:
                             print(f"[超时强制上报] 时间步 {t}: {forced_count} 个节点")
             
                 # 计算统计信息
-                stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, self.network)
+                stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, pre_transferred_total, self.network)
                 
                 # 【反馈机制】收集调度后的网络状态并计算反馈分数
                 post_energies = np.array([n.current_energy for n in self.network.nodes], dtype=float)

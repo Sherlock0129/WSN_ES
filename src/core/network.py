@@ -892,12 +892,39 @@ class Network:
                 base_consumption = donor.energy_consumption(receiver, transfer_WET=False)
                 wet_consumption = donor.E_char * duration  # WET模块能耗乘以duration
                 total_consumption = base_consumption + wet_consumption
-                donor.current_energy -= total_consumption
                 
-                receiver.current_energy += energy_received
-
-                donor.transferred_history.append(energy_sent)
-                receiver.received_history.append(energy_received)
+                # 检查donor能量是否足够
+                if donor.current_energy < total_consumption:
+                    print(f"[警告] Donor {donor.node_id} 能量不足，跳过传输")
+                    print(f"  需要: {total_consumption:.2f}J, 拥有: {donor.current_energy:.2f}J")
+                    print(f"  计划传输: {energy_sent:.2f}J (duration={duration}min)")
+                    continue  # 跳过此传输
+                
+                # 对于duration>1的传输，逐分钟更新能量（用于可视化）
+                if duration > 1:
+                    # 每分钟传输的能量
+                    energy_per_minute = energy_sent / duration
+                    received_per_minute = energy_received / duration
+                    consumption_per_minute = total_consumption / duration
+                    
+                    # 逐分钟更新能量并记录到energy_history
+                    for minute in range(duration):
+                        donor.current_energy -= consumption_per_minute
+                        receiver.current_energy += received_per_minute
+                        
+                        # 记录到energy_history（用于可视化）
+                        donor.energy_history.append(donor.current_energy)
+                        receiver.energy_history.append(receiver.current_energy)
+                    
+                    # 记录总传输量到历史
+                    donor.transferred_history.append(energy_sent)
+                    receiver.received_history.append(energy_received)
+                else:
+                    # duration=1时，一次性传输（保持原有逻辑）
+                    donor.current_energy -= total_consumption
+                    receiver.current_energy += energy_received
+                    donor.transferred_history.append(energy_sent)
+                    receiver.received_history.append(energy_received)
 
                 # 显示完整路径（所有节点）
                 path_str = " → ".join([str(node.node_id) for node in path])
@@ -907,6 +934,8 @@ class Network:
             else:
                 # 多跳传输：逐跳转发，每跳能量衰减
                 energy_left = energy_sent
+                
+                # 记录donor的transferred_history
                 donor.transferred_history.append(energy_sent)
 
                 # 计算总路径效率（各跳效率的乘积）
@@ -934,10 +963,25 @@ class Network:
                         base_consumption = sender.energy_consumption(receiver_i, transfer_WET=False)
                         wet_consumption = sender.E_char * duration  # WET模块能耗乘以duration
                         total_consumption = base_consumption + wet_consumption
+                        
+                        # 检查donor能量是否足够
+                        if sender.current_energy < total_consumption:
+                            print(f"[警告] 多跳传输中Donor {sender.node_id} 能量不足，终止路径传输")
+                            print(f"  需要: {total_consumption:.2f}J, 拥有: {sender.current_energy:.2f}J")
+                            break  # 终止整条路径的传输
+                        
                         sender.current_energy -= total_consumption
                     else:
                         # 中间跳：只消耗通信能耗（瞬时转发，不需要乘以duration）
-                        sender.current_energy -= sender.energy_consumption(receiver_i, transfer_WET=False)
+                        consumption = sender.energy_consumption(receiver_i, transfer_WET=False)
+                        
+                        # 检查中继节点能量是否足够
+                        if sender.current_energy < consumption:
+                            print(f"[警告] 中继节点 {sender.node_id} 能量不足，终止路径传输")
+                            print(f"  需要: {consumption:.2f}J, 拥有: {sender.current_energy:.2f}J")
+                            break  # 终止整条路径的传输
+                        
+                        sender.current_energy -= consumption
 
                     # 接收方获得能量
                     receiver_i.current_energy += energy_delivered

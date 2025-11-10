@@ -199,6 +199,18 @@ def create_scheduler(config_manager: ConfigManager, network):
         logger.info(f"  - AoI权重: {scheduler_params.get('w_aoi', 0.1)}")
         logger.info(f"  - 信息量权重: {scheduler_params.get('w_info', 0.05)}")
         logger.info(f"  - 节点锁定: 启用（当duration > 1时）")
+    elif scheduler_type == "AdaptiveDurationAwareLyapunovScheduler":
+        from scheduling.schedulers import AdaptiveDurationAwareLyapunovScheduler
+        scheduler = AdaptiveDurationAwareLyapunovScheduler(**scheduler_params)
+        logger.info("✓ 使用自适应传输时长感知 Lyapunov 调度器 (AdaptiveDurationAwareLyapunovScheduler)")
+        logger.info(f"  - 初始V: {scheduler_params.get('V', 0.5)}")
+        logger.info(f"  - V范围: [{scheduler_params.get('V_min', 0.1)}, {scheduler_params.get('V_max', 2.0)}]")
+        logger.info(f"  - 调整速率: {scheduler_params.get('adjust_rate', 0.1)*100:.0f}%")
+        logger.info(f"  - 反馈窗口: {scheduler_params.get('window_size', 10)}")
+        logger.info(f"  - 时长范围: {scheduler_params.get('min_duration', 1)}-{scheduler_params.get('max_duration', 5)} 分钟")
+        logger.info(f"  - AoI权重: {scheduler_params.get('w_aoi', 0.02)}")
+        logger.info(f"  - 信息量权重: {scheduler_params.get('w_info', 0.1)}")
+        logger.info(f"  - 特性: V参数自适应调整 + 传输时长优化 + 节点锁定机制")
     else:
         raise ValueError(f"未知的调度器类型: {scheduler_type}")
     
