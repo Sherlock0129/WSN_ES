@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from utils.output_manager import OutputManager
 
@@ -8,10 +9,20 @@ def _ensure_dir(path: str):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
 
-def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=None, session_dir=None):
+def plot_node_distribution(
+    nodes,
+    output_dir="data",
+    show_paths=True,
+    path_len=None,
+    session_dir=None,
+    title_font_size: int = 12,
+    axis_label_font_size: int = 10,
+    tick_font_size: int = 9,
+    legend_font_size: int = 12,
+):
     """
     Plot 2D node distribution, distinguishing solar/non-solar nodes with optional mobile node paths.
-    Uses Plotly for interactivity, ensures equal axis scaling, and saves in IEEE style.
+    Uses Matplotlib to produce a static IEEE-style figure with equal axis scaling.
 
     Args:
         nodes: List[SensorNode]
@@ -33,26 +44,19 @@ def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=N
         else:
             nosolar_x.append(x); nosolar_y.append(y); nosolar_ids.append(node.node_id)
 
-    fig = go.Figure()
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
 
-    fig.add_trace(
-        go.Scatter(
-            x=solar_x, y=solar_y, mode='markers+text', name='Solar nodes',
-            marker=dict(color='#f5b301', symbol='circle', size=8),
-            text=[str(node_id) for node_id in solar_ids[:100]],
-            textposition='bottom right', textfont=dict(size=8, family='Arial'),
-            hovertemplate='Node ID: %{text}<br>X: %{x} m<br>Y: %{y} m<extra></extra>'
-        )
+    ax.scatter(
+        solar_x, solar_y, c='#f5b301', s=45, marker='o', label='Solar nodes', edgecolors='black', linewidths=0.4
     )
-    fig.add_trace(
-        go.Scatter(
-            x=nosolar_x, y=nosolar_y, mode='markers+text', name='Non-solar nodes',
-            marker=dict(color='#666666', symbol='triangle-up', size=8),
-            text=[str(node_id) for node_id in nosolar_ids[:100]],
-            textposition='bottom right', textfont=dict(size=8, family='Arial'),
-            hovertemplate='Node ID: %{text}<br>X: %{x} m<br>Y: %{y} m<extra></extra>'
-        )
+    ax.scatter(
+        nosolar_x, nosolar_y, c='#666666', s=55, marker='^', label='Non-solar nodes', edgecolors='black', linewidths=0.4
     )
+
+    for x, y, node_id in zip(solar_x, solar_y, solar_ids[:100]):
+        ax.text(x, y, str(node_id), fontsize=tick_font_size, ha='left', va='bottom', family='Arial')
+    for x, y, node_id in zip(nosolar_x, nosolar_y, nosolar_ids[:100]):
+        ax.text(x, y, str(node_id), fontsize=tick_font_size, ha='left', va='bottom', family='Arial')
 
     # Mobile paths
     if show_paths:
@@ -64,13 +68,8 @@ def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=N
                         history = history[-path_len:]
                     hx = [p[0] for p in history]
                     hy = [p[1] for p in history]
-                    fig.add_trace(
-                        go.Scatter(
-                            x=hx, y=hy, mode='lines', name=f'Path Node {node.node_id}',
-                            line=dict(width=1, color='rgba(0, 0, 0, 0.5)'),
-                            hovertemplate=f'Node ID: {node.node_id}<br>X: %{x} m<br>Y: %{y} m<extra></extra>',
-                            showlegend=False
-                        )
+                    ax.plot(
+                        hx, hy, '-', linewidth=1.0, color='black', alpha=0.5, label='_nolegend_'
                     )
 
     # Equal axis scaling
@@ -85,28 +84,46 @@ def plot_node_distribution(nodes, output_dir="data", show_paths=True, path_len=N
     else:
         x_range, y_range = [-1, 1], [-1, 1]
 
-    fig.update_layout(
-        title=dict(text="Node distribution in 2D space", font=dict(size=10, family='Arial')),
-        xaxis_title="X position (m)", yaxis_title="Y position (m)",
-        font=dict(family='Arial', size=8),
-        legend=dict(x=1.05, y=1, xanchor='left', yanchor='top', font=dict(size=8, family='Arial')),
-        showlegend=True, hovermode='closest', template='plotly_white', margin=dict(r=150),
-        xaxis=dict(range=x_range, showgrid=True, gridcolor='rgba(0, 0, 0, 0.3)',
-                   scaleanchor='y', scaleratio=1,
-                   title=dict(font=dict(size=8, family='Arial')),
-                   tickfont=dict(size=8, family='Arial')),
-        yaxis=dict(range=y_range, showgrid=True, gridcolor='rgba(0, 0, 0, 0.3)',
-                   title=dict(font=dict(size=8, family='Arial')),
-                   tickfont=dict(size=8, family='Arial'))
+    ax.set_xlim(x_range)
+    ax.set_ylim(y_range)
+    ax.set_title("Node distribution in 2D space", fontsize=title_font_size, family='Arial')
+    ax.set_xlabel("X position (m)", fontsize=axis_label_font_size, family='Arial')
+    ax.set_ylabel("Y position (m)", fontsize=axis_label_font_size, family='Arial')
+    ax.grid(True, color=(0, 0, 0, 0.25), linestyle='--', linewidth=0.6, alpha=0.5)
+    ax.set_aspect('equal', adjustable='box')
+    ax.tick_params(axis='both', which='major', labelsize=tick_font_size)
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_family('Arial')
+
+    handles, labels = ax.get_legend_handles_labels()
+    # Deduplicate path legend entries
+    dedup = {}
+    for h, l in zip(handles, labels):
+        if l not in dedup:
+            dedup[l] = h
+    legend = ax.legend(
+        dedup.values(),
+        dedup.keys(),
+        loc='upper right',
+        fontsize=legend_font_size,
+        frameon=False,
+        borderpad=0.4,
+        labelspacing=0.6
     )
+    if legend is not None:
+        for text in legend.get_texts():
+            text.set_family('Arial')
+            text.set_fontsize(legend_font_size)
 
     # 使用传入的会话目录或创建新的
     if session_dir is None:
         session_dir = OutputManager.get_session_dir(output_dir)
     
     save_path = OutputManager.get_file_path(session_dir, 'node_distribution.png')
-    fig.write_image(save_path, width=800, height=600, scale=3)
-    fig.show()
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.show()
+    plt.close(fig)
     print(f"节点分布图已保存到: {save_path}")
     # IEEE Caption: Fig. 1. Node distribution in 2D space.
 

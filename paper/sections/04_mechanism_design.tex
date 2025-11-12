@@ -24,17 +24,24 @@
 \end{itemize}
 
 \textbf{伪代码}（简化版）：
-\begin{verbatim}
-函数 should_trigger_transfer(t, network):
-    如果 t % check_interval != 0 或 (t - last_transfer_time) < cooldown:
-        返回 False
-    从 InfoNode 获取能量状态 {E_i}
-    r_low = |{i: E_i < θ_i}| / N
-    CV = std({E_i}) / mean({E_i})
-    如果 r_low > r_crit 或 CV > CV_th 或 存在i使得E_i < 0.5θ_i:
-        返回 True
-    返回 False
-\end{verbatim}
+\begin{mdframed}[backgroundcolor=gray!08,roundcorner=2pt,linewidth=0pt,innertopmargin=6pt,innerbottommargin=6pt,innerleftmargin=6pt,innerrightmargin=6pt]
+\textbf{Algorithm 1: 被动传能触发判定（should\_trigger\_transfer）}
+\begin{algorithmic}[1]
+\REQUIRE 当前时刻 $t$；网络状态句柄 network；检查间隔 $T_{\text{check}}$；冷却期 $T_{\text{cool}}$
+\ENSURE 是否触发传能（布尔）
+\IF{$t \bmod T_{\text{check}} \neq 0$ \OR $(t - \text{last\_transfer\_time}) < T_{\text{cool}}$}
+    \STATE \textbf{return} False
+\ENDIF
+\STATE 从 InfoNode 获取能量状态集合 $\{E_i\}_{i\in\mathcal{N}}$
+\STATE $r_{\text{low}} \leftarrow \frac{|\{i: E_i < \theta_i^{\text{low}}\}|}{|\mathcal{N}|}$
+\STATE $\text{CV} \leftarrow \frac{\text{std}(\{E_i\})}{\text{mean}(\{E_i\})}$
+\IF{$r_{\text{low}} > r_{\text{crit}}$ \OR $\text{CV} > \text{CV}_{\text{th}}$ \OR 存在 $i$ 使得 $E_i < 0.5\,\theta_i^{\text{low}}$}
+    \STATE \textbf{return} True
+\ELSE
+    \STATE \textbf{return} False
+\ENDIF
+\end{algorithmic}
+\end{mdframed}
 
 %（实现细节省略）
 
@@ -81,20 +88,26 @@ S_{\mathcal{P}} = w_1 E_{\text{recv}} - w_2 E_{\text{loss}} + w_3 \mathbb{I}_{\t
 \end{itemize}
 
 \textbf{伪代码}（简化版）：
-\begin{verbatim}
-函数 pick_k_via_lookahead(network, t, current_K):
-    candidates = {current_K, current_K±1, current_K±2, current_K±3}
-    best_K, best_reward = current_K, -∞
-    对于 K in candidates:
-        net_copy = deepcopy(network)
-        前瞻演化 T_h 分钟
-        plans = net_copy.plan_transfer(K)
-        net_copy.execute_transfer(plans)
-        reward = 计算奖励函数 R(K)
-        如果 reward > best_reward:
-            best_K, best_reward = K, reward
-    返回 best_K
-\end{verbatim}
+\begin{mdframed}[backgroundcolor=gray!08,roundcorner=2pt,linewidth=0pt,innertopmargin=6pt,innerbottommargin=6pt,innerleftmargin=6pt,innerrightmargin=6pt]
+\textbf{Algorithm 2: 基于前瞻仿真的动态 $K$ 值选择（pick\_k\_via\_lookahead）}
+\begin{algorithmic}[1]
+\REQUIRE 网络状态句柄 network；当前时刻 $t$；当前 $K$ 值 $K_{\text{cur}}$；前瞻窗口 $T_h$
+\ENSURE 最优 $K$ 值 $K^*$
+\STATE $C_K \leftarrow \{K_{\text{cur}},\, K_{\text{cur}}\pm1,\, K_{\text{cur}}\pm2,\, K_{\text{cur}}\pm3\}$
+\STATE $K^* \leftarrow K_{\text{cur}}$，$R^* \leftarrow -\infty$
+\FOR{$K \in C_K$}
+    \STATE $\text{net\_copy} \leftarrow \text{deepcopy}(\text{network})$
+    \STATE 在 $\text{net\_copy}$ 上前瞻演化 $T_h$ 分钟
+    \STATE $\text{plans} \leftarrow \text{net\_copy.plan\_transfer}(K)$
+    \STATE $\text{net\_copy.execute\_transfer}(\text{plans})$
+    \STATE $R \leftarrow w_1(\sigma_{\text{pre}}-\sigma_{\text{post}})+w_2 E_{\text{delivered}}-w_3 E_{\text{loss}}$
+    \IF{$R > R^*$}
+        \STATE $K^* \leftarrow K$，$R^* \leftarrow R$
+    \ENDIF
+\ENDFOR
+\STATE \textbf{return} $K^*$
+\end{algorithmic}
+\end{mdframed}
 
 %（实现细节省略）
 
