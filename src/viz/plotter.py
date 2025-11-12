@@ -326,17 +326,17 @@ def plot_energy_over_time(nodes, results, output_dir="data", session_dir=None, i
         )
 
     fig.update_layout(
-        title=dict(text="Energy change over time for each node", font=dict(size=10, family='Arial')),
+        title=dict(text="Energy change over time for each node", font=dict(size=40, family='Arial')),
         xaxis_title="Time step", yaxis_title="Energy (J)",
-        font=dict(family='Arial', size=8),
-        legend=dict(x=1.05, y=1, xanchor='left', yanchor='top', font=dict(size=8, family='Arial')),
-        showlegend=True, hovermode='closest', template='plotly_white', margin=dict(r=150),
+        font=dict(family='Arial', size=32),
+        legend=dict(x=1.05, y=1, xanchor='left', yanchor='top', font=dict(size=32, family='Arial')),
+        showlegend=True, hovermode='closest', template='plotly_white', margin=dict(r=200),
         xaxis=dict(showgrid=True, gridcolor='rgba(0, 0, 0, 0.3)',
-                   title=dict(font=dict(size=8, family='Arial')),
-                   tickfont=dict(size=8, family='Arial')),
+                   title=dict(font=dict(size=32, family='Arial')),
+                   tickfont=dict(size=28, family='Arial')),
         yaxis=dict(showgrid=True, gridcolor='rgba(0, 0, 0, 0.3)',
-                   title=dict(font=dict(size=8, family='Arial')),
-                   tickfont=dict(size=8, family='Arial'))
+                   title=dict(font=dict(size=32, family='Arial')),
+                   tickfont=dict(size=28, family='Arial'))
     )
 
     # 使用传入的会话目录或创建新的

@@ -6,12 +6,11 @@
 import os
 import sys
 
-import logger
-
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.simulation_config import ConfigManager, load_config
+from utils.logger import logger, get_detailed_plan_logger
 from scheduling.schedulers import (
     LyapunovScheduler, ClusterScheduler, PredictionScheduler,
     PowerControlScheduler, BaselineHeuristic,
@@ -32,7 +31,6 @@ except ImportError:
     DDPG_AVAILABLE = False
     logger.warning("DDPG调度器不可用（需要安装PyTorch）")
 from scheduling.passive_transfer import compare_passive_modes as _compare_passive_modes
-from utils.logger import logger, get_detailed_plan_logger
 from utils.error_handling import error_handler, handle_exceptions
 from viz.plotter import plot_node_distribution, plot_energy_over_time, plot_center_node_energy
 from sim.parallel_executor import ParallelSimulationExecutor

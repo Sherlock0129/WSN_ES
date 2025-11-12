@@ -363,7 +363,10 @@ class SimulationStats:
         print(f"  Values: {[round(v, 2) for v in energy_scores[:10]]}{' ...' if len(energy_scores) > 10 else ''}\n")
         
         # 创建图表（3行1列）
-        fig, axes = plt.subplots(3, 1, figsize=(14, 12))
+        fig, axes = plt.subplots(3, 1, figsize=(14, 16))
+        # 放大刻度字体（约2倍）
+        for ax in axes:
+            ax.tick_params(labelsize=18)
         
         # 1. 总体反馈分数随时间变化
         ax1 = axes[0]
@@ -377,10 +380,10 @@ class SimulationStats:
         ax1.fill_between(time_steps, 0, total_scores, 
                          where=[s < 0 for s in total_scores], 
                          color='red', alpha=0.2, interpolate=True)
-        ax1.set_title('Overall Feedback Score Over Time', fontsize=12, fontweight='bold')
-        ax1.set_xlabel('Time Step', fontsize=10)
-        ax1.set_ylabel('Feedback Score', fontsize=10)
-        ax1.legend(loc='best')
+        ax1.set_title('Overall Feedback Score Over Time', fontsize=24, fontweight='bold')
+        ax1.set_xlabel('Time Step', fontsize=20)
+        ax1.set_ylabel('Feedback Score', fontsize=20)
+        ax1.legend(loc='best', fontsize=24)
         ax1.grid(True, linestyle='--', alpha=0.5)
         
         # 2. 各维度分数堆叠图
@@ -406,16 +409,19 @@ class SimulationStats:
                            zorder=10-i)  # 确保线条分层显示
             print(f"  Plotted {label} with color {color}")
         ax2.axhline(y=0, color='black', linestyle='--', linewidth=1.5, alpha=0.7)
-        ax2.set_title('Dimensional Scores Over Time', fontsize=12, fontweight='bold')
-        ax2.set_xlabel('Time Step', fontsize=10)
-        ax2.set_ylabel('Score', fontsize=10)
-        ax2.legend(loc='best', ncol=2, fontsize=9, framealpha=0.9)
+        ax2.set_title('Dimensional Scores Over Time', fontsize=24, fontweight='bold')
+        ax2.set_xlabel('Time Step', fontsize=20)
+        ax2.set_ylabel('Score', fontsize=20)
+        # 固定位置到右上角，并稍向下偏移，避免与权重注释重叠
+        ax2.legend(loc='upper right', ncol=2, fontsize=18, framealpha=0.9,
+                   bbox_to_anchor=(1.0, 0.93))
         ax2.grid(True, linestyle='--', alpha=0.3)
         
         # 添加注释说明权重
         info_text = 'Weights: Balance=40%, Survival=30%, Efficiency=20%, Energy=10%'
-        ax2.text(0.02, 0.98, info_text, transform=ax2.transAxes, 
-                fontsize=8, verticalalignment='top', 
+        # 将权重说明移动到右上角，置于图例上方区域，避免与曲线/图例遮挡
+        ax2.text(0.98, 0.98, info_text, transform=ax2.transAxes, 
+                fontsize=16, verticalalignment='top', horizontalalignment='right',
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
         
         # 3. 正/负/中性影响分布统计（柱状图）
@@ -437,10 +443,10 @@ class SimulationStats:
             percentage = (count / total_count * 100) if total_count > 0 else 0
             ax3.text(bar.get_x() + bar.get_width()/2., height,
                     f'{int(count)}\n({percentage:.1f}%)',
-                    ha='center', va='bottom', fontsize=10, fontweight='bold')
+                    ha='center', va='bottom', fontsize=20, fontweight='bold')
         
-        ax3.set_title('Impact Distribution Statistics', fontsize=12, fontweight='bold')
-        ax3.set_ylabel('Count', fontsize=10)
+        ax3.set_title('Impact Distribution Statistics', fontsize=24, fontweight='bold')
+        ax3.set_ylabel('Count', fontsize=20)
         ax3.set_ylim(0, max(counts) * 1.2 if max(counts) > 0 else 1)
         ax3.grid(True, axis='y', linestyle='--', alpha=0.5)
         
@@ -456,7 +462,7 @@ class SimulationStats:
         stats_text += f'Total: {total_count}'
         
         props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-        ax3.text(0.98, 0.97, stats_text, transform=ax3.transAxes, fontsize=9,
+        ax3.text(0.98, 0.97, stats_text, transform=ax3.transAxes, fontsize=18,
                 verticalalignment='top', horizontalalignment='right', bbox=props)
         
         # 调整布局并保存
