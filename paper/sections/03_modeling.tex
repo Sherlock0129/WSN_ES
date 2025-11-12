@@ -1,4 +1,36 @@
 \section{Modeling}
+\noindent 为便于阅读，先给出本文建模中常用符号与参数表（完整含义与单位见表\ref{tab:symbols}）。
+
+\begin{table}[t]
+\centering
+\caption{符号与参数说明}
+\label{tab:symbols}
+\begin{tabular}{lp{0.62\linewidth}}
+\hline
+\textbf{符号} & \textbf{说明} \\
+\hline
+$\mathcal{N},\, i$ & 节点集合与节点索引 \\
+$C_i,\, E_i(t)$ & 节点$i$电池容量与时刻$t$剩余能量 \\
+$\theta_i^{\text{low}},\, \theta_i^{\text{high}}$ & 低/高能量阈值 \\
+$\mathbf{x}_i(t),\, \mathbf{v}_i(t),\, v_{\max}$ & 节点位置、速度与最大速度 \\
+$d_{ij}(t)$ & 节点对$(i,j)$的欧氏距离 \\
+$E_{\text{sen}},\, E_{\text{com}}$ & 感知/计算能耗与通信能耗 \\
+$E_{\text{elec}},\, \epsilon_{\text{amp}},\, \tau$ & 电子学能耗、功放系数与路径损耗指数 \\
+$B$ & 传输比特数（或比特率相应时窗量化） \\
+$\eta(d),\, \eta_0,\, \gamma$ & 无线能量传输效率模型参数 \\
+$\mathcal{P},\, H,\, H_{\max}$ & 传能路径、跳数与最大跳数 \\
+$\eta_{\mathcal{P}},\, \eta_{\text{th}}$ & 路径累计效率与效率阈值 \\
+$E_{\text{send}},\, E_{\text{recv}},\, E_{\text{loss}}$ & 发送/接收能量与损耗 \\
+$s_i,\, \eta_{\text{solar}},\, A_i$ & 是否可采集、太阳能效率与面板面积 \\
+$G(t),\, G_{\max},\, t_{\text{rise}},\, t_{\text{set}}$ & 日内辐照度及其参数 \\
+$\zeta(t)$ & 天气扰动因子（有界、均值约为1） \\
+$\text{AOEI}_i(t)$ & 节点$i$的能量信息年龄 \\
+$V_0,\, \lambda$ & 信息价值衰减模型参数 \\
+$w_{\text{aoei}},\, Q_i,\, \tau$ & AOEI权重、虚拟队列与传输时长 \\
+\hline
+\end{tabular}
+\end{table}
+
 \subsection{Node and Scenario Modeling}
 本章建立不依赖具体实现细节的抽象化模型。
 
@@ -28,7 +60,11 @@
     \[
     E_{h,i}(t)= s_i\cdot \eta_{\text{solar}} A_i\cdot G(t)\cdot \Delta t,
     \]
-    其中转换效率 \(\eta_{\text{solar}}\in(0,1)\)、面板面积 \(A_i\)，日内辐照度 \(G(t)=G_{\max}\cdot \max\{0,\sin(\pi(t-t_{\text{rise}})/(t_{\text{set}}-t_{\text{rise}}))\}\cdot \zeta(t)\)，\(\zeta(t)\) 刻画天气扰动（如 \(\mathbb{E}[\zeta]=1\) 的有界噪声）。非平稳性由 \((t_{\text{rise}},t_{\text{set}})\) 与 \(\zeta(t)\) 共同引入。
+    其中转换效率 \(\eta_{\text{solar}}\in(0,1)\)、面板面积 \(A_i\)，日内辐照度
+    \begin{equation}
+    G(t)=G_{\max}\cdot \max\!\Big\{0,\ \sin\!\Big(\frac{\pi(t-t_{\text{rise}})}{t_{\text{set}}-t_{\text{rise}}}\Big)\Big\}\cdot \zeta(t),
+    \end{equation}
+    \(\zeta(t)\) 刻画天气扰动（如 \(\mathbb{E}[\zeta]=1\) 的有界噪声）。非平稳性由 \((t_{\text{rise}},t_{\text{set}})\) 与 \(\zeta(t)\) 共同引入。
     \item \emph{链路特性：}节点对 \((i,j)\) 的距离 \(d_{ij}(t)=\|\mathbf{x}_i(t)-\mathbf{x}_j(t)\|_2\)。能量传输效率
     \[
     \eta(d_{ij})=\min\Big\{1,\max\big\{0,\tfrac{\eta_0}{d_{ij}^{\gamma}}\big\}\Big\},\quad \eta_0\in(0,1),\ \gamma\in[2,4].
@@ -47,10 +83,25 @@
     \]
     系统施加最大跳数 \(H_{\max}\) 与效率阈值 \(\eta_{\text{th}}\)，仅允许 \(\eta_{\mathcal{P}}\ge \eta_{\text{th}}\) 且 \(H\le H_{\max}\) 的路径，以抑制极低效路径并保障全局能效与公平。
 \end{itemize}
+
+% 图占位：网络拓扑与能量路径示意（留出位置）
+\begin{figure}[t]
+\centering
+\begin{mdframed}[linewidth=0.5pt]
+\parbox[c][4.0cm][c]{0.95\linewidth}{\centering \textbf{图占位：网络拓扑与能量路径示意图}\\[3pt]
+建议后续替换为仿真生成的节点分布与路径示意图。}
+\end{mdframed}
+\caption{网络拓扑与能量路径示意（占位）。}
+\label{fig:network_paths_placeholder}
+\end{figure}
+
 在能量守恒下，节点能量演化为
-\[
-E_i(t+\Delta t)=\min\!\Big\{C_i,\ E_i(t)-E_{\text{sen},i}(t)-E_{\text{com},i}(t)-E_{\text{send},i}(t)+E_{h,i}(t)+E_{\text{recv},i}(t)\Big\},
-\]
+\begin{equation}
+\begin{aligned}
+E_i(t+\Delta t)=\min\Big\{C_i,\ &E_i(t)-E_{\text{sen},i}(t)-E_{\text{com},i}(t)\\
+&-E_{\text{send},i}(t)+E_{h,i}(t)+E_{\text{recv},i}(t)\Big\},
+\end{aligned}
+\end{equation}
 其中 \(C_i\) 为电池容量，\(E_{\text{sen},i}\) 为感知/计算能耗，\(E_{\text{com},i}\) 为通信能耗。上述三层（结构/供给/链路）与能量演化共同定义机制运行的语义空间与外生扰动，为后续决策与评估提供统一背景与可检验假设。
 
 \subsection{Economic Interpretation and AOEI as Price Signal}
@@ -69,6 +120,18 @@ V_{\text{info},i}(t) = V_0 \cdot e^{-\lambda \cdot \text{AOEI}_i(t)}
 C_{\text{AOEI},i}(\tau) = w_{\text{aoei}} \cdot \tau \cdot Q_i
 \end{equation}
 其中\(\tau\)为传输时长（导致 AOEI 增量），\(Q_i\)为节点\(i\)的能量虚拟队列长度（需求紧迫度），\(w_{\text{aoei}}\)为权重系数（默认0.1）。
+
+% 图占位：AOEI 衰减曲线（保留位置，后续以代码生成图替换）
+\begin{figure}[t]
+\centering
+\begin{mdframed}[linewidth=0.5pt]
+\centering
+\parbox[c][4.0cm][c]{0.95\linewidth}{\centering \textbf{图占位：AOEI 导致信息价值指数衰减曲线}\\[3pt]
+建议以代码生成并替换此处曲线图（可扩展自 \texttt{src/experiments/visualize\_results.py}）。}
+\end{mdframed}
+\caption{信息价值随 AOEI 的指数衰减示意。}
+\label{fig:aoei_decay_placeholder}
+\end{figure}
 
 \textbf{（2）InfoNode 数字账户：}维护三级缓存架构：
 \begin{itemize}
@@ -106,6 +169,18 @@ u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent
     \item 外部性治理：能量传输专用路由的效率阈值与跳数限制抑制低效多跳的负外部性。
 \end{enumerate}
 形式化地，可达解集满足 \(\mathcal{F}_{\text{dynamic}} \supset \mathcal{F}_{\text{static}}\)，即在相同资源约束下，存在 \((\eta, \phi) \in \mathcal{F}_{\text{dynamic}}\) 使得效率 \(\eta\) 与公平度 \(\phi\) 同时优于静态基线。该主张的实证验证见第五章。
+
+% 图占位：动态帕累托边界外移示意（保留位置，后续替换）
+\begin{figure}[t]
+\centering
+\begin{mdframed}[linewidth=0.5pt]
+\centering
+\parbox[c][4.0cm][c]{0.95\linewidth}{\centering \textbf{图占位：动态帕累托边界外移示意图}\\[3pt]
+建议替换为实证对比图（如综合雷达图/效率-公平二维对标）。}
+\end{mdframed}
+\caption{动态帕累托边界外移的概念示意。}
+\label{fig:dynamic_pareto_placeholder}
+\end{figure}
 
 \subsection{Objectives and Constraints}
 系统目标与约束定义如下：
