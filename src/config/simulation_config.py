@@ -799,7 +799,7 @@ class ConfigManager:
     
     def create_adcr_link_layer(self, network):
         """创建ADCRLinkLayerVirtual对象"""
-        from acdr.adcr_link_layer import ADCRLinkLayerVirtual
+        from info_collection.adcr_link_layer import ADCRLinkLayerVirtual
         return ADCRLinkLayerVirtual(
             network=network,
             # 核心算法参数
