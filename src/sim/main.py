@@ -67,6 +67,11 @@ output_dir = 'adcr'
 # 运行能量仿真并绘制图像
 simulation.simulate()
 
+# 保存详细的计划日志
+from src.utils.logger import get_detailed_plan_logger
+plan_logger = get_detailed_plan_logger(simulation.session_dir) # 使用仿真会话目录
+plan_logger.save_simulation_plans(simulation)
+
 # 记录整个模拟的所有plans到文件
 def save_all_plans_to_file(simulation, output_file="all_plans.txt"):
     """将整个模拟的所有plans保存到文件"""

@@ -82,7 +82,7 @@ class NetworkConfig:
     - max_hops 限制多跳路径长度（影响 EETOR/机会路由）。
     """
     num_nodes: int = 30
-    max_hops: int = 3
+    max_hops: int = 5
     distribution_mode: str = "random"  # 节点位置分布模式："uniform"（网格/规则）、"random"（随机）
     network_area_width: float = 5.0    # 区域宽度 m
     network_area_height: float = 5.0   # 区域高度 m
@@ -117,7 +117,7 @@ class SimulationConfig:
     - use_gpu_acceleration 控制是否使用 GPU（CuPy）加速统计/距离矩阵等并行计算。
     """
 
-    time_steps: int = 10080            # 总时间步数（分钟），默认 7 天
+    time_steps: int = 10080            # 总7 天
     energy_transfer_interval: int = 60   # 传能/调度触发间隔（分钟）
     # 注意：当前实现中触发条件写死为 `if t % 60 == 0`，未读取该配置值；后续可将其接入。
     output_dir: str = "data"             # 仿真输出根目录，由 OutputManager 管理会话子目录
@@ -127,9 +127,9 @@ class SimulationConfig:
     enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
 
     # 智能被动传能参数
-    passive_mode: bool = True          # 是否启用智能被动传能模式（False为定时主动传能）
+    passive_mode: bool = True        # 是否启用智能被动传能模式（False为定时主动传能）
     check_interval: int = 1                # 智能检查间隔（分钟）
-    critical_ratio: float = 0.2             # 低能量节点临界比例（0-1）
+    critical_ratio: float = 0             # 低能量节点临界比例（0-1）
     energy_variance_threshold: float = 0.05  # 能量方差阈值，超过则触发传能
     cooldown_period: int = 0               # 传能冷却期（分钟），避免频繁触发
     predictive_window: int = 60             # 预测窗口（分钟），用于预测性触发
@@ -150,6 +150,9 @@ class SimulationConfig:
     
     # 计算加速
     use_gpu_acceleration: bool = False   # GPU 加速开关（需要安装 CuPy 与 CUDA 驱动）
+
+    # 可视化开关
+    enable_visualization: bool = True    # 是否生成可视化图表
 
 
 @dataclass

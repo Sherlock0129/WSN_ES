@@ -529,19 +529,25 @@ class Network:
         if self.energy_distribution_mode != "center_decreasing":
             return
         
-        # 计算网络几何中心（与ADCR虚拟中心相同）
-        xs, ys = zip(*[node.position for node in self.nodes])
+        # 计算网络几何中心（只使用普通节点，排除物理中心节点）
+        regular_nodes = [node for node in self.nodes if not node.is_physical_center]
+        if not regular_nodes:
+            return  # 如果没有普通节点，直接返回
+        
+        xs, ys = zip(*[node.position for node in regular_nodes])
         center_x = sum(xs) / len(xs)
         center_y = sum(ys) / len(ys)
         network_center = (center_x, center_y)
         
-        # 计算所有节点到中心的距离
+        # 计算所有节点到中心的距离（包括物理中心，用于后续索引）
         distances = []
         for node in self.nodes:
             distance = math.sqrt((node.position[0] - center_x)**2 + (node.position[1] - center_y)**2)
             distances.append(distance)
         
-        max_distance = max(distances)
+        # 最大距离只考虑普通节点
+        regular_distances = [distances[i] for i, node in enumerate(self.nodes) if not node.is_physical_center]
+        max_distance = max(regular_distances) if regular_distances else 0
         
         print(f"[Energy-Distribution] 网络中心: ({center_x:.2f}, {center_y:.2f})")
         print(f"[Energy-Distribution] 最大距离: {max_distance:.2f}m")
@@ -549,6 +555,11 @@ class Network:
         
         # 根据距离分配能量（线性递减）
         for i, node in enumerate(self.nodes):
+            # 跳过物理中心节点，保持其初始能量为普通节点的倍数
+            if node.is_physical_center:
+                print(f"[Energy-Distribution] Node {node.node_id} (物理中心): 保持初始能量={node.initial_energy:.0f}J (普通节点的{self.center_initial_energy_multiplier}倍)")
+                continue
+            
             distance = distances[i]
             
             # 线性衰减：ratio = 1.0 - (distance / max_distance)

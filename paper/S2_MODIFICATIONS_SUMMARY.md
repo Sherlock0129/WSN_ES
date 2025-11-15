@@ -44,7 +44,7 @@
 - **节点建模**：添加`SensorNode.py`的详细参数说明
   - 能量状态参数：`current_energy`, `capacity`, `voltage`, `low_threshold_energy`
   - 能量采集：`energy_harvest(t)`方法，太阳能模型参数
-  - 能量消耗：`energy_consumption(target, transfer_WET)`方法
+  - 能量消耗：`energy_consumption(target, transfer_WET)`方法（其中 `transfer_WET=True` 表示执行无线能量共享（wireless energy sharing））
   - 传输效率：`energy_transfer_efficiency(target)`，公式\(\eta(d) = 0.6/d^2\)
   
 - **AOI价格信号**：详细公式与经济学解释
