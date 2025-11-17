@@ -855,6 +855,64 @@ class NodeInfoManager:
         if self.archive_buffer:
             self._flush_archive()
             self._log("[NodeInfoManager] 强制刷新归档完成")
+
+    def archive_current_state(self, current_time: int):
+        """将所有节点的当前状态（包括估算值）归档"""
+        if not self.archive_path:
+            return
+
+        for node_id, info in self.latest_info.items():
+            position = info.get('position', (None, None))
+            info_source_nodes_str = ','.join(map(str, info.get('info_source_nodes', []))) if info.get('info_source_nodes') else ''
+            self.archive_buffer.append({
+                'arrival_time': info['arrival_time'],
+                'node_id': node_id,
+                'energy': info['energy'],
+                'record_time': info['record_time'],
+                'aoi': current_time - info['arrival_time'],
+                't': current_time,
+                'position_x': position[0] if position else None,
+                'position_y': position[1] if position else None,
+                'is_solar': info.get('is_solar'),
+                'cluster_id': info.get('cluster_id'),
+                'data_size': info.get('data_size'),
+                'info_volume': info.get('info_volume', 0),
+                'info_waiting_since': info.get('info_waiting_since', -1),
+                'info_is_reported': info.get('info_is_reported', True),
+                'info_source_nodes': info_source_nodes_str
+            })
+        
+        if len(self.archive_buffer) >= self.archive_batch_size:
+            self._flush_archive()
+
+    def archive_current_state(self, current_time: int):
+        """将所有节点的当前状态（包括估算值）归档"""
+        if not self.archive_path:
+            return
+
+        for node_id, info in self.latest_info.items():
+            position = info.get('position', (None, None))
+            info_source_nodes_str = ','.join(map(str, info.get('info_source_nodes', []))) if info.get('info_source_nodes') else ''
+            self.archive_buffer.append({
+                'arrival_time': info['arrival_time'],
+                'node_id': node_id,
+                'energy': info['energy'],
+                'record_time': info['record_time'],
+                'aoi': current_time - info['arrival_time'],
+                't': current_time,
+                'position_x': position[0] if position else None,
+                'position_y': position[1] if position else None,
+                'is_solar': info.get('is_solar'),
+                'cluster_id': info.get('cluster_id'),
+                'data_size': info.get('data_size'),
+                'info_volume': info.get('info_volume', 0),
+                'info_waiting_since': info.get('info_waiting_since', -1),
+                'info_is_reported': info.get('info_is_reported', True),
+                'info_source_nodes': info_source_nodes_str
+            })
+        
+        if len(self.archive_buffer) >= self.archive_batch_size:
+            self._flush_archive()
     
     def get_statistics(self) -> Dict:
         """

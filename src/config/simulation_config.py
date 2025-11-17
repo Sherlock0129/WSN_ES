@@ -82,12 +82,12 @@ class NetworkConfig:
     - max_hops 限制多跳路径长度（影响 EETOR/机会路由）。
     """
     num_nodes: int = 30
-    max_hops: int = 3
+    max_hops: int = 5
     distribution_mode: str = "random"  # 节点位置分布模式："uniform"（网格/规则）、"random"（随机）
     network_area_width: float = 5.0    # 区域宽度 m
     network_area_height: float = 5.0   # 区域高度 m
     min_distance: float = 0.5          # 节点间最小生成距离 m（避免过近重叠）
-    random_seed: int = 131            # 随机种子（影响位置与属性抽样）
+    random_seed: int = 128            # 随机种子（影响位置与属性抽样）
     solar_node_ratio: float = 0.6      # 具备太阳能节点比例（0~1）
     mobile_node_ratio: float = 0.0     # 可移动节点比例（0~1，若启用移动模型）
     
@@ -117,8 +117,8 @@ class SimulationConfig:
     - use_gpu_acceleration 控制是否使用 GPU（CuPy）加速统计/距离矩阵等并行计算。
     """
 
-    time_steps: int = 10080            # 总时间步数（分钟），默认 7 天
-    energy_transfer_interval: int = 10   # 传能/调度触发间隔（分钟）
+    time_steps: int = 10080            # 总7 天
+    energy_transfer_interval: int = 60   # 传能/调度触发间隔（分钟）
     # 注意：当前实现中触发条件写死为 `if t % 60 == 0`，未读取该配置值；后续可将其接入。
     output_dir: str = "data"             # 仿真输出根目录，由 OutputManager 管理会话子目录
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
@@ -146,10 +146,13 @@ class SimulationConfig:
     use_lookahead: bool = False          # 是否进行短期前瞻评估以辅助 K 调整
     
     # ADCR链路层
-    enable_adcr_link_layer: bool = True # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
+    enable_adcr_link_layer: bool = False # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
     
     # 计算加速
     use_gpu_acceleration: bool = False   # GPU 加速开关（需要安装 CuPy 与 CUDA 驱动）
+
+    # 可视化开关
+    enable_visualization: bool = True    # 是否生成可视化图表
 
 
 @dataclass
@@ -168,8 +171,8 @@ class SchedulerConfig:
 
     # scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
     # scheduler_type: str = "AdaptiveLyapunovScheduler"  # 默认调度器类型
-    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
-    # scheduler_type: str = "AdaptiveDurationAwareLyapunovScheduler"  # 默认调度器类型
+    # scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
+    scheduler_type: str = "AdaptiveDurationAwareLyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
@@ -799,7 +802,7 @@ class ConfigManager:
     
     def create_adcr_link_layer(self, network):
         """创建ADCRLinkLayerVirtual对象"""
-        from acdr.adcr_link_layer import ADCRLinkLayerVirtual
+        from info_collection.adcr_link_layer import ADCRLinkLayerVirtual
         return ADCRLinkLayerVirtual(
             network=network,
             # 核心算法参数

@@ -81,54 +81,26 @@ class PassiveTransferManager:
         if t - self.last_transfer_time < self.cooldown_period:
             return False, None
         
-        # 3. 获取节点能量状态（优先使用虚拟能量层）
-        # 排除物理中心节点（ID=0）用于阈值检测
+        # 3. 获取节点能量状态（直接从真实网络获取，仅用于触发决策）
+        # 这一步是为了确保触发决策基于最新的能量状态，而不影响AOI的计算
         physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
         physical_center_id = physical_center.node_id if physical_center else None
 
-        # 优先从NodeInfoManager获取能量信息（虚拟能量层）
-        if self.node_info_manager is not None:
-            # 使用虚拟能量层：从NodeInfoManager的信息表获取能量
-            all_info = self.node_info_manager.get_all_nodes_info()
-            regular_nodes_info = {
-                node_id: info for node_id, info in all_info.items()
-                if node_id != physical_center_id
-            }
-            total_nodes = len(regular_nodes_info)
-            
-            if total_nodes == 0:
-                return False, None
-            
-            # 从虚拟能量层获取能量
-            energies = np.array([info['energy'] for info in regular_nodes_info.values()])
-            
-            # 阈值需要从真实节点获取（这是配置参数，不是状态信息）
-            # 获取第一个普通节点的阈值作为参考（假设所有节点阈值相同）
-            regular_nodes = [node for node in network.nodes if node.node_id != physical_center_id]
-            if len(regular_nodes) > 0:
-                # 使用第一个普通节点的阈值（所有节点阈值应该相同）
-                threshold_energy = regular_nodes[0].low_threshold_energy
-                thresholds = np.full(total_nodes, threshold_energy)
-            else:
-                # 如果没有普通节点，无法确定阈值
-                return False, None
-        else:
-            # 向后兼容：如果没有NodeInfoManager，回退到直接访问SensorNode
-            nodes = network.nodes
-            regular_nodes = [node for node in nodes if node.node_id != physical_center_id]
-            total_nodes = len(regular_nodes)
-            
-            if total_nodes == 0:
-                return False, None
-            
-            # 直接从SensorNode获取能量（向后兼容）
-            energies = np.array([node.current_energy for node in regular_nodes])
-            thresholds = np.array([node.low_threshold_energy for node in regular_nodes])
-
-        # 3. 低能量节点比例检查
-        low_energy_nodes = energies < thresholds
-        low_energy_ratio = np.sum(low_energy_nodes) / total_nodes
+        regular_nodes = [node for node in network.nodes if node.node_id != physical_center_id]
+        total_nodes = len(regular_nodes)
         
+        if total_nodes == 0:
+            return False, None
+        
+        # 直接从真实节点获取能量和阈值，仅用于本次决策
+        energies = np.array([node.current_energy for node in regular_nodes])
+        thresholds = np.array([node.low_threshold_energy for node in regular_nodes])
+
+        # 3. 低能量节点比例检查(已禁用)
+        low_energy_nodes = energies < thresholds
+        # low_energy_ratio = np.sum(low_energy_nodes) / total_nodes
+        low_energy_ratio = False
+
         # 4. 能量方差检查（归一化方差，考虑能量不均衡）
         if len(energies) > 0 and np.mean(energies) > 0:
             energy_cv = np.std(energies) / np.mean(energies)  # 变异系数
@@ -224,12 +196,12 @@ class PassiveTransferManager:
         reasons = []
         should_trigger = False
         
-        # 条件1: 严重情况 - 低能量节点比例超过临界值
-        if low_energy_ratio > self.critical_ratio:
-            should_trigger = True
-            reasons.append(f"低能量节点比例={low_energy_ratio:.2%}>{self.critical_ratio:.2%}")
+        # 条件1: 严重情况 - 低能量节点比例超过临界值（已禁用）
+        # if low_energy_ratio > self.critical_ratio:
+        #     should_trigger = True
+        #     reasons.append(f"低能量节点比例={low_energy_ratio:.2%}>{self.critical_ratio:.2%}")
         
-        # 条件2: 能量分布严重不均
+        # 条件2: 能量分布严重不均（仅保留此条件）
         if energy_cv > self.energy_variance_threshold:
             should_trigger = True
             reasons.append(f"能量变异系数={energy_cv:.3f}>{self.energy_variance_threshold:.3f}")
@@ -239,12 +211,12 @@ class PassiveTransferManager:
         #     should_trigger = True
         #     reasons.append(f"预测{self.predictive_window}分钟后将出现能量危机")
         
-        # 条件4: 紧急情况 - 存在极低能量节点（低于阈值的50%）
-        critical_nodes = energies < (thresholds * 0.5)
-        if np.any(critical_nodes):
-            should_trigger = True
-            critical_count = np.sum(critical_nodes)
-            reasons.append(f"存在{critical_count}个极低能量节点（<阈值50%）")
+        # 条件4: 紧急情况 - 存在极低能量节点（低于阈值的50%）（已禁用）
+        # critical_nodes = energies < (thresholds * 0.5)
+        # if np.any(critical_nodes):
+        #     should_trigger = True
+        #     critical_count = np.sum(critical_nodes)
+        #     reasons.append(f"存在{critical_count}个极低能量节点（<阈值50%）")
         
         return should_trigger, reasons
     

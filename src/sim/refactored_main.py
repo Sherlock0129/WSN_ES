@@ -111,7 +111,7 @@ def create_scheduler(config_manager: ConfigManager, network):
             if dummy_network:
                 scheduler.plan(dummy_network, 0)
             scheduler.load_model(sched_config.dqn_model_path)
-            logger.info(f"✓ DQN模型已加载: {sched_config.dqn_model_path}")
+            logger.info(f"DQN模型已加载: {sched_config.dqn_model_path}")
         elif not sched_config.dqn_training_mode:
             logger.warning(f"⚠ DQN模型文件不存在: {sched_config.dqn_model_path}")
             logger.warning("  将使用随机初始化的网络（性能可能较差）")
@@ -150,7 +150,7 @@ def create_scheduler(config_manager: ConfigManager, network):
             if dummy_network:
                 scheduler.plan(dummy_network, 0)
             scheduler.load_model(sched_config.ddpg_model_path)
-            logger.info(f"✓ DDPG模型已加载: {sched_config.ddpg_model_path}")
+            logger.info(f"DDPG模型已加载: {sched_config.ddpg_model_path}")
         elif not sched_config.ddpg_training_mode:
             logger.warning(f"⚠ DDPG模型文件不存在: {sched_config.ddpg_model_path}")
             logger.warning("  将使用随机初始化的网络（性能可能较差）")
@@ -164,11 +164,11 @@ def create_scheduler(config_manager: ConfigManager, network):
     
     if scheduler_type == "LyapunovScheduler":
         scheduler = LyapunovScheduler(**scheduler_params)
-        logger.info("✓ 使用标准 Lyapunov 调度器")
+        logger.info("使用标准 Lyapunov 调度器")
     elif scheduler_type == "AdaptiveLyapunovScheduler":
         from scheduling.schedulers import AdaptiveLyapunovScheduler
         scheduler = AdaptiveLyapunovScheduler(**scheduler_params)
-        logger.info("✓ 使用自适应参数 Lyapunov 调度器 (AdaptiveLyapunovScheduler)")
+        logger.info("使用自适应参数 Lyapunov 调度器 (AdaptiveLyapunovScheduler)")
         logger.info(f"  - 初始V: {scheduler_params.get('V', 0.5)}")
         logger.info(f"  - V范围: [{scheduler_params.get('V_min', 0.1)}, {scheduler_params.get('V_max', 2.0)}]")
         logger.info(f"  - 调整速率: {scheduler_params.get('adjust_rate', 0.1)*100:.0f}%")
@@ -176,23 +176,23 @@ def create_scheduler(config_manager: ConfigManager, network):
         logger.info(f"  - 特性: V参数自动调整，基于4维反馈（均衡、效率、存活率、总能量）")
     elif scheduler_type == "AdaptiveDurationLyapunovScheduler":
         scheduler = AdaptiveDurationLyapunovScheduler(**scheduler_params)
-        logger.info("✓ 使用自适应时长 Lyapunov 调度器")
+        logger.info("使用自适应时长 Lyapunov 调度器")
     elif scheduler_type == "ClusterScheduler":
         scheduler = ClusterScheduler(**scheduler_params)
-        logger.info("✓ 使用聚类调度器")
+        logger.info("使用聚类调度器")
     elif scheduler_type == "PredictionScheduler":
         scheduler = PredictionScheduler(**scheduler_params)
-        logger.info("✓ 使用预测调度器")
+        logger.info("使用预测调度器")
     elif scheduler_type == "PowerControlScheduler":
         scheduler = PowerControlScheduler(**scheduler_params)
-        logger.info("✓ 使用功率控制调度器")
+        logger.info("使用功率控制调度器")
     elif scheduler_type == "BaselineHeuristic":
         scheduler = BaselineHeuristic(**scheduler_params)
-        logger.info("✓ 使用基线启发式调度器")
+        logger.info("使用基线启发式调度器")
     elif scheduler_type == "duration_aware" or scheduler_type == "DurationAwareLyapunovScheduler":
         from scheduling.schedulers import DurationAwareLyapunovScheduler
         scheduler = DurationAwareLyapunovScheduler(**scheduler_params)
-        logger.info("✓ 使用传输时长感知 Lyapunov 调度器 (DurationAwareLyapunovScheduler)")
+        logger.info("使用传输时长感知 Lyapunov 调度器 (DurationAwareLyapunovScheduler)")
         logger.info(f"  - 时长范围: {scheduler_params.get('min_duration', 1)}-{scheduler_params.get('max_duration', 5)} 分钟")
         logger.info(f"  - AoI权重: {scheduler_params.get('w_aoi', 0.1)}")
         logger.info(f"  - 信息量权重: {scheduler_params.get('w_info', 0.05)}")
@@ -200,7 +200,7 @@ def create_scheduler(config_manager: ConfigManager, network):
     elif scheduler_type == "AdaptiveDurationAwareLyapunovScheduler":
         from scheduling.schedulers import AdaptiveDurationAwareLyapunovScheduler
         scheduler = AdaptiveDurationAwareLyapunovScheduler(**scheduler_params)
-        logger.info("✓ 使用自适应传输时长感知 Lyapunov 调度器 (AdaptiveDurationAwareLyapunovScheduler)")
+        logger.info("使用自适应传输时长感知 Lyapunov 调度器 (AdaptiveDurationAwareLyapunovScheduler)")
         logger.info(f"  - 初始V: {scheduler_params.get('V', 0.5)}")
         logger.info(f"  - V范围: [{scheduler_params.get('V_min', 0.1)}, {scheduler_params.get('V_max', 2.0)}]")
         logger.info(f"  - 调整速率: {scheduler_params.get('adjust_rate', 0.1)*100:.0f}%")
@@ -328,7 +328,7 @@ def _run_training_loop(config_manager: ConfigManager, config_file: str = None):
         if (episode + 1) % save_interval == 0:
             if hasattr(scheduler, 'save_model'):
                 scheduler.save_model(model_path)
-                logger.info(f"✓ 模型已保存（回合{episode + 1}）")
+                logger.info(f"模型已保存（回合{episode + 1}）")
     
     # 训练完成，保存最终模型
     if scheduler and hasattr(scheduler, 'save_model'):
@@ -460,66 +460,67 @@ def _run_single_simulation(config_manager: ConfigManager, config_file: str = Non
             logger.info("虚拟中心归档已保存（PathCollector）")
     
     # 5. 生成可视化
-    logger.info("生成可视化图表...")
-    with handle_exceptions("可视化生成", recoverable=True):
-        # 绘制节点分布图
-        plot_node_distribution(network.nodes, session_dir=simulation.session_dir)
-        
-        # 绘制能量随时间变化图
-        plot_energy_over_time(network.nodes, simulation.result_manager.get_results(), session_dir=simulation.session_dir)
-        
-        # 绘制物理中心节点能量变化图
-        plot_center_node_energy(network.nodes, simulation.result_manager.get_results(), session_dir=simulation.session_dir)
-        
-        # 绘制K值变化图
-        simulation.plot_K_history()
-        
-        # 绘制ADCR聚类和路径图
-        if hasattr(network, 'adcr_link') and network.adcr_link is not None:
-            from viz.plotter import plot_adcr_clusters_and_paths
-            plot_adcr_clusters_and_paths(network.adcr_link, session_dir=simulation.session_dir)
-        
-        # 如果使用DurationAwareLyapunovScheduler，生成专门的可视化
-        from scheduling.schedulers import DurationAwareLyapunovScheduler
-        if isinstance(scheduler, DurationAwareLyapunovScheduler):
-            logger.info("生成传输时长感知的专门可视化...")
-            try:
-                from viz.duration_aware_plotter import (
-                    plot_duration_statistics,
-                    plot_energy_transfer_timeline,
-                    plot_energy_transfer_with_duration,
-                    create_energy_flow_animation
-                )
-                
-                # 统计图
-                plot_duration_statistics(simulation, simulation.session_dir)
-                logger.info("✓ 传输时长统计图生成完成")
-                
-                # 为关键时间点生成时间线图和路径图
-                if hasattr(simulation, 'plans_by_time'):
-                    # 选择有传输的时间点
-                    transfer_times = [t for t, data in simulation.plans_by_time.items() 
-                                    if data.get('plans')]
+    if config_manager.simulation_config.enable_visualization:
+        logger.info("生成可视化图表...")
+        with handle_exceptions("可视化生成", recoverable=True):
+            # 绘制节点分布图
+            plot_node_distribution(network.nodes, session_dir=simulation.session_dir)
+            
+            # 绘制能量随时间变化图
+            plot_energy_over_time(network.nodes, simulation.result_manager.get_results(), session_dir=simulation.session_dir)
+            
+            # 绘制物理中心节点能量变化图
+            plot_center_node_energy(network.nodes, simulation.result_manager.get_results(), session_dir=simulation.session_dir)
+            
+            # 绘制K值变化图
+            simulation.plot_K_history()
+            
+            # 绘制ADCR聚类和路径图
+            if hasattr(network, 'adcr_link') and network.adcr_link is not None:
+                from viz.plotter import plot_adcr_clusters_and_paths
+                plot_adcr_clusters_and_paths(network.adcr_link, session_dir=simulation.session_dir)
+            
+            # 如果使用DurationAwareLyapunovScheduler，生成专门的可视化
+            from scheduling.schedulers import DurationAwareLyapunovScheduler
+            if isinstance(scheduler, DurationAwareLyapunovScheduler):
+                logger.info("生成传输时长感知的专门可视化...")
+                try:
+                    from viz.duration_aware_plotter import (
+                        plot_duration_statistics,
+                        plot_energy_transfer_timeline,
+                        plot_energy_transfer_with_duration,
+                        create_energy_flow_animation
+                    )
                     
-                    # 选择前3个和最后1个时间点
-                    sample_times = transfer_times[:3] + transfer_times[-1:] if transfer_times else []
+                    # 统计图
+                    plot_duration_statistics(simulation, simulation.session_dir)
+                    logger.info("传输时长统计图生成完成")
                     
-                    for t in sample_times:
-                        plans = simulation.plans_by_time[t].get('plans', [])
-                        if plans:
-                            plot_energy_transfer_timeline(plans, network, t, simulation.session_dir)
-                            plot_energy_transfer_with_duration(plans, network, t, simulation.session_dir)
+                    # 为关键时间点生成时间线图和路径图
+                    if hasattr(simulation, 'plans_by_time'):
+                        # 选择有传输的时间点
+                        transfer_times = [t for t, data in simulation.plans_by_time.items() 
+                                        if data.get('plans')]
+                        
+                        # 选择前3个和最后1个时间点
+                        sample_times = transfer_times[:3] + transfer_times[-1:] if transfer_times else []
+                        
+                        for t in sample_times:
+                            plans = simulation.plans_by_time[t].get('plans', [])
+                            if plans:
+                                plot_energy_transfer_timeline(plans, network, t, simulation.session_dir)
+                                plot_energy_transfer_with_duration(plans, network, t, simulation.session_dir)
+                        
+                        logger.info(f"为{len(sample_times)}个时间点生成了时间线和路径图")
                     
-                    logger.info(f"✓ 为{len(sample_times)}个时间点生成了时间线和路径图")
-                
-                # 创建动画（可选，比较耗时）
-                # create_energy_flow_animation(simulation)
-                # logger.info("✓ 能量传输动画生成完成")
-                
-            except Exception as e:
-                logger.warning(f"生成传输时长可视化时出错: {e}")
-        
-        logger.info("可视化图表生成完成")
+                    # 创建动画（可选，比较耗时）
+                    # create_energy_flow_animation(simulation)
+                    # logger.info("能量传输动画生成完成")
+                    
+                except Exception as e:
+                    logger.warning(f"生成传输时长可视化时出错: {e}")
+            
+            logger.info("可视化图表生成完成")
     
     # 6. 输出统计信息
     logger.info("输出统计信息...")

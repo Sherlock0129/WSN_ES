@@ -80,6 +80,11 @@ def run_simulation_with_config(config_manager: ConfigManager):
         network.path_info_collector.vc.archive_path = archive_path
     
     simulation.simulate()
+
+    # 保存详细的计划日志
+    from utils.logger import get_detailed_plan_logger
+    plan_logger = get_detailed_plan_logger(session_dir)
+    plan_logger.save_simulation_plans(simulation)
     
     # 生成可视化
     plot_node_distribution(network.nodes, session_dir=session_dir)
@@ -410,74 +415,24 @@ def run_exp4_duration_aware_only():
 # ==================== 主函数 ====================
 
 def main():
-    """主函数：逐步执行对照实验"""
+    """主函数：只运行E2的基准和no_info_reward实验"""
     print("="*80)
-    print("对照实验执行脚本")
+    print("运行 E2 对照实验 (基准 vs. 无信息奖励)")
     print("="*80)
-    print("\n本脚本将执行四类对照实验：")
-    print("1. 智能被动传能：智能被动 vs 60min主动")
-    print("2. 信息价值：去掉信息价值部分、路由/调度是否优先考虑信息价值")
-    print("3. 机会主义上报机制：与ADCR、每个人给中心发进行对比")
-    print("4. AdaptiveDurationAware：与传统Lyapunov、单纯DurationAware进行对比")
-    print("\n请按提示逐步执行...")
-    
-    # 实验1：智能被动传能
-    print("\n" + "="*80)
-    print("开始实验1：智能被动传能")
-    print("="*80)
-    input("按Enter键开始实验1-基准（智能被动传能）...")
-    run_exp1_baseline_passive()
-    
-    input("按Enter键开始实验1-对照（60分钟主动传能）...")
-    run_exp1_active_60min()
-    
+
     # 实验2：信息价值
     print("\n" + "="*80)
     print("开始实验2：信息价值")
     print("="*80)
-    input("按Enter键开始实验2-基准（启用信息价值）...")
+    print("运行 E2-基准（启用信息价值）...")
     run_exp2_baseline_with_info()
     
-    input("按Enter键开始实验2-对照1（去掉调度器信息价值奖励）...")
+    print("运行 E2-对照1（去掉调度器信息价值奖励）...")
     run_exp2_no_info_reward()
-    
-    input("按Enter键开始实验2-对照2（去掉路由信息感知）...")
-    run_exp2_no_info_routing()
-    
-    input("按Enter键开始实验2-对照3（同时去掉路由和调度的信息价值）...")
-    run_exp2_no_info_both()
-    
-    # 实验3：机会主义上报机制
+
     print("\n" + "="*80)
-    print("开始实验3：机会主义上报机制")
+    print("E2部分实验完成！")
     print("="*80)
-    input("按Enter键开始实验3-基准（机会主义上报机制）...")
-    run_exp3_baseline_opportunistic()
-    
-    input("按Enter键开始实验3-对照1（使用ADCR协议）...")
-    run_exp3_adcr()
-    
-    input("按Enter键开始实验3-对照2（每个人直接给中心发）...")
-    run_exp3_direct_report()
-    
-    # 实验4：AdaptiveDurationAware
-    print("\n" + "="*80)
-    print("开始实验4：AdaptiveDurationAware")
-    print("="*80)
-    input("按Enter键开始实验4-基准（AdaptiveDurationAwareLyapunovScheduler）...")
-    run_exp4_baseline_adaptive_duration()
-    
-    input("按Enter键开始实验4-对照1（传统LyapunovScheduler）...")
-    run_exp4_traditional_lyapunov()
-    
-    input("按Enter键开始实验4-对照2（DurationAwareLyapunovScheduler）...")
-    run_exp4_duration_aware_only()
-    
-    print("\n" + "="*80)
-    print("所有对照实验完成！")
-    print("="*80)
-    print("\n结果文件已保存到 data/备选图/ 目录")
-    print("会话目录已重命名，可在 data/ 目录下查看")
 
 
 if __name__ == "__main__":

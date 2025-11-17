@@ -115,13 +115,14 @@ class EnergySimulation:
             if hasattr(self.network, 'adcr_link') and self.network.adcr_link is not None:
                 self.network.adcr_link.step(t)
 
-            # Step 1.6: 在检查触发条件前，先同步节点能量到虚拟能量层（确保被动传输管理器使用最新能量）
-            # 这确保了被动传输决策基于最新的节点能量状态
-            if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
-                self.scheduler.nim.batch_update_node_info(
-                    nodes=self.network.nodes,
-                    current_time=t
-                )
+            # Step 1.6: [已禁用] 在检查触发条件前，先同步节点能量到虚拟能量层
+            # 这一步会导致所有节点的AOEI在每个时间步都被重置为0，因此已禁用。
+            # 节点信息的更新现在完全依赖于各自的上报机制（如机会主义、ADCR等）。
+            # if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+            #     self.scheduler.nim.batch_update_node_info(
+            #         nodes=self.network.nodes,
+            #         current_time=t
+            #     )
 
             # Step 2: 智能综合决策能量传输触发（使用被动传能管理器）
             should_trigger, trigger_reason = self.passive_manager.should_trigger_transfer(t, self.network)
@@ -165,11 +166,11 @@ class EnergySimulation:
                             from scheduling.schedulers import DurationAwareLyapunovScheduler
                             if isinstance(self.scheduler, DurationAwareLyapunovScheduler):
                                 self.scheduler.nim.check_and_update_locks(t)
-                            # 更新节点信息
-                            self.scheduler.nim.batch_update_node_info(
-                                nodes=self.network.nodes,
-                                current_time=t
-                            )
+                            # [已移除] 此处不应有全局信息更新，节点信息的更新应由具体的上报机制（如PathCollector）处理
+                            # self.scheduler.nim.batch_update_node_info(
+                            #     nodes=self.network.nodes,
+                            #     current_time=t
+                            # )
                         
                         # 同步自适应K给调度器（若其带 K）
                         if hasattr(self.scheduler, "K"):
@@ -290,9 +291,21 @@ class EnergySimulation:
                 # 记录K值和对应时间
                 self.k_adaptation.record_K_value(current_time)
 
+
+            # Step 3 is now outside the if block
+
+
+
+            # Step 4 is now outside the if block
+
+        
             # Step 3: 记录能量状态
             self.result_manager.record_energy_status(self.network)
-        
+
+            # Step 4: 归档当前所有节点的状态（包括估算值和增长后的AOI）
+            if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                self.scheduler.nim.archive_current_state(t)
+
         # 模拟结束后绘制K值随时间变化的图表（训练模式下跳过）
         if not getattr(self, 'training_mode', False):
             K_history, K_timestamps, _ = self.k_adaptation.get_K_history()
