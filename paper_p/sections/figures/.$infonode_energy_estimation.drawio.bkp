@@ -1,0 +1,91 @@
+<mxfile host="65bd71144e">
+    <diagram name="InfoNode理论能量计算流程图" id="infonode-flowchart">
+        <mxGraphModel dx="1002" dy="848" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="1200" math="1" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="InfoNode理论能量计算流程图" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;fontColor=#1a1a1a" parent="1" vertex="1">
+                    <mxGeometry x="300" y="10" width="400" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="start" value="开始&#10;节点i, 时刻t" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=11;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="380" y="60" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="input" value="输入参数&#10;• E_i(t_0): 上次已知能量&#10;• t_0: 上次更新时间&#10;• Δt = t - t_0: 时间间隔&#10;• 传输计划: 已知的能量传输记录" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" parent="1" vertex="1">
+                    <mxGeometry x="320" y="150" width="260" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="check1" value="是否存在信息滞后?&#10;t - t_last_update &gt; 0" style="rhombus;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=10;align=center" parent="1" vertex="1">
+                    <mxGeometry x="360" y="280" width="180" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="step1" value="步骤1: 计算基础能量变化&#10;&#10;能量消耗:&#10;E_cons = E_sen·Δt + E_com·Δt&#10;其中: E_sen=0.1 J/min, E_com根据通信量计算&#10;&#10;能量采集:&#10;E_harvest = η_solar·A_i·G(t)·Δt&#10;其中: η_solar=0.2, A_i=0.1 m²&#10;G(t) = G_max·sin(π(t-t_rise)/(t_set-t_rise))" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=9;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" parent="1" vertex="1">
+                    <mxGeometry x="260" y="400" width="380" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="step2" value="步骤2: 计算传输相关能量&#10;&#10;遍历已知传输计划:&#10;• 如果节点i作为发送者:&#10;  E_send,i = Σ(τ_k · E_char · η_path,k)&#10;• 如果节点i作为接收者:&#10;  E_recv,i = Σ(τ_k · E_char · η_path,k)&#10;&#10;其中: τ_k为传输时长, E_char为特征能量&#10;η_path,k为路径k的传输效率" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=9;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" parent="1" vertex="1">
+                    <mxGeometry x="260" y="570" width="380" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="step3" value="步骤3: 计算估算能量&#10;&#10;E_i^est(t) = E_i(t_0) - E_cons + E_harvest&#10;              - E_send,i + E_recv,i&#10;&#10;物理意义:&#10;初始能量 - 消耗 + 采集 - 发送 + 接收" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" parent="1" vertex="1">
+                    <mxGeometry x="260" y="740" width="380" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="step4" value="步骤4: 边界约束&#10;&#10;E_i^est(t) = min{C_i, max{0, E_i^est(t)}}&#10;&#10;确保能量值在合理范围内:&#10;• 最小值: 0 (不能为负)&#10;• 最大值: C_i (电池容量)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" parent="1" vertex="1">
+                    <mxGeometry x="260" y="870" width="380" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="update" value="更新InfoNode数字孪生账户&#10;&#10;• E_i(t) ← E_i^est(t)&#10;• is_estimated_i ← True&#10;• t_est,i ← t&#10;• 更新历史记录: (t, E_i(t), A_i(t))&#10;• 更新统计信息: 平均能量、方差等" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" parent="1" vertex="1">
+                    <mxGeometry x="260" y="1000" width="380" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="end" value="结束&#10;返回估算能量 E_i^est(t)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=11;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="380" y="1140" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="no_lag" value="使用最新上报值&#10;E_i(t) = E_i^report&#10;is_estimated_i = False" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=10;align=center" parent="1" vertex="1">
+                    <mxGeometry x="600" y="300" width="180" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1" parent="1" source="start" target="input" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1" parent="1" source="input" target="check1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge3" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff" parent="1" source="check1" target="step1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge4" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff" parent="1" source="check1" target="no_lag" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1" parent="1" source="step1" target="step2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1" parent="1" source="step2" target="step3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1" parent="1" source="step3" target="step4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1" parent="1" source="step4" target="update" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1" parent="1" source="update" target="end" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1" parent="1" source="no_lag" target="end" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="690" y="330"/>
+                            <mxPoint x="690" y="1170"/>
+                            <mxPoint x="520" y="1170"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="param_box" value="参数说明:&#10;• E_sen: 感知能耗 (0.1 J/min)&#10;• E_com: 通信能耗 (根据通信量)&#10;• η_solar: 太阳能效率 (0.2)&#10;• A_i: 面板面积 (0.1 m²)&#10;• G(t): 日内辐照度函数&#10;• C_i: 电池容量 (3.5 mAh @ 3.7V)&#10;• E_char: 特征能量 (300 J)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=1;fontSize=9;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" parent="1" vertex="1">
+                    <mxGeometry x="680" y="400" width="200" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="note1" value="Δt" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontStyle=2;fontColor=#0066cc" parent="1" vertex="1">
+                    <mxGeometry x="590" y="200" width="30" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="note2" value="E_cons, E_harvest" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontStyle=2;fontColor=#0066cc" parent="1" vertex="1">
+                    <mxGeometry x="650" y="470" width="100" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="note3" value="E_send, E_recv" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontStyle=2;fontColor=#0066cc" parent="1" vertex="1">
+                    <mxGeometry x="650" y="640" width="100" height="20" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

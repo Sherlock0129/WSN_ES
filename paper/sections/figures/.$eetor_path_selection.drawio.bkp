@@ -1,0 +1,190 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="EETOR路径选择与信息收集示意图" id="eetor-topology">
+    <mxGraphModel dx="1422" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="1" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- 标题 -->
+        <mxCell id="title" value="EETOR路径选择与信息收集示意图" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;fontColor=#1a1a1a" vertex="1" parent="1">
+          <mxGeometry x="400" y="10" width="400" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- 网络拓扑区域 -->
+        <!-- Source节点 -->
+        <mxCell id="source" value="Source&#xa;(源节点)&#xa;E=500 J" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="200" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Relay1节点 -->
+        <mxCell id="relay1" value="Relay1&#xa;(中继节点1)&#xa;E=300 J&#xa;η=0.6" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="320" y="200" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Relay2节点 -->
+        <mxCell id="relay2" value="Relay2&#xa;(中继节点2)&#xa;E=250 J&#xa;η=0.5" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="560" y="200" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Target节点 -->
+        <mxCell id="target" value="Target&#xa;(目标节点)&#xa;E=100 J&#xa;Δ=200 J" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="800" y="200" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Node1 -->
+        <mxCell id="node1" value="Node1&#xa;E=180 J&#xa;AoI=25 min" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="320" y="400" width="100" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Node2 -->
+        <mxCell id="node2" value="Node2&#xa;E=150 J&#xa;AoI=30 min" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="560" y="400" width="100" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Node3 -->
+        <mxCell id="node3" value="Node3&#xa;E=120 J&#xa;AoI=35 min" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="800" y="400" width="100" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Node4 (额外节点) -->
+        <mxCell id="node4" value="Node4&#xa;E=200 J&#xa;AoI=20 min" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="200" y="200" width="100" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Node5 (额外节点) -->
+        <mxCell id="node5" value="Node5&#xa;E=160 J&#xa;AoI=28 min" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="1040" y="200" width="100" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- 能量传输路径（红色粗线，带标注） -->
+        <mxCell id="energy1" value="能量传输&#xa;E_sent=300 J&#xa;η_path=0.6" style="endArrow=classic;html=1;rounded=0;strokeColor=#d79b00;strokeWidth=5;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=9;fontColor=#d79b00;labelBackgroundColor=#ffffff" edge="1" parent="1" source="source" target="relay1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="200" y="250" as="sourcePoint" />
+            <mxPoint x="250" y="200" as="targetPoint" />
+            <mxPoint x="240" y="180" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="energy2" value="能量传输&#xa;E_sent=180 J&#xa;η_path=0.5" style="endArrow=classic;html=1;rounded=0;strokeColor=#d79b00;strokeWidth=5;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=9;fontColor=#d79b00;labelBackgroundColor=#ffffff" edge="1" parent="1" source="relay1" target="relay2">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="440" y="250" as="sourcePoint" />
+            <mxPoint x="490" y="200" as="targetPoint" />
+            <mxPoint x="440" y="180" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="energy3" value="能量传输&#xa;E_sent=90 J&#xa;η_path=0.4&#xa;E_recv=36 J" style="endArrow=classic;html=1;rounded=0;strokeColor=#d79b00;strokeWidth=5;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=9;fontColor=#d79b00;labelBackgroundColor=#ffffff" edge="1" parent="1" source="relay2" target="target">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="680" y="250" as="sourcePoint" />
+            <mxPoint x="730" y="200" as="targetPoint" />
+            <mxPoint x="680" y="180" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 信息收集路径（蓝色虚线，带标注） -->
+        <mxCell id="info1" value="信息收集&#xa;B_v1=50 bits&#xa;A_v1=10 min" style="endArrow=classic;html=1;rounded=0;strokeColor=#6c8ebf;strokeWidth=3;dashed=1;dashPattern=8 8;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=9;fontColor=#6c8ebf;labelBackgroundColor=#ffffff" edge="1" parent="1" source="relay1" target="node1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="370" y="320" as="sourcePoint" />
+            <mxPoint x="420" y="270" as="targetPoint" />
+            <mxPoint x="420" y="320" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="info2" value="信息收集&#xa;B_v2=30 bits&#xa;A_v2=15 min" style="endArrow=classic;html=1;rounded=0;strokeColor=#6c8ebf;strokeWidth=3;dashed=1;dashPattern=8 8;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=9;fontColor=#6c8ebf;labelBackgroundColor=#ffffff" edge="1" parent="1" source="relay2" target="node2">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="610" y="320" as="sourcePoint" />
+            <mxPoint x="660" y="270" as="targetPoint" />
+            <mxPoint x="610" y="320" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="info3" value="信息收集&#xa;B_n3=10 bits&#xa;A_n3=35 min" style="endArrow=classic;html=1;rounded=0;strokeColor=#6c8ebf;strokeWidth=3;dashed=1;dashPattern=8 8;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=9;fontColor=#6c8ebf;labelBackgroundColor=#ffffff" edge="1" parent="1" source="target" target="node3">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="850" y="320" as="sourcePoint" />
+            <mxPoint x="900" y="270" as="targetPoint" />
+            <mxPoint x="850" y="320" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- 信息增益计算标注 -->
+        <mxCell id="info_gain" value="路径信息增益计算:&#xa;G_info(P) = Σ(B_vi · e^(-λ_A · A_vi))&#xa;&#xa;路径P = {Source, Relay1, Relay2, Target}&#xa;G_info(P) = 50·e^(-0.02·10) + 30·e^(-0.02·15)&#xa;         + 10·e^(-0.02·35) ≈ 75.2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=9;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" vertex="1" parent="1">
+          <mxGeometry x="80" y="520" width="320" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- 路径评分计算标注 -->
+        <mxCell id="path_score" value="路径综合评分:&#xa;Score(P) = α·η_P + (1-α)·G_info(P)/G_max&#xa;&#xa;假设: α=0.7, η_P=0.12 (累积效率)&#xa;      G_max=100, G_info(P)=75.2&#xa;Score(P) = 0.7·0.12 + 0.3·0.752 = 0.33" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=9;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" vertex="1" parent="1">
+          <mxGeometry x="440" y="520" width="320" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- 信息聚合过程 -->
+        <mxCell id="aggregation" value="信息聚合过程:&#xa;1. 沿路径收集: Relay1→Node1, Relay2→Node2, Target→Node3&#xa;2. 压缩信息: compress(B_vi) → B_vi^compressed&#xa;3. 计算摘要: hash(B_vi) → hash_i&#xa;4. 布隆过滤器去重: 去除重复信息&#xa;5. 更新InfoNode: 同步到sink节点" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;fontSize=9;align=left;verticalAlign=top;spacingLeft=8;spacingTop=5" vertex="1" parent="1">
+          <mxGeometry x="800" y="520" width="340" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- 图例 -->
+        <mxCell id="legend_title" value="图例" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="680" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend1" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#d79b00;strokeWidth=5" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="80" y="720" as="sourcePoint" />
+            <mxPoint x="180" y="720" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend1_text" value="能量传输路径（红色粗线，带效率标注）" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="190" y="710" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend2" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#6c8ebf;strokeWidth=3;dashed=1;dashPattern=8 8" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="80" y="750" as="sourcePoint" />
+            <mxPoint x="180" y="750" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend2_text" value="信息收集路径（蓝色虚线，带信息量标注）" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="190" y="740" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend3" value="节点类型说明:" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="450" y="680" width="120" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend3_box1" value="源/目标节点" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=9" vertex="1" parent="1">
+          <mxGeometry x="450" y="710" width="100" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend3_box2" value="中继节点" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;fontSize=9" vertex="1" parent="1">
+          <mxGeometry x="570" y="710" width="100" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend3_box3" value="普通节点" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=9" vertex="1" parent="1">
+          <mxGeometry x="690" y="710" width="100" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- 效率标注 -->
+        <mxCell id="eff_label1" value="η₁=0.6" style="text;html=1;strokeColor=#d79b00;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=9;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="200" y="150" width="50" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="eff_label2" value="η₂=0.5" style="text;html=1;strokeColor=#d79b00;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=9;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="440" y="150" width="50" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="eff_label3" value="η₃=0.4&#xa;η_total=0.12" style="text;html=1;strokeColor=#d79b00;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=9;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="680" y="150" width="60" height="35" as="geometry" />
+        </mxCell>
+        
+        <!-- 信息流标注 -->
+        <mxCell id="info_flow1" value="信息捎带" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="360" y="340" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="info_flow2" value="信息捎带" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="600" y="340" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="info_flow3" value="信息捎带" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="840" y="340" width="60" height="20" as="geometry" />
+        </mxCell>
+        
+        <!-- 能量损耗标注 -->
+        <mxCell id="loss1" value="损耗: 120 J" style="text;html=1;strokeColor=#d79b00;fillColor=#ffe6cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="200" y="120" width="70" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="loss2" value="损耗: 90 J" style="text;html=1;strokeColor=#d79b00;fillColor=#ffe6cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="440" y="120" width="70" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="loss3" value="损耗: 54 J" style="text;html=1;strokeColor=#d79b00;fillColor=#ffe6cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" vertex="1" parent="1">
+          <mxGeometry x="680" y="120" width="70" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

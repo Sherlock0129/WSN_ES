@@ -1,0 +1,105 @@
+\section{Modeling}
+本章建立不依赖具体实现细节的抽象化模型，强调以机制与约束为主线刻画系统要素，为下一章机制要素的设计与实现提供统一的语义空间与约束基础，从而使同一套机制化设计能够在后续章节中映射到不同的算法实例与实验场景。为便于后续讨论，本节首先给出本文建模中常用的符号与参数表（完整含义与单位见表\ref{tab:symbols}）），以确保建模符号体系的一致性。
+
+\begin{table}[t]
+\centering
+\caption{符号与参数说明}
+\label{tab:symbols}
+\begin{tabular}{lp{0.62\linewidth}}
+\hline
+\textbf{符号} & \textbf{说明} \\
+\hline
+$\mathcal{N},\, i$ & 节点集合与节点索引 \\
+$C_i,\, E_i(t)$ & 节点$i$电池容量与时刻$t$剩余能量 \\
+$\theta_i^{\text{low}},\, \theta_i^{\text{high}}$ & 低/高能量阈值 \\
+$\mathbf{x}_i(t),\, \mathbf{v}_i(t),\, v_{\max}$ & 节点位置、速度与最大速度 \\
+$d_{ij}(t)$ & 节点对$(i,j)$的欧氏距离 \\
+$E_{\text{sen}},\, E_{\text{com}}$ & 感知/计算能耗与通信能耗 \\
+$E_{\text{elec}},\, \epsilon_{\text{amp}},\, \tau$ & 电子学能耗、功放系数与路径损耗指数 \\
+$B$ & 传输比特数（或比特率相应时窗量化） \\
+$\eta(d),\, \eta_0,\, \gamma$ & 无线能量传输效率模型参数 \\
+$\mathcal{P},\, H,\, H_{\max}$ & 传能路径、跳数与最大跳数 \\
+$\eta_{\mathcal{P}},\, \eta_{\text{th}}$ & 路径累计效率与效率阈值 \\
+$E_{\text{send}},\, E_{\text{recv}},\, E_{\text{loss}}$ & 发送/接收能量与损耗 \\
+$s_i,\, \eta_{\text{solar}},\, A_i$ & 是否可采集、太阳能效率与面板面积 \\
+$G(t),\, G_{\max},\, t_{\text{rise}},\, t_{\text{set}}$ & 日内辐照度及其参数 \\
+$\zeta(t)$ & 天气扰动因子（有界、均值约为1） \\
+$\text{AOEI}_i(t)$ & 节点$i$的能量信息年龄 \\
+$V_0,\, \lambda$ & 信息价值衰减模型参数 \\
+$w_{\text{aoei}},\, Q_i,\, \tau$ & AOEI权重、虚拟队列与传输时长 \\
+\hline
+\end{tabular}
+\end{table}
+
+在此基础上，本节采用分层建模方法展开描述。首先从节点视角进行建模，刻画节点的能量状态、采集能力、消耗特性与传输效率等核心属性，并建立物理节点与虚拟信息节点（数字孪生账户）之间的对应关系，用于支撑跨层调度与状态推理。随后从整体场景出发，分别从网络结构、环境供给与链路特性三个维度构建具备普适性的能量共享模型。通过该分层方式，可为后续机制设计与性能评估提供统一、结构化且可扩展的建模框架。
+
+\subsection{Node Modeling}
+
+网络由普通传感器节点与 sink 节点组成。sink 节点是网络中的汇聚与控制节点，负责集中接收全网数据、维护全局状态与调度信息，不参与能量传输，其自身能量在本模型中视为充足且不作为优化对象。普通传感器节点既具备能量采集（Energy Harvesting, EH）能力，也具备能量共享/传输（Energy Sharing, ES）能力，可在不同角色间动态切换：在能量充裕时作为供能者执行无线能量传输，在能量紧张时作为受能者发起请求，同时 数字孪生账户 在 sink 节点通过计算更新信息状态与需求。普通节点\(i \in \mathcal{N}\)具备以下关键属性与动态过程：
+\begin{itemize}
+    \item \emph{能量状态}：电池容量\(C_i\)（典型值3.5~mAh, 3.7~V），当前能量\(E_i(t)\)，低/高阈值\(\theta_i^{\text{low}}, \theta_i^{\text{high}}\)。
+    \item \emph{能量采集}：若启用太阳能，基于日内辐照度模型\(G(t) = G_{\max} \sin(\pi(t-t_{\text{rise}})/(t_{\text{set}}-t_{\text{rise}}))\)采集能量，转换效率\(\eta_{\text{solar}}=0.2\)，面板面积\(A=0.1~\text{m}^2\)。
+    \item \emph{能量消耗}：感知能耗\(E_{\text{sen}}=0.1~\text{J}\)，通信能耗\(E_{\text{com}} = E_{\text{elec}} B + \epsilon_{\text{amp}} B d^{\tau}\)（其中\(B\)为比特率，\(d\)为距离，\(\tau=2\)为路径损耗指数）。
+    \item \emph{能量传输效率}：距离\(d\)处的无线能量传输效率\(\eta(d) = \eta_0 / d^{\gamma}\)（\(\eta_0=0.6\), \(\gamma=2.0\)，对应1米处最大效率60\%）。
+\end{itemize}
+在信息层，每个物理节点一一映射为在 sink 节点维护的虚拟节点（数字孪生账户），这些虚拟代理承载物理节点的实时状态、账户余额与历史轨迹，用作调度与路由过程中状态访问、预测与推理的接口，从而在不依赖全局实时信息的情况下实现跨层决策联动。
+
+\subsection{Scenario Modeling}
+从网络结构、环境供给与链路特性三个层面描述：
+该三层建模共同构成一个具备普适性的无线能量共享场景：网络结构层允许从规则网格到随机部署乃至能量空洞的多样拓扑，适配环境监测、灾害应急和智慧城市等主流应用；环境供给层通过日内辐照度与天气扰动的混合建模呈现非平稳能源供给，能够覆盖太阳能、风能等异质采集背景；链路特性层则联动通信与能量传输效率、路径约束与损耗阈值，确保模型既贴合无线能量传输物理规律，又能映射到具备实际部署约束的多跳网络，从而为后续机制与算法分析提供通用而可落地的抽象环境。
+\begin{itemize}
+    \item \emph{网络结构：}设节点集合为 \(\mathcal{N}=\{1,\dots,N\}\)，sink 节点记为 0 且不参与无线能量共享（wireless energy sharing）。节点 \(i\) 在时刻 \(t\) 的二维位置为 \(\mathbf{x}_i(t)\in\mathbb{R}^2\)。部署分布支持：
+    \begin{enumerate}[label=(\alph*), leftmargin=1.35em]
+        \item 均匀随机：\(\mathbf{x}_i(0)\sim \mathcal{U}([0,L]\times[0,L])\)；
+        \item 规则网格：\(\mathbf{x}_i(0)\) 等间距栅格；
+        \item 能量空洞：存在子域 \(\Omega_{\text{hole}}\subset [0,L]^2\)，使得 \(\mathbb{P}(\mathbf{x}_i(0)\in \Omega_{\text{hole}})\) 降低，且 \(\mathbb{E}[E_i(0)\mid \mathbf{x}_i(0)\in \Omega_{\text{hole}}]\) 偏低。
+    \end{enumerate}
+    典型规模 \(N\in[10,100]\)。模型支持可选的节点移动，其位置按如下方式更新：
+    \[
+    \mathbf{x}_i(t+\Delta t)=\mathbf{x}_i(t)+\mathbf{v}_i(t)\,\Delta t,\qquad \|\mathbf{v}_i(t)\|\le v_{\max},
+    \]
+    其中 \(\mathbf{v}_i(t)\) 可取直线、往返或随机游走模型，以反映动态拓扑。
+    \item \emph{环境供给：}若节点 \(i\) 具备采集能力（标识 \(s_i\in\{0,1\}\)），其单位时间采集量建模为
+    \[
+    E_{h,i}(t)= s_i\cdot \eta_{\text{solar}} A_i\cdot G(t)\cdot \Delta t,
+    \]
+    其中转换效率 \(\eta_{\text{solar}}\in(0,1)\)、面板面积 \(A_i\)，日内辐照度
+    \begin{equation}
+    G(t)=G_{\max}\cdot \max\!\Big\{0,\ \sin\!\Big(\frac{\pi(t-t_{\text{rise}})}{t_{\text{set}}-t_{\text{rise}}}\Big)\Big\}\cdot \zeta(t),
+    \end{equation}
+    \(\zeta(t)\) 刻画天气扰动（如 \(\mathbb{E}[\zeta]=1\) 的有界噪声）。非平稳性由 \((t_{\text{rise}},t_{\text{set}})\) 与 \(\zeta(t)\) 共同引入。
+    \item \emph{链路特性：}节点对 \((i,j)\) 的距离 \(d_{ij}(t)=\|\mathbf{x}_i(t)-\mathbf{x}_j(t)\|_2\)。能量传输效率
+    \[
+    \eta(d_{ij})=\min\Big\{1,\max\big\{0,\tfrac{\eta_0}{d_{ij}^{\gamma}}\big\}\Big\},\quad \eta_0\in(0,1),\ \gamma\in[2,4].
+    \]
+    多跳路径 \(\mathcal{P}= (i=v_0\to v_1\to\cdots\to v_H=j)\) 的总效率 \(\eta_{\mathcal{P}}=\prod_{k=0}^{H-1}\eta(d_{v_k v_{k+1}})\)。
+    通信能耗采用常用模型（发送/接收）
+    \[
+    \begin{aligned}
+    E_{\text{tx}}&=E_{\text{elec}}\,B+\epsilon_{\text{amp}}\,B\cdot d_{ij}^{\tau},\\
+    E_{\text{rx}}&=E_{\text{elec}}\,B,
+    \end{aligned}
+    \]
+    其中 \(\tau\) 为路径损耗指数、\(\epsilon_{\text{amp}}>0\)。单次无线能量共享（wireless energy sharing）发送量 \(E_{\text{send}}\) 的有效接收
+    \[
+    E_{\text{recv}}=\eta_{\mathcal{P}}\cdot E_{\text{send}},\qquad E_{\text{loss}}=E_{\text{send}}-E_{\text{recv}}.
+    \]
+    系统施加最大跳数 \(H_{\max}\) 与效率阈值 \(\eta_{\text{th}}\)，仅允许 \(\eta_{\mathcal{P}}\ge \eta_{\text{th}}\) 且 \(H\le H_{\max}\) 的路径，以抑制极低效路径并保障全局能效与公平。
+\end{itemize}
+
+% 图占位：网络拓扑与能量路径示意（留出位置）
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.9\linewidth]{sections/figures/node_distribution .png}
+\caption{网络拓扑示意图。}
+\label{fig:network_paths_placeholder}
+\end{figure}
+
+在能量守恒下，节点能量演化为
+\begin{equation}
+\begin{aligned}
+E_i(t+\Delta t)=\min\Big\{C_i,\ &E_i(t)-E_{\text{sen},i}(t)-E_{\text{com},i}(t)\\
+&-E_{\text{send},i}(t)+E_{h,i}(t)+E_{\text{recv},i}(t)\Big\},
+\end{aligned}
+\end{equation}
+其中 \(C_i\) 为电池容量，\(E_{\text{sen},i}\) 为感知/计算能耗，\(E_{\text{com},i}\) 为通信能耗。上述三层（结构/供给/链路）与能量演化共同定义机制运行的语义空间与外生扰动，为后续决策与评估提供统一背景与可检验假设。

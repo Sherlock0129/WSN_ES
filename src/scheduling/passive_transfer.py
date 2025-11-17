@@ -67,7 +67,10 @@ class PassiveTransferManager:
         """
         # 如果不是被动模式，使用传统的定时触发（每60分钟）
         if not self.passive_mode:
-            should_trigger = (t % 60 == 0)
+            # 使用 check_interval 作为定时触发的间隔
+            if self.check_interval <= 0:
+                return False, None  # 间隔小于等于0时，禁用定时触发
+            should_trigger = (t % self.check_interval == 0)
             return should_trigger, "定时触发" if should_trigger else None
         
         # 1. 检查间隔：只在指定间隔检查

@@ -87,7 +87,7 @@ class NetworkConfig:
     network_area_width: float = 5.0    # 区域宽度 m
     network_area_height: float = 5.0   # 区域高度 m
     min_distance: float = 0.5          # 节点间最小生成距离 m（避免过近重叠）
-    random_seed: int = 128            # 随机种子（影响位置与属性抽样）
+    random_seed: int = 131            # 随机种子（影响位置与属性抽样）
     solar_node_ratio: float = 0.6      # 具备太阳能节点比例（0~1）
     mobile_node_ratio: float = 0.0     # 可移动节点比例（0~1，若启用移动模型）
     
@@ -118,7 +118,7 @@ class SimulationConfig:
     """
 
     time_steps: int = 10080            # 总时间步数（分钟），默认 7 天
-    energy_transfer_interval: int = 60   # 传能/调度触发间隔（分钟）
+    energy_transfer_interval: int = 10   # 传能/调度触发间隔（分钟）
     # 注意：当前实现中触发条件写死为 `if t % 60 == 0`，未读取该配置值；后续可将其接入。
     output_dir: str = "data"             # 仿真输出根目录，由 OutputManager 管理会话子目录
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
@@ -127,8 +127,8 @@ class SimulationConfig:
     enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
 
     # 智能被动传能参数
-    passive_mode: bool = True          # 是否启用智能被动传能模式（False为定时主动传能）
-    check_interval: int = 1                # 智能检查间隔（分钟）
+    passive_mode: bool = False          # 是否启用智能被动传能模式（False为定时主动传能）
+    check_interval: int = 1000                # 智能检查间隔（分钟）
     critical_ratio: float = 0.2             # 低能量节点临界比例（0-1）
     energy_variance_threshold: float = 0.05  # 能量方差阈值，超过则触发传能
     cooldown_period: int = 0               # 传能冷却期（分钟），避免频繁触发
@@ -146,7 +146,7 @@ class SimulationConfig:
     use_lookahead: bool = False          # 是否进行短期前瞻评估以辅助 K 调整
     
     # ADCR链路层
-    enable_adcr_link_layer: bool = False # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
+    enable_adcr_link_layer: bool = True # 是否启用ADCR链路层参与仿真（聚类、路径规划、能耗结算）
     
     # 计算加速
     use_gpu_acceleration: bool = False   # GPU 加速开关（需要安装 CuPy 与 CUDA 驱动）
@@ -168,8 +168,8 @@ class SchedulerConfig:
 
     # scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
     # scheduler_type: str = "AdaptiveLyapunovScheduler"  # 默认调度器类型
-    # scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
-    scheduler_type: str = "AdaptiveDurationAwareLyapunovScheduler"  # 默认调度器类型
+    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
+    # scheduler_type: str = "AdaptiveDurationAwareLyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
@@ -287,7 +287,7 @@ class ADCRConfig:
     """
 
     # 核心算法参数
-    round_period: int = 1440        # 重聚类周期（分钟），例如每日重选簇头
+    round_period: int = 120        # 重聚类周期（分钟），例如每日重选簇头
     r_neighbor: float = 1.732       # 邻居检测半径 ≈ sqrt(3.0)（与直传判定阈值一致）
     r_min_ch: float = 1.0           # 簇头间最小距离（避免过密簇头）
     c_k: float = 1.2                # K 值估计系数（与 SimulationConfig.K 的关系：用于 ADCR 内部估计/限制）
@@ -371,7 +371,7 @@ class EETORConfig:
     sparse_network_range: float = 10.0      # 稀疏网络使用较大的通信范围
     
     # 信息感知路由参数
-    enable_info_aware_routing: bool = True  # 是否启用信息感知路由
+    enable_info_aware_routing: bool = False  # 是否启用信息感知路由
     info_reward_factor: float = 0.2          # 信息奖励系数（0~1），信息量大的节点优先选择
     # 注意：max_info_wait_time 和 min_info_volume_threshold 在 PathCollectorConfig 中配置
 
@@ -393,8 +393,8 @@ class PathCollectorConfig:
     """
     
     # 基本开关
-    enable_path_collector: bool = True  # 是否启用路径信息收集器
-    replace_adcr: bool = True  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
+    enable_path_collector: bool = False  # 是否启用路径信息收集器
+    replace_adcr: bool = False  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
     
     # 能量消耗模式
     energy_mode: str = "full"  # 能量消耗模式："free"（零能耗，默认）
@@ -412,8 +412,8 @@ class PathCollectorConfig:
     use_solar_model: bool = True  # 是否使用太阳能模型进行估算
     
     # 机会主义信息传递参数
-    enable_opportunistic_info_forwarding: bool = True  # 是否启用机会主义信息传递
-    enable_delayed_reporting: bool = True               # 是否启用延迟上报（False为立即上报）
+    enable_opportunistic_info_forwarding: bool = False  # 是否启用机会主义信息传递
+    enable_delayed_reporting: bool = False               # 是否启用延迟上报（False为立即上报）
     max_wait_time: int = 500                              # 最大等待时间（分钟），超时强制上报（固定模式或自适应模式的基础值）
     min_info_volume_threshold: int = 1                   # 最小信息量阈值（节点数），低于此值不等待
     max_info_volume: int = 1000000                         # 信息量最大值（bits），超过此值强制上报，None表示无限制

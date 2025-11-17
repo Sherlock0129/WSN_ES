@@ -1,0 +1,160 @@
+% IEEE Journal Paper Template
+% Based on bare_jrnl.tex V1.4b
+% Modified for Information-Energy Dual System in WSN Energy Sharing
+
+\documentclass[journal]{IEEEtran}
+
+% *** MISC UTILITY PACKAGES ***
+\ifCLASSINFOpdf
+  \usepackage[pdftex]{graphicx}
+  \graphicspath{{sections/figures/}}
+  \DeclareGraphicsExtensions{.pdf,.jpeg,.png}
+\else
+  \usepackage[dvips]{graphicx}
+  \graphicspath{{sections/figures/}}
+  \DeclareGraphicsExtensions{.eps}
+\fi
+
+% *** MATH PACKAGES ***
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+
+% *** SPECIALIZED LIST PACKAGES ***
+\usepackage{enumitem}
+
+% *** ALIGNMENT PACKAGES ***
+\usepackage{array}
+\usepackage{booktabs}  % 三线表支持
+\usepackage{multirow}  % 跨行表格支持
+\usepackage{makecell}  % 表格单元格换行
+
+% *** SUBFIGURE PACKAGES ***
+\usepackage[caption=false,font=footnotesize]{subfig}
+
+% *** FLOAT PACKAGES ***
+\usepackage{stfloats}
+
+% *** PDF, URL AND HYPERLINK PACKAGES ***
+\usepackage{url}
+\usepackage{hyperref}
+
+% *** CHINESE SUPPORT ***
+\usepackage[UTF8]{ctex}
+
+% *** ADDITIONAL PACKAGES ***
+\usepackage{siunitx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usetikzlibrary{shapes.geometric, arrows}
+\usepackage{mdframed}  % 可分页的背景框
+
+% correct bad hyphenation here
+\hyphenation{op-tical net-works semi-conduc-tor}
+
+\begin{document}
+
+% paper title
+% Titles are generally capitalized except for words such as a, an, and, as,
+% at, but, by, for, in, nor, of, on, or, the, to and up, which are usually
+% not capitalized unless they are the first or last word of the title.
+\title{Information-Energy Dual System for\\Energy Sharing in Wireless Sensor Networks}
+
+% author names and IEEE memberships
+% note positions of commas and nonbreaking spaces ( ~ ) LaTeX will not break
+% a structure at a ~ so this keeps an author's name from being broken across
+% two lines.
+\author{Author~Name,~\IEEEmembership{Member,~IEEE,}
+        and~Coauthor~Name,~\IEEEmembership{Member,~IEEE}%
+\thanks{M. Shell was with the Department
+of Electrical and Computer Engineering, University Name, City,
+Country e-mail: (see http://www.example.com/contact.html).}%
+\thanks{J. Doe and J. Doe are with Anonymous University.}%
+\thanks{Manuscript received Month DD, YYYY; revised Month DD, YYYY.}}
+
+% The paper headers
+\markboth{IEEE Transactions on XXX,~Vol.~XX, No.~X, Month~YYYY}%
+{Shell \MakeLowercase{\textit{et al.}}: Information-Energy Dual System for Energy Sharing in WSN}
+
+% make the title area
+\maketitle
+
+% As a general rule, do not put math, special symbols or citations
+% in the abstract or keywords.
+\begin{abstract}
+Wireless Sensor Networks (WSNs) face fundamental challenges in simultaneously prolonging network lifetime and balancing energy distribution due to the decoupling of information and energy systems. Traditional approaches optimize within fixed system constraints, making it difficult to achieve both objectives simultaneously. This paper proposes an Information-Energy Dual System that integrates four synergistic mechanisms: (1) Age-of-Energy-Information (AOEI) priority mechanism that determines energy information reporting timing through dynamic AOI thresholds; (2) InfoNode digital twin mechanism that maintains virtual node energy tables through theoretical energy calculations; (3) Adaptive Lyapunov Duration Planning (ALDP) mechanism that performs prospective transmission duration planning; and (4) Energy-Efficient Transfer Opportunistic Routing (EETOR) mechanism that opportunistically collects node information during energy transmission. These four mechanisms work synergistically to fundamentally integrate information and energy systems, solving the core problem of "information system independence from energy system." Experimental results demonstrate that the proposed approach significantly prolongs network lifetime (first node death time) and improves energy balance (coefficient of variation) without increasing total energy consumption, achieving a 194.4\% improvement in the combined objective compared to baseline methods.
+\end{abstract}
+
+% Note that keywords are not normally used for peerreview papers.
+\begin{IEEEkeywords}
+Wireless sensor networks, energy sharing, information-energy dual system, AOEI, digital twin, mechanism design
+\end{IEEEkeywords}
+
+% For peer review papers, you can put extra information on the cover
+% page as needed:
+% \ifCLASSOPTIONpeerreview
+% \begin{center} \bfseries EDICS Category: 3-BBND \end{center}
+% \fi
+%
+% For peerreview papers, this IEEEtran command inserts a page break and
+% creates the second title. It will be ignored for other modes.
+\IEEEpeerreviewmaketitle
+
+% ========== 各章节通过 \input 引用 ==========
+\input{sections/01_introduction}
+
+\input{sections/02_related_work}
+
+\input{sections/03_modeling}
+
+\input{sections/04_mechanism_design}
+
+\input{sections/05_experiments}
+
+\input{sections/06_discussion}
+
+\input{sections/07_conclusion}
+
+% ========== 参考文献 ==========
+% can use a bibliography generated by BibTeX as a .bbl file
+% BibTeX documentation can be easily obtained at:
+% http://mirror.ctan.org/biblio/bibtex/contrib/doc/
+% The IEEEtran BibTeX style support page is at:
+% http://www.michaelshell.org/tex/ieeetran/bibtex/
+\bibliographystyle{IEEEtran}
+% argument is your BibTeX string definitions and bibliography database(s)
+% \bibliography{IEEEabrv,references}
+
+% <OR> manually copy in the resultant .bbl file
+% set second argument of \begin to the number of references
+% (used to reserve space for the reference number labels box)
+\begin{thebibliography}{1}
+
+\bibitem{placeholder2025}
+Placeholder reference. Replace with actual bibliography entries.
+
+\end{thebibliography}
+
+% biography section
+% 
+% If you have an EPS/PDF photo (graphicx package needed) extra braces are
+% needed around the contents of the optional argument to biography to prevent
+% the LaTeX parser from getting confused when it sees the complicated
+% \includegraphics command within an optional argument. (You could create
+% your own custom macro containing the \includegraphics command to make things
+% simpler here.)
+\begin{IEEEbiographynophoto}{Author Name}
+Biography text here.
+\end{IEEEbiographynophoto}
+
+% insert where needed to balance the two columns on the last page with
+% biographies
+%\newpage
+
+\begin{IEEEbiographynophoto}{Coauthor Name}
+Biography text here.
+\end{IEEEbiographynophoto}
+
+% that's all folks
+\end{document}

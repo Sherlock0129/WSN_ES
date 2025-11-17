@@ -1,0 +1,85 @@
+<mxfile host="Electron" modified="2025-11-15T23:17:25.074Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.2.5 Chrome/120.0.6099.109 Electron/28.1.0 Safari/537.36" version="24.2.5" etag="Qq4QXcdIqytxxmea1BIu" type="device">
+  <diagram name="EETOR路径选择与信息收集示意图" id="eetor-topology">
+    <mxGraphModel dx="939" dy="633" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="1" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="source" value="Source1&lt;br&gt;(源节点1)&lt;br&gt;E=500 J" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=3;fontSize=11;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="10" y="155" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="relay1" value="Relay1&#xa;(中继节点1)&#xa;E=300 J&#xa;η=0.6" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=3;fontSize=11;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="190" y="90" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="relay2" value="Relay2&#xa;(中继节点2)&#xa;E=250 J&#xa;η=0.5" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=3;fontSize=11;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="350" y="110" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="target" value="Target1&lt;br&gt;(目标节点1)&lt;br&gt;E=100 J&lt;br&gt;Δ=200 J" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#D6B6B6;strokeWidth=3;fontSize=11;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="470" y="230" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="node5" value="Node5&#xa;E=160 J&#xa;AoI=28 min" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10" parent="1" vertex="1">
+          <mxGeometry x="920" y="175" width="100" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="info_flow1" value="信息捎带" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" parent="1" vertex="1">
+          <mxGeometry x="130" y="180" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="info_flow2" value="信息捎带" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" parent="1" vertex="1">
+          <mxGeometry x="350" y="320" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="info_flow3" value="信息捎带" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" parent="1" vertex="1">
+          <mxGeometry x="530" y="200" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="loss2" value="损耗: 90 J" style="text;html=1;strokeColor=#d79b00;fillColor=#ffe6cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" parent="1" vertex="1">
+          <mxGeometry x="290" y="100" width="70" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="loss3" value="损耗: 54 J" style="text;html=1;strokeColor=#d79b00;fillColor=#ffe6cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=8;fontStyle=2" parent="1" vertex="1">
+          <mxGeometry x="590" y="250" width="70" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="vvK2uKNDjfBNpJjOrP4P-1" value="Source2&lt;br&gt;(源节点2)&lt;br&gt;E=500 J" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="220" y="255" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="vvK2uKNDjfBNpJjOrP4P-3" value="Target2&lt;br&gt;(目标节点2)&lt;br&gt;E=100 J&lt;br&gt;Δ=200 J" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;fontSize=11;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="620" y="135" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="vvK2uKNDjfBNpJjOrP4P-4" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#d79b00;strokeWidth=5;exitX=0.997;exitY=0.307;exitDx=0;exitDy=0;exitPerimeter=0;entryX=-0.018;entryY=0.588;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="source" target="relay1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="130" y="90" as="sourcePoint" />
+            <mxPoint x="190" y="115" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vvK2uKNDjfBNpJjOrP4P-5" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#d79b00;strokeWidth=5;exitX=1.023;exitY=0.449;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.054;entryY=0.255;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="relay1" target="relay2">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="290" y="145" as="sourcePoint" />
+            <mxPoint x="340" y="175" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vvK2uKNDjfBNpJjOrP4P-6" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#d79b00;strokeWidth=5;entryX=0.087;entryY=0.175;entryDx=0;entryDy=0;entryPerimeter=0;exitX=1;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="relay2" target="target">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="440" y="205" as="sourcePoint" />
+            <mxPoint x="480" y="235" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vvK2uKNDjfBNpJjOrP4P-8" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#d79b00;strokeWidth=5;exitX=0.979;exitY=0.394;exitDx=0;exitDy=0;entryX=0.043;entryY=0.747;entryDx=0;entryDy=0;entryPerimeter=0;exitPerimeter=0;" edge="1" parent="1" source="vvK2uKNDjfBNpJjOrP4P-1" target="target">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="150" y="115" as="sourcePoint" />
+            <mxPoint x="220" y="154" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vvK2uKNDjfBNpJjOrP4P-9" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#d79b00;strokeWidth=5;exitX=0.913;exitY=0.232;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.061;entryY=0.778;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="target" target="vvK2uKNDjfBNpJjOrP4P-3">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="160" y="125" as="sourcePoint" />
+            <mxPoint x="230" y="164" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vvK2uKNDjfBNpJjOrP4P-11" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#9673a6;strokeWidth=5;exitX=0;exitY=0;exitDx=0;exitDy=0;dashed=1;dashPattern=1 1;fillColor=#e1d5e7;entryX=0.887;entryY=0.788;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="vvK2uKNDjfBNpJjOrP4P-3" target="vvK2uKNDjfBNpJjOrP4P-12">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="700" y="228.5" as="sourcePoint" />
+            <mxPoint x="590" y="110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vvK2uKNDjfBNpJjOrP4P-12" value="sink" style="ellipse;whiteSpace=wrap;html=1;fillColor=#a20025;strokeColor=#6F0000;strokeWidth=3;fontSize=11;fontStyle=1;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="500" y="30" width="100" height="100" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -46,11 +46,37 @@ def plot_node_distribution(
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
 
+    # Use filled vs hollow markers to highlight solar capability
     ax.scatter(
-        solar_x, solar_y, c='#f5b301', s=45, marker='o', label='Solar nodes', edgecolors='black', linewidths=0.4
+        solar_x,
+        solar_y,
+        s=60,
+        marker='o',
+        facecolors='#f7c948',
+        edgecolors='#d48806',
+        linewidths=1.0,
+        label='Solar-enabled (filled)',
     )
     ax.scatter(
-        nosolar_x, nosolar_y, c='#666666', s=55, marker='^', label='Non-solar nodes', edgecolors='black', linewidths=0.4
+        solar_x,
+        solar_y,
+        s=120,
+        marker='o',
+        facecolors='none',
+        edgecolors='#ffe08a',
+        linewidths=0.8,
+        alpha=0.5,
+        label='_nolegend_',
+    )
+    ax.scatter(
+        nosolar_x,
+        nosolar_y,
+        s=65,
+        marker='o',
+        facecolors='none',
+        edgecolors='#424242',
+        linewidths=1.5,
+        label='Non-solar (hollow)',
     )
 
     for x, y, node_id in zip(solar_x, solar_y, solar_ids[:100]):

@@ -549,6 +549,10 @@ class Network:
         
         # 根据距离分配能量（线性递减）
         for i, node in enumerate(self.nodes):
+            # 跳过物理中心节点，保护其特殊能量值
+            if node.is_physical_center:
+                continue
+
             distance = distances[i]
             
             # 线性衰减：ratio = 1.0 - (distance / max_distance)

@@ -1,5 +1,5 @@
 \section{Modeling}
-\noindent 为便于阅读，先给出本文建模中常用符号与参数表（完整含义与单位见表\ref{tab:symbols}）。
+本章建立不依赖具体实现细节的抽象化模型，强调以机制与约束为主线刻画系统要素，为下一章机制要素的设计与实现提供统一的语义空间与约束基础，从而使同一套制度化设计能够在后续章节中映射到不同的算法实例与实验场景。为便于后续讨论，本节首先给出本文建模中常用的符号与参数表（完整含义与单位见表\ref{tab:symbols}）），以确保建模符号体系的一致性。
 
 \begin{table}[t]
 \centering
@@ -31,27 +31,30 @@ $w_{\text{aoei}},\, Q_i,\, \tau$ & AOEI权重、虚拟队列与传输时长 \\
 \end{tabular}
 \end{table}
 
-\subsection{Node and Scenario Modeling}
-本章建立不依赖具体实现细节的抽象化模型。
+在此基础上，本节采用分层建模方法展开描述。首先从节点视角进行建模，刻画节点的能量状态、采集能力、消耗特性与传输效率等核心属性，并建立物理节点与虚拟信息节点（InfoNode）之间的对应关系，用于支撑跨层调度与状态推理。随后从整体场景出发，分别从网络结构、环境供给与链路特性三个维度构建具备普适性的能量共享模型。通过该分层方式，可为后续机制设计与性能评估提供统一、结构化且可扩展的建模框架。
 
-\textbf{节点建模：}网络由普通传感器节点与物理中心节点组成。物理中心节点不参与能量传输，其职责在于信息汇聚与全网状态维护。普通节点\(i \in \mathcal{N}\)具备以下关键属性与动态过程：
+\subsection{Node Modeling}
+
+网络由普通传感器节点与 sink 节点组成。sink 节点是网络中的汇聚与控制节点，负责集中接收全网数据、维护全局状态与调度信息，不参与能量传输，其自身能量在本模型中视为充足且不作为优化对象。普通传感器节点既具备能量采集（Energy Harvesting, EH）能力，也具备能量共享/传输（Energy Sharing, ES）能力，可在不同角色间动态切换：在能量充裕时作为供能者执行无线能量传输，在能量紧张时作为受能者发起请求，同时 InfoNode 在 sink 节点通过计算更新信息状态与需求。普通节点\(i \in \mathcal{N}\)具备以下关键属性与动态过程：
 \begin{itemize}
     \item \emph{能量状态}：电池容量\(C_i\)（典型值3.5~mAh, 3.7~V），当前能量\(E_i(t)\)，低/高阈值\(\theta_i^{\text{low}}, \theta_i^{\text{high}}\)。
     \item \emph{能量采集}：若启用太阳能，基于日内辐照度模型\(G(t) = G_{\max} \sin(\pi(t-t_{\text{rise}})/(t_{\text{set}}-t_{\text{rise}}))\)采集能量，转换效率\(\eta_{\text{solar}}=0.2\)，面板面积\(A=0.1~\text{m}^2\)。
     \item \emph{能量消耗}：感知能耗\(E_{\text{sen}}=0.1~\text{J}\)，通信能耗\(E_{\text{com}} = E_{\text{elec}} B + \epsilon_{\text{amp}} B d^{\tau}\)（其中\(B\)为比特率，\(d\)为距离，\(\tau=2\)为路径损耗指数）。
     \item \emph{能量传输效率}：距离\(d\)处的无线能量传输效率\(\eta(d) = \eta_0 / d^{\gamma}\)（\(\eta_0=0.6\), \(\gamma=2.0\)，对应1米处最大效率60\%）。
 \end{itemize}
-每个物理节点在信息空间一一映射为轻量级信息节点（InfoNode），用于调度与路由过程中的状态访问与推理，从而弱化对全局完美信息假设的依赖。
+在信息层，每个物理节点一一映射为在 sink 节点维护的虚拟节点（InfoNode），这些虚拟代理承载物理节点的实时状态、账户余额与历史轨迹，用作调度与路由过程中状态访问、预测与推理的接口，从而在不依赖全局实时信息的情况下实现跨层决策联动\cite{9120192}。
 
-\textbf{场景建模：}从网络结构、环境供给与链路特性三个层面描述：
+\subsection{Scenario Modeling}
+从网络结构、环境供给与链路特性三个层面描述：
+该三层建模共同构成一个具备普适性的无线能量共享场景：网络结构层允许从规则网格到随机部署乃至能量空洞的多样拓扑，适配环境监测、灾害应急和智慧城市等主流应用；环境供给层通过日内辐照度与天气扰动的混合建模呈现非平稳能源供给，能够覆盖太阳能、风能等异质采集背景\cite{tang2018energy}；链路特性层则联动通信与能量传输效率、路径约束与损耗阈值，确保模型既贴合无线能量传输物理规律，又能映射到具备实际部署约束的多跳网络\cite{tang2018energy}，从而为后续机制与算法分析提供通用而可落地的抽象环境。
 \begin{itemize}
-    \item \emph{网络结构：}设节点集合为 \(\mathcal{N}=\{1,\dots,N\}\)，物理中心节点记为 0 且不参与 WET。节点 \(i\) 在时刻 \(t\) 的二维位置为 \(\mathbf{x}_i(t)\in\mathbb{R}^2\)。部署分布支持：
+    \item \emph{网络结构：}设节点集合为 \(\mathcal{N}=\{1,\dots,N\}\)，sink 节点记为 0 且不参与无线能量共享（wireless energy sharing）。节点 \(i\) 在时刻 \(t\) 的二维位置为 \(\mathbf{x}_i(t)\in\mathbb{R}^2\)。部署分布支持：
     \begin{enumerate}[label=(\alph*), leftmargin=1.35em]
         \item 均匀随机：\(\mathbf{x}_i(0)\sim \mathcal{U}([0,L]\times[0,L])\)；
         \item 规则网格：\(\mathbf{x}_i(0)\) 等间距栅格；
         \item 能量空洞：存在子域 \(\Omega_{\text{hole}}\subset [0,L]^2\)，使得 \(\mathbb{P}(\mathbf{x}_i(0)\in \Omega_{\text{hole}})\) 降低，且 \(\mathbb{E}[E_i(0)\mid \mathbf{x}_i(0)\in \Omega_{\text{hole}}]\) 偏低。
     \end{enumerate}
-    典型规模 \(N\in[10,100]\)。可选启用移动：
+    典型规模 \(N\in[10,100]\)。模型支持可选的节点移动，其位置按如下方式更新：
     \[
     \mathbf{x}_i(t+\Delta t)=\mathbf{x}_i(t)+\mathbf{v}_i(t)\,\Delta t,\qquad \|\mathbf{v}_i(t)\|\le v_{\max},
     \]
@@ -77,7 +80,7 @@ $w_{\text{aoei}},\, Q_i,\, \tau$ & AOEI权重、虚拟队列与传输时长 \\
     E_{\text{rx}}&=E_{\text{elec}}\,B,
     \end{aligned}
     \]
-    其中 \(\tau\) 为路径损耗指数、\(\epsilon_{\text{amp}}>0\)。单次 WET 发送量 \(E_{\text{send}}\) 的有效接收
+    其中 \(\tau\) 为路径损耗指数、\(\epsilon_{\text{amp}}>0\)。单次无线能量共享（wireless energy sharing）发送量 \(E_{\text{send}}\) 的有效接收
     \[
     E_{\text{recv}}=\eta_{\mathcal{P}}\cdot E_{\text{send}},\qquad E_{\text{loss}}=E_{\text{send}}-E_{\text{recv}}.
     \]
@@ -87,11 +90,8 @@ $w_{\text{aoei}},\, Q_i,\, \tau$ & AOEI权重、虚拟队列与传输时长 \\
 % 图占位：网络拓扑与能量路径示意（留出位置）
 \begin{figure}[t]
 \centering
-\begin{mdframed}[linewidth=0.5pt]
-\parbox[c][4.0cm][c]{0.95\linewidth}{\centering \textbf{图占位：网络拓扑与能量路径示意图}\\[3pt]
-建议后续替换为仿真生成的节点分布与路径示意图。}
-\end{mdframed}
-\caption{网络拓扑与能量路径示意（占位）。}
+\includegraphics[width=0.9\linewidth]{figures/node_distribution (1).png}
+\caption{网络拓扑示意图。}
 \label{fig:network_paths_placeholder}
 \end{figure}
 
@@ -104,92 +104,118 @@ E_i(t+\Delta t)=\min\Big\{C_i,\ &E_i(t)-E_{\text{sen},i}(t)-E_{\text{com},i}(t)\
 \end{equation}
 其中 \(C_i\) 为电池容量，\(E_{\text{sen},i}\) 为感知/计算能耗，\(E_{\text{com},i}\) 为通信能耗。上述三层（结构/供给/链路）与能量演化共同定义机制运行的语义空间与外生扰动，为后续决策与评估提供统一背景与可检验假设。
 
-\subsection{Economic Interpretation and AOEI as Price Signal}
-经济学解释围绕"价格信号—数字账户—交易规则"的结构展开。核心价格信号采用 AOEI 描述信息新鲜度（越新越有价值），用于触发与排序；在经济学层面与具体实现中，可结合\emph{信息价值}（由 AOEI 的时效性维度与\emph{信息量}维度共同构成）作为参考，以更精细地表达"支付意愿"与时机强度。
+% \subsection{Economic Interpretation and AOEI as Price Signal}
+% 经济学解释遵循“价格信号—数字账户—交易规则”的分析框架。
+% 其中，AOEI 用于刻画信息的新鲜度，作为触发机制与优先级排序的基础价格信号。在此基础上，系统的行为选择并不仅由新鲜度本身驱动，而是由“更全面的信息价值”所决定。
+% 信息价值是一个综合性概念，由 AOEI 所反映的时效性维度、信息量以及其对任务效用的边际贡献等因素共同构成，能够更准确地表达节点的“支付意愿”与触发强度。因此，AOEI 所提供的新鲜度仅构成信息价值的局部属性，而真正影响节点策略选择与资源分配的，是信息价值这一整体性指标。从经济学视角看，价格信号应当以信息价值为核心，而非仅依赖单一的新鲜度指标。
 
-\textbf{（1）AOEI 作为价格信号：}信息年龄\(\text{AOEI}_i(t)\)定义为信息到达物理中心后的时间：
-\begin{equation}
-\text{AOEI}_i(t) = t - t_{\text{arrival},i}
-\end{equation}
-其经济学含义对应于\emph{资产折旧理论}（会计学）或\emph{商品保质期模型}（供应链管理）：节点\(i\)的能量状态信息随时间"过时"，基于陈旧信息的决策质量以\(Q(\text{AOEI})=Q_0 e^{-\lambda \text{AOEI}}\)速率衰减。当\(\text{AOEI}_i(t)>T_{\text{stale}}\)（定义陈旧阈值\(T_{\text{stale}}=60\)分钟）时，该节点以\(p=\mathbb{P}(E_i<\theta_i^{\text{low}}\mid \text{AOEI}_i>T_{\text{stale}})>0.4\)的概率处于低能状态却未及时触发传能，导致信息经济学中的"逆向选择"（Adverse Selection）；因此，应提高价格信号（优先级权重）以吸引供能节点。信息价值的时间衰减可建模为：
-\begin{equation}
-V_{\text{info},i}(t) = V_0 \cdot e^{-\lambda \cdot \text{AOEI}_i(t)}
-\end{equation}
-其中\(\lambda\)为衰减率（类似金融学的折现率），\(V_0\)为新鲜状态下的基础价值。在需要时，信息量可作为放大因子或加法收益项并入"信息价值"指标。在决策函数中，AOEI 以惩罚项形式内生化：
-\begin{equation}
-C_{\text{AOEI},i}(\tau) = w_{\text{aoei}} \cdot \tau \cdot Q_i
-\end{equation}
-其中\(\tau\)为传输时长（导致 AOEI 增量），\(Q_i\)为节点\(i\)的能量虚拟队列长度（需求紧迫度），\(w_{\text{aoei}}\)为权重系数（默认0.1）。
+% \textbf{（1）AOEI 作为价格信号：}信息年龄\(\text{AOEI}_i(t)\)定义为信息到达物理中心后的时间：
+% \begin{equation}
+% \text{AOEI}_i(t) = t - t_{\text{arrival},i}
+% \end{equation}
+% 其经济学含义对应于\emph{资产折旧理论}（会计学）或\emph{商品保质期模型}（供应链管理）：节点\(i\)的能量状态信息随时间"过时"，基于陈旧信息的决策质量以\(Q(\text{AOEI})=Q_0 e^{-\lambda \text{AOEI}}\)速率衰减。当\(\text{AOEI}_i(t)>T_{\text{stale}}\)（定义陈旧阈值\(T_{\text{stale}}=60\)分钟）时，该节点以\(p=\mathbb{P}(E_i<\theta_i^{\text{low}}\mid \text{AOEI}_i>T_{\text{stale}})>0.4\)的概率处于低能状态却未及时触发传能，导致信息经济学中的"逆向选择"（Adverse Selection）；因此，应提高价格信号（优先级权重）以吸引供能节点。信息价值的时间衰减可建模为：
+% \begin{equation}
+% V_{\text{info},i}(t) = V_0 \cdot e^{-\lambda \cdot \text{AOEI}_i(t)}
+% \end{equation}
+% 其中\(\lambda\)为衰减率（类似金融学的折现率），\(V_0\)为新鲜状态下的基础价值。在需要时，信息量可作为放大因子或加法收益项并入"信息价值"指标。在决策函数中，AOEI 以惩罚项形式内生化：
+% \begin{equation}
+% C_{\text{AOEI},i}(\tau) = w_{\text{aoei}} \cdot \tau \cdot Q_i
+% \end{equation}
+% 其中\(\tau\)为传输时长（导致 AOEI 增量），\(Q_i\)为节点\(i\)的能量虚拟队列长度（需求紧迫度），\(w_{\text{aoei}}\)为权重系数（默认0.1）。
 
-% 图占位：AOEI 衰减曲线（保留位置，后续以代码生成图替换）
-\begin{figure}[t]
-\centering
-\begin{mdframed}[linewidth=0.5pt]
-\centering
-\parbox[c][4.0cm][c]{0.95\linewidth}{\centering \textbf{图占位：AOEI 导致信息价值指数衰减曲线}\\[3pt]
-建议以代码生成并替换此处曲线图（可扩展自 \texttt{src/experiments/visualize\_results.py}）。}
-\end{mdframed}
-\caption{信息价值随 AOEI 的指数衰减示意。}
-\label{fig:aoei_decay_placeholder}
-\end{figure}
+% % 图占位：AOEI 衰减曲线（保留位置，后续以代码生成图替换）
+% \begin{figure}[t]
+% \centering
+% \includegraphics[width=0.9\linewidth]{figures/aoei_decay.png}
+% \caption{信息价值随 AOEI 的指数衰减示意。}
+% \label{fig:aoei_decay_placeholder}
+% \end{figure}
 
-\textbf{（2）InfoNode 数字账户：}维护三级缓存架构：
-\begin{itemize}
-    \item \emph{L1-最新状态表}：维护能量、AOEI、位置、是否太阳能等关键字段，支持快速查询。
-    \item \emph{L2-近期历史}：固定大小1000的FIFO队列，用于趋势分析与异常检测。
-    \item \emph{L3-长期归档}：CSV批量写入，支持离线分析与模型训练。
-\end{itemize}
-该架构提供"透明市场视图"，弱化信息不对称，避免道德风险。
+% \textbf{（2）InfoNode 数字账户：}维护三级缓存架构：
+% \begin{itemize}
+%     \item \emph{L1-最新状态表}：维护能量、AOEI、位置、是否太阳能等关键字段，支持快速查询。
+%     \item \emph{L2-近期历史}：固定大小1000的FIFO队列，用于趋势分析与异常检测。
+%     \item \emph{L3-长期归档}：CSV批量写入，支持离线分析与模型训练。
+% \end{itemize}
+% 该架构提供"透明市场视图"，弱化信息不对称，避免道德风险。
 
-\textbf{（3）机会主义信息上报：}在传能路径上"搭载"状态更新，结合信息去重（基于源节点集合）与动态等待上限\(T_{\max}/(1+\text{info\_volume}/\text{scale})\)，以降低通信能耗与冗余为主要目标，并通过按需聚合控制上报频率（不以直接提升新鲜度为目标）；透明性主要由 InfoNode 提供。
+% \textbf{（3）机会主义信息上报：}在传能路径上"搭载"状态更新，结合信息去重（基于源节点集合）与动态等待上限\(T_{\max}/(1+\text{info\_volume}/\text{scale})\)，以降低通信能耗与冗余为主要目标，并通过按需聚合控制上报频率（不以直接提升新鲜度为目标）；透明性主要由 InfoNode 提供。
 
-上述三者相互耦合：价格信号决定分配优先级与强度，数字账户保障状态可得，交易规则降低获取状态的边际成本；辅以能量传输专用路由（如 EETOR）的效率阈值与多跳抑制，可在局部理性前提下导出全局可解释的资源再配置结果。
+% 上述三者相互耦合：价格信号决定分配优先级与强度，数字账户保障状态可得，交易规则降低获取状态的边际成本；辅以能量传输专用路由（如 EETOR）的效率阈值与多跳抑制，可在局部理性前提下导出全局可解释的资源再配置结果。
 
-\subsubsection{博弈论视角：能量共享的合作博弈与机制设计}
+% \subsubsection{博弈论视角：能量共享的合作博弈与机制设计}
 
-本文将多节点能量共享建模为\emph{合作博弈}，每个节点在"保守能量"与"参与共享"之间进行策略选择。
+% 本文将多节点能量共享建模为\emph{合作博弈}，每个节点在"保守能量"与"参与共享"之间进行策略选择。
 
-\textbf{博弈模型：}设局中人集合为\(\mathcal{N} = \{1,2,\ldots,N\}\)。节点\(i\)的策略空间包括：（i）作为需求方，通过 AOEI 信号表达"支付意愿"\(p_i(t) = f(\text{AOEI}_i, E_i, \theta_i)\)；（ii）作为供给方，决定是否响应传能请求及传输时长\(\tau_i \in [0, \tau_{\max}]\)。收益函数为：
-\begin{equation}
-u_i(E_i, E_{-i}, \tau) = \alpha_1 E_{\text{received},i} - \alpha_2 E_{\text{sent},i} - \alpha_3 \text{AOEI}_i \cdot \tau
-\end{equation}
-其中\(E_{\text{received},i}\)为节点\(i\)接收的净能量，\(E_{\text{sent},i}\)为作为供能方发送的能量（含损耗），\(\text{AOEI}_i \cdot \tau\)为传能时长导致的信息过时成本。
+% \textbf{博弈模型：}
+% 设局中人集合为 $\mathcal{N} = \{1,2,\ldots,N\}$。在任意时刻 $t$，节点可同时具备需求方、供给方与中继方的潜在角色，其策略选择体现三方之间的博弈关系。
 
-\textbf{准纳什均衡：}在 AOEI 价格信号与弱势保护机制下，系统存在\emph{准纳什均衡}（Quasi-Nash Equilibrium），满足：
-\begin{enumerate}[label=(\roman*), leftmargin=1.6em]
-    \item \emph{个体理性}（Individual Rationality）：每个节点的收益不低于不参与合作的收益；
-    \item \emph{预算平衡}（Budget Balance）：系统总能量守恒；
-    \item \emph{激励相容}（Incentive Compatibility）：节点通过 InfoNode 如实报告能量状态是其最优策略（因信息透明化消除了隐藏信息的收益）。
-\end{enumerate}
+% \textbf{(1) 需求方博弈 —— 如何表达“支付意愿”}
 
-\textbf{帕累托改进与边界外移：}传统静态均衡下，系统位于固定的帕累托前沿 \(\mathcal{F}_{\text{static}}\)。本文通过三类机制性改造实现\emph{动态帕累托边界外移}：
-\begin{enumerate}[label=(\alph*), leftmargin=1.6em]
-    \item 价格内生化：将外生的"谁需要能量"转化为内生的市场定价（AOEI 驱动），减少信息不对称；
-    \item 信息透明化：InfoNode 数字孪生降低逆向选择与道德风险；
-    \item 外部性治理：能量传输专用路由的效率阈值与跳数限制抑制低效多跳的负外部性。
-\end{enumerate}
-形式化地，可达解集满足 \(\mathcal{F}_{\text{dynamic}} \supset \mathcal{F}_{\text{static}}\)，即在相同资源约束下，存在 \((\eta, \phi) \in \mathcal{F}_{\text{dynamic}}\) 使得效率 \(\eta\) 与公平度 \(\phi\) 同时优于静态基线。该主张的实证验证见第五章。
+% 当节点 $i$ 能量不足或信息即将过时时，其作为需求方需决定是否发起传能请求，并通过 AOEI 信号表达自身的“支付意愿”：
+% \[
+% p_i(t) = f(\text{AOEI}_i(t), E_i(t), \theta_i),
+% \]
+% 其中 $\text{AOEI}_i$ 捕捉信息的新鲜度，$E_i$ 反映电量状态，$\theta_i$ 代表其任务紧迫度。
+% 需求方之间的竞争体现为：谁的支付意愿更高，越容易获得供能资源，从而形成一种“优先级竞争博弈”。
 
-% 图占位：动态帕累托边界外移示意（保留位置，后续替换）
-\begin{figure}[t]
-\centering
-\begin{mdframed}[linewidth=0.5pt]
-\centering
-\parbox[c][4.0cm][c]{0.95\linewidth}{\centering \textbf{图占位：动态帕累托边界外移示意图}\\[3pt]
-建议替换为实证对比图（如综合雷达图/效率-公平二维对标）。}
-\end{mdframed}
-\caption{动态帕累托边界外移的概念示意。}
-\label{fig:dynamic_pareto_placeholder}
-\end{figure}
+% \textbf{(2) 供给方博弈 —— 是否响应、响应多少}
 
-\subsection{Objectives and Constraints}
-系统目标与约束定义如下：
-\begin{itemize}
-    \item \emph{寿命目标：}最大化首个节点死亡时间，体现系统持续服务能力；
-    \item \emph{均衡与公平：}降低能量方差或变异系数（CV），对低能节点实施优先保护；
-    \item \emph{效率目标：}提升有效接收能量占比，减少路径与链路的无效损耗；
-    \item \emph{时效目标：}提升关键状态的新鲜度，降低决策滞后带来的系统性低效；
-    \item \emph{约束条件：}效率阈值、最大跳数、预算与调度频率等策略层与系统层限制。
-\end{itemize}
-从帕累托视角看，静态边界对应于在既定约束集合下的最优效率—公平权衡；通过将 AOEI 价格信号与数字账户、交易规则制度化内生引入，可对可行解空间实现外推，即在相同资源与约束条件下获得更优的目标组合（动态边界外移）。本文在实验部分将以多指标对标与消融试验展示该外推效应。
+% 当多个需求方提出请求时，节点 $j$ 作为供给方需决定是否响应以及传输时长：
+% \[
+% \tau_j \in [0, \tau_{\max}],
+% \]
+% 供给方的行为是一个“成本—收益权衡博弈”：供给越多可获得更高回报（声望、交换信用或未来互惠），但其自身能量降低会影响后续任务与生存概率。
+% 供给方之间的竞争体现为：不同供能节点争夺未来潜在收益，同时避免过度消耗自身能量。
 
+% \textbf{(3) 中继方博弈 —— 是否参与中转、如何选择路径}
+
+% 若传能距离较远或链路受阻，其他节点可作为中继方参与能量转发。
+% 中继节点的博弈重点在于：参与中继可带来中继奖励或未来互惠，但中继本身会消耗能量并承受信息过时带来的风险。
+% 因此，中继方的策略表现为：是否加入传能链路，以及如何选择最优中继路径以最大化综合效益。
+
+% \textbf{(4) 统一收益函数}
+
+% 综合三方角色，节点 $i$ 的收益函数表示为：
+% \begin{equation}
+% u_i(E_i, E_{-i}, \tau)
+% = \alpha_1 E_{\text{received},i}
+% - \alpha_2 E_{\text{sent},i}
+% - \alpha_3\, \text{AOEI}_i \cdot \tau,
+% \end{equation}
+% 其中：
+% \begin{itemize}
+%     \item $E_{\text{received},i}$：作为需求方获得的净能量收益；
+%     \item $E_{\text{sent},i}$：作为供给方或中继方发送（或中转）消耗的能量；
+%     \item $\text{AOEI}_i \cdot \tau$：传输延时导致的信息过时成本。
+% \end{itemize}
+
+% 该结构体现了三方之间的动态互动：需求方提升支付意愿以争取供能；供给方在收益与成本之间权衡响应强度；中继方决定是否参与以增强整体网络的能量流通效率。三方策略共同推动系统达到一个可能的纳什均衡或演化稳定状态。
+
+% \textbf{准纳什均衡：}在 AOEI 价格信号与弱势保护机制下，系统存在\emph{准纳什均衡}（Quasi-Nash Equilibrium），满足：
+% \begin{enumerate}[label=(\roman*), leftmargin=1.6em]
+%     \item \emph{个体理性}（Individual Rationality）：每个节点的收益不低于不参与合作的收益；
+%     \item \emph{预算平衡}（Budget Balance）：系统总能量守恒；
+%     \item \emph{激励相容}（Incentive Compatibility）：节点通过 InfoNode 如实报告能量状态是其最优策略（因信息透明化消除了隐藏信息的收益）。
+% \end{enumerate}
+
+% \textbf{帕累托改进与边界外移：}传统静态均衡下，系统位于固定的帕累托前沿 \(\mathcal{F}_{\text{static}}\)。本文通过三类机制性改造实现\emph{动态帕累托边界外移}：
+% \begin{enumerate}[label=(\alph*), leftmargin=1.6em]
+%     \item 价格内生化：将外生的"谁需要能量"转化为内生的市场定价（AOEI 驱动），减少信息不对称；
+%     \item 信息透明化：InfoNode 数字孪生降低逆向选择与道德风险；
+%     \item 外部性治理：能量传输专用路由的效率阈值与跳数限制抑制低效多跳的负外部性。
+% \end{enumerate}
+% 形式化地，可达解集满足 \(\mathcal{F}_{\text{dynamic}} \supset \mathcal{F}_{\text{static}}\)，即在相同资源约束下，存在 \((\eta, \phi) \in \mathcal{F}_{\text{dynamic}}\) 使得效率 \(\eta\) 与公平度 \(\phi\) 同时优于静态基线。该主张的实证验证见第五章。
+
+%\subsection{Objectives and Constraints}
+%系统目标与约束定义如下：
+%\begin{itemize}
+ %   \item \emph{寿命目标：}最大化首个节点死亡时间，体现系统持续服务能力；
+ %   \item \emph{均衡与公平：}降低能量方差或变异系数（CV），对低能节点实施优先保护；
+ %   \item \emph{效率目标：}提升有效接收能量占比，减少路径与链路的无效损耗；
+ %   \item \emph{时效目标：}提升关键状态的新鲜度，降低决策滞后带来的系统性低效；
+ %   \item \emph{约束条件：}效率阈值、最大跳数、预算与调度频率等策略层与系统层限制。
+%\end{itemize}
+%从帕累托视角看，静态边界对应于在既定约束集合下的最优效率—公平权衡；而动态外推的理论基础可拆解为三步：（i）\textbf{价格信号内生化}：AOEI 转化为结算价格，使节点的“支付意愿”成为可度量变量，实质上是在可行域中引入一条新的约束映射 \(p_i(t)=f(\text{AOEI}_i,E_i,\theta_i)\)，从而将原本外生的价值判断内生化；（ii）\textbf{信息账户耦合}：InfoNode 将能量状态、历史信誉与交易规则绑定，保证个体理性、预算平衡与激励相容同时成立，相当于在资源守恒集合上叠加一组机制约束，使原有可行解集中那些因信息不透明而不可达的解得以进入；（iii）\textbf{路径治理}：通过效率阈值 \(\eta_{\text{th}}\)、最大跳数 \(H_{\max}\) 等制度变量，将路由问题转化为“受限最优传输”，抑制低效率多跳的负外部性，使系统能够在同样的能量预算下实现损耗更低的路径组合。上述三步构成“价格—账户—规则—路径”闭环，使新机制下的可行解集 \(\mathcal{F}_{\text{dynamic}}\) 对静态解集 \(\mathcal{F}_{\text{static}}\) 呈严格超集关系，即存在 \((\eta,\phi) \in \mathcal{F}_{\text{dynamic}}\) 同时优于静态基线的效率 \(\eta\) 与公平度 \(\phi\)。本文在实验部分将以多指标对标与消融试验展示该外推效应。
+
+%从帕累托视角看，静态边界对应于在既定约束集合下的最优效率—公平权衡；而动态外推的理论基础可拆解为四步：（i）\textbf{价格信号内生化}：AOEI 转化为结算价格，使节点的"支付意愿"成为可度量变量，实质上是在可行域中引入一条新的约束映射 \(p_i(t)=f(\text{AOEI}_i,E_i,\theta_i)\)，从而将原本外生的价值判断内生化；（ii）\textbf{信息账户耦合}：InfoNode 将能量状态、历史信誉与交易规则绑定，保证个体理性、预算平衡与激励相容同时成立，相当于在资源守恒集合上叠加一组机制约束，使原有可行解集中那些因信息不透明而不可达的解得以进入；（iii）\textbf{博弈规则设计}：将能量共享建模为合作博弈，通过激励相容机制引导节点的策略选择（action），使节点在需求方、供给方与中继方之间的角色转换与行为决策内生化。具体而言，节点 \(i\) 的策略选择 \(a_i(t)\)（包括是否发起传能请求、响应强度 \(\tau_i\)、是否参与中继等）不仅影响其自身收益 \(u_i(a_i, a_{-i})\)，更通过价格信号与账户透明机制产生系统级外部性，使得个体理性与集体理性在准纳什均衡下达成协调。这种博弈规则设计将原本外生的行为约束转化为内生激励，使节点的最优策略选择自发推动系统向帕累托改进方向演化；（iv）\textbf{路径治理}：通过效率阈值 \(\eta_{\text{th}}\)、最大跳数 \(H_{\max}\) 等制度变量，将路由问题转化为"受限最优传输"，抑制低效率多跳的负外部性，使系统能够在同样的能量预算下实现损耗更低的路径组合。上述四步构成"价格—账户—规则—路径"闭环，使新机制下的可行解集 \(\mathcal{F}_{\text{dynamic}}\) 对静态解集 \(\mathcal{F}_{\text{static}}\) 呈严格超集关系，即存在 \((\eta,\phi) \in \mathcal{F}_{\text{dynamic}}\) 同时优于静态基线的效率 \(\eta\) 与公平度 \(\phi\)。本文在实验部分将以多指标对标与消融试验展示该外推效应。
