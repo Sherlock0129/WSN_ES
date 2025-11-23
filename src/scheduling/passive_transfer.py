@@ -17,6 +17,7 @@ class PassiveTransferManager:
     3. 低能量节点比例
     4. 能量分布方差
     5. 预测性分析
+    6. 自适应阈值调整：连续200次检查都满足触发条件时，自动提高方差阈值0.05
     """
     
     def __init__(self, 
@@ -26,7 +27,8 @@ class PassiveTransferManager:
                  energy_variance_threshold: float = 0.3,
                  cooldown_period: int = 30,
                  predictive_window: int = 60,
-                 node_info_manager=None):
+                 node_info_manager=None,
+                 active_transfer_interval: int = 60):
         """
         初始化被动传能管理器
         
@@ -45,6 +47,7 @@ class PassiveTransferManager:
         self.cooldown_period = cooldown_period
         self.predictive_window = predictive_window
         self.node_info_manager = node_info_manager  # 虚拟能量层管理器
+        self.active_transfer_interval = active_transfer_interval  # 主动模式触发间隔（分钟）
         
         # 状态变量
         self.last_transfer_time = -cooldown_period  # 上次传能时间
@@ -53,6 +56,13 @@ class PassiveTransferManager:
         # 统计信息
         self.trigger_count = 0  # 触发次数
         self.trigger_reasons_stats = {}  # 触发原因统计
+        
+        # 自适应阈值调整机制
+        self.original_variance_threshold = energy_variance_threshold  # 保存原始阈值
+        self.consecutive_trigger_count = 0  # 连续触发计数器
+        self.threshold_adjustment_count = 0  # 阈值调整次数
+        self.adaptive_threshold_steps = 10  # 连续触发步数阈值
+        self.threshold_increment = 0.05  # 每次调整的增量
     
     def should_trigger_transfer(self, t: int, network) -> Tuple[bool, Optional[str]]:
         """
@@ -67,21 +77,17 @@ class PassiveTransferManager:
         """
         # 如果不是被动模式，使用传统的定时触发（每60分钟）
         if not self.passive_mode:
-            # 使用 check_interval 作为定时触发的间隔
-            if self.check_interval <= 0:
+            # 使用 active_transfer_interval 作为定时触发的间隔
+            if self.active_transfer_interval <= 0:
                 return False, None  # 间隔小于等于0时，禁用定时触发
-            should_trigger = (t % self.check_interval == 0)
+            should_trigger = (t % self.active_transfer_interval == 0)
             return should_trigger, "定时触发" if should_trigger else None
         
         # 1. 检查间隔：只在指定间隔检查
         if t % self.check_interval != 0:
             return False, None
         
-        # 2. 冷却期检查：避免过于频繁的传能
-        if t - self.last_transfer_time < self.cooldown_period:
-            return False, None
-        
-        # 3. 获取节点能量状态（直接从真实网络获取，仅用于触发决策）
+        # 2. 获取节点能量状态（直接从真实网络获取，仅用于触发决策）
         # 这一步是为了确保触发决策基于最新的能量状态，而不影响AOI的计算
         physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
         physical_center_id = physical_center.node_id if physical_center else None
@@ -114,12 +120,35 @@ class PassiveTransferManager:
         # 记录当前能量状态（用于未来预测）（已禁用）
         # self._update_energy_history(energies)
         
-        # 综合决策逻辑
+        # 综合决策逻辑（判断是否满足触发条件）
         should_trigger, reasons = self._make_decision(
             low_energy_ratio, energy_cv, predict_critical,
             energies, thresholds
         )
         
+        # 自适应阈值调整机制（在冷却期检查之前进行，基于是否满足触发条件）
+        if should_trigger:
+            # 满足触发条件，增加连续触发计数
+            self.consecutive_trigger_count += 1
+            
+            # 如果连续触发达到阈值，提高方差阈值
+            if self.consecutive_trigger_count >= self.adaptive_threshold_steps:
+                self.energy_variance_threshold += self.threshold_increment
+                self.threshold_adjustment_count += 1
+                # 重置计数器，重新开始计数
+                self.consecutive_trigger_count = 0
+                
+                # 记录阈值调整信息
+                reasons.append(f"[阈值自适应调整: {self.energy_variance_threshold:.3f}]")
+        else:
+            # 不满足触发条件，重置连续触发计数
+            self.consecutive_trigger_count = 0
+        
+        # 冷却期检查：避免过于频繁的传能（在决策之后检查，但不影响计数）
+        if t - self.last_transfer_time < self.cooldown_period:
+            return False, None
+        
+        # 如果满足触发条件且不在冷却期，则实际触发
         if should_trigger:
             reason_str = " | ".join(reasons)
             self._record_trigger(reason_str)
@@ -251,7 +280,11 @@ class PassiveTransferManager:
             'trigger_count': self.trigger_count,
             'trigger_reasons': self.trigger_reasons_stats,
             'energy_history_length': len(self.energy_history),
-            'mode': '智能被动传能' if self.passive_mode else '定时主动传能'
+            'mode': '智能被动传能' if self.passive_mode else '定时主动传能',
+            'current_variance_threshold': self.energy_variance_threshold,
+            'original_variance_threshold': self.original_variance_threshold,
+            'threshold_adjustment_count': self.threshold_adjustment_count,
+            'consecutive_trigger_count': self.consecutive_trigger_count
         }
     
     def reset(self):
@@ -260,6 +293,10 @@ class PassiveTransferManager:
         self.energy_history = []
         self.trigger_count = 0
         self.trigger_reasons_stats = {}
+        # 重置自适应阈值相关状态
+        self.energy_variance_threshold = self.original_variance_threshold
+        self.consecutive_trigger_count = 0
+        self.threshold_adjustment_count = 0
     
     def get_config(self) -> Dict[str, Any]:
         """
@@ -272,8 +309,12 @@ class PassiveTransferManager:
             'check_interval': self.check_interval,
             'critical_ratio': self.critical_ratio,
             'energy_variance_threshold': self.energy_variance_threshold,
+            'original_variance_threshold': self.original_variance_threshold,
             'cooldown_period': self.cooldown_period,
-            'predictive_window': self.predictive_window
+            'predictive_window': self.predictive_window,
+            'adaptive_threshold_steps': self.adaptive_threshold_steps,
+            'threshold_increment': self.threshold_increment,
+            'threshold_adjustment_count': self.threshold_adjustment_count
         }
 
 

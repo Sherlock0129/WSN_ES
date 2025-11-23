@@ -1,4 +1,25 @@
 \section{Modeling}
+
+\subsection{Real IoT Deployment Patterns}
+
+为确保所提出的 IoT-centric 信息–能量双生系统能够服务于真实世界的 IoT sustainability 需求，本节首先总结三个具有代表性的边缘 IoT 部署模式，并抽象出驱动系统设计的共性约束。
+
+\subsubsection{(A) 智慧农业}
+
+智慧农业场景中，传感节点随机且稀疏地（random + sparse）部署在农田或牧场，节点间距不均导致通信链路条件高度异质。太阳能采集受季节、阴影与地形影响呈现极不稳定性，一旦连续阴雨就可能形成长期能量空洞\cite{zhang2022energyhole}。土壤含水率、蒸散等关键变量必须保持空间连续性，但节点死亡会造成监测数据稀疏（data sparse），直接削弱产量预测模型的准确性。因此，部署需要一个"dual system"以避免能量空洞并保证覆盖度（coverage）：IoT Information Layer 利用自适应 AOI 阈值驱动信息上报，IoT Digital-Twin Layer 持续推演节点能量，并通过 Cross-Layer Scheduling Layer 调节传能时长；同时，Opportunistic IoT Routing Layer 在能量传输过程中顺带回收状态信息，使智慧农业网络具备 self-optimizing IoT 能力。
+
+\subsubsection{(B) 智慧城市空气质量监测}
+
+智慧城市监测网络常部署在楼宇与道路交错的空间，城市遮挡导致太阳能收益差异巨大：高层屋顶节点拥有充足可再生能量，而街道阴影区域节点长期处于低能态，形成极端能量不均衡。高楼附近的风廊效应与交通微气象也会造成信息更新滞后，一旦状态信息落后，路由与聚类调度容易失效（routing/cluster failure）\cite{yates2021aoi}。IoT-centric architecture 通过信息–能量同步提高 QoS 与可靠性：IoT Information Layer 动态感知信息新鲜度，Cross-Layer Scheduling Layer 根据数字孪生估计分配能量预算，Opportunistic IoT Routing Layer 将信息回传嵌入能量传输链，实现 zero-touch autonomous IoT management。这样即可在高遮挡环境中维持 edge intelligence 推理所需的数据质量。
+
+\subsubsection{(C) 工业物联网}
+
+工业物联网（IIoT）部署在异构电磁环境中，不同车间或设备分区存在强烈的电磁噪声差异，导致能源采集与无线能量传输效率随空间剧烈波动。现场设备的信息上报成本高昂，往往需要与生产控制网络共享带宽，同时 AI 模型又必须依赖 fresh data\cite{mohjazi2021sensors}。AOEI 与轻量级数字孪生的耦合（AOEI + digital twin）更适合这类缺乏实时信息的工业场景：IoT Digital-Twin Layer 维持虚拟节点账户，Cross-Layer Scheduling Layer 基于 Lyapunov 规划推断传能时长，Opportunistic IoT Routing Layer 通过机会主义路径实现能量驱动的信息回流，Edge Visualization Layer 则支撑运维人员实时掌握工业现场状态，实现 scalable deployment 与 edge intelligence 的协同。
+
+上述三种典型 IoT 部署共享相同的结构性约束：(i) 可再生能源高度非平稳；(ii) 空间能量分布极不均匀；(iii) 由于通信成本和干扰，信息更新存在严重时延\cite{mohjazi2021sensors}。这些共性直接催生了本文提出的信息–能量双生系统：通过 IoT-centric architecture 实现信息–能量协同，使 IoT sustainability 与零人工干预的自演化能力成为同一系统框架内的内生属性，从而在异质部署、10k+ 节点规模与 heterogeneous IoT devices 环境下维持自适应、self-optimizing IoT 行为。
+
+\subsection{System Model}
+
 本章建立不依赖具体实现细节的抽象化模型，强调以机制与约束为主线刻画系统要素，为下一章机制要素的设计与实现提供统一的语义空间与约束基础，从而使同一套机制化设计能够在后续章节中映射到不同的算法实例与实验场景。为便于后续讨论，本节首先给出本文建模中常用的符号与参数表（完整含义与单位见表\ref{tab:symbols}）），以确保建模符号体系的一致性。
 
 \begin{table}[t]
@@ -21,7 +42,7 @@ $\eta(d),\, \eta_0,\, \gamma$ & 无线能量传输效率模型参数 \\
 $\mathcal{P},\, H,\, H_{\max}$ & 传能路径、跳数与最大跳数 \\
 $\eta_{\mathcal{P}},\, \eta_{\text{th}}$ & 路径累计效率与效率阈值 \\
 $E_{\text{send}},\, E_{\text{recv}},\, E_{\text{loss}}$ & 发送/接收能量与损耗 \\
-$s_i,\, \eta_{\text{solar}},\, A_i$ & 是否可采集、太阳能效率与面板面积 \\
+$\eta_{\text{solar}},\, A_i$ & 太阳能转换效率与面板面积 \\
 $G(t),\, G_{\max},\, t_{\text{rise}},\, t_{\text{set}}$ & 日内辐照度及其参数 \\
 $\zeta(t)$ & 天气扰动因子（有界、均值约为1） \\
 $\text{AOEI}_i(t)$ & 节点$i$的能量信息年龄 \\
@@ -39,7 +60,7 @@ $w_{\text{aoei}},\, Q_i,\, \tau$ & AOEI权重、虚拟队列与传输时长 \\
 \begin{itemize}
     \item \emph{能量状态}：电池容量\(C_i\)（典型值3.5~mAh, 3.7~V），当前能量\(E_i(t)\)，低/高阈值\(\theta_i^{\text{low}}, \theta_i^{\text{high}}\)。
     \item \emph{能量采集}：若启用太阳能，基于日内辐照度模型\(G(t) = G_{\max} \sin(\pi(t-t_{\text{rise}})/(t_{\text{set}}-t_{\text{rise}}))\)采集能量，转换效率\(\eta_{\text{solar}}=0.2\)，面板面积\(A=0.1~\text{m}^2\)。
-    \item \emph{能量消耗}：感知能耗\(E_{\text{sen}}=0.1~\text{J}\)，通信能耗\(E_{\text{com}} = E_{\text{elec}} B + \epsilon_{\text{amp}} B d^{\tau}\)（其中\(B\)为比特率，\(d\)为距离，\(\tau=2\)为路径损耗指数）。
+    \item \emph{能量消耗}：感知能耗\(E_{\text{sen}}=0.1~\text{J}\)，通信能耗\(E_{\text{com}} = E_{\text{elec}} B + \epsilon_{\text{amp}} B d^{\tau}\)（其中\(B\)为比特率，\(d\)为距离，\(\tau=2\)为路径损耗指数）\cite{heinzelman2002twc}。
     \item \emph{能量传输效率}：距离\(d\)处的无线能量传输效率\(\eta(d) = \eta_0 / d^{\gamma}\)（\(\eta_0=0.6\), \(\gamma=2.0\)，对应1米处最大效率60\%）。
 \end{itemize}
 在信息层，每个物理节点一一映射为在 sink 节点维护的虚拟节点（数字孪生账户），这些虚拟代理承载物理节点的实时状态、账户余额与历史轨迹，用作调度与路由过程中状态访问、预测与推理的接口，从而在不依赖全局实时信息的情况下实现跨层决策联动。
@@ -59,9 +80,9 @@ $w_{\text{aoei}},\, Q_i,\, \tau$ & AOEI权重、虚拟队列与传输时长 \\
     \mathbf{x}_i(t+\Delta t)=\mathbf{x}_i(t)+\mathbf{v}_i(t)\,\Delta t,\qquad \|\mathbf{v}_i(t)\|\le v_{\max},
     \]
     其中 \(\mathbf{v}_i(t)\) 可取直线、往返或随机游走模型，以反映动态拓扑。
-    \item \emph{环境供给：}若节点 \(i\) 具备采集能力（标识 \(s_i\in\{0,1\}\)），其单位时间采集量建模为
+    \item \emph{环境供给：}本文默认所有节点均配备能量采集硬件并具备采能能力；但受部署环境遮挡、安装姿态、器件老化或接口损耗等固定因素影响，部分节点在本实验条件下几乎无法主动自然采能，我们将这种长期有效采能不足的现象称为 \emph{energy shadow}。其单位时间采集量建模为
     \[
-    E_{h,i}(t)= s_i\cdot \eta_{\text{solar}} A_i\cdot G(t)\cdot \Delta t,
+    E_{h,i}(t)= \eta_{\text{solar}} A_i\cdot G(t)\cdot \Delta t,
     \]
     其中转换效率 \(\eta_{\text{solar}}\in(0,1)\)、面板面积 \(A_i\)，日内辐照度
     \begin{equation}
@@ -90,7 +111,7 @@ $w_{\text{aoei}},\, Q_i,\, \tau$ & AOEI权重、虚拟队列与传输时长 \\
 % 图占位：网络拓扑与能量路径示意（留出位置）
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.9\linewidth]{sections/figures/node_distribution .png}
+\includegraphics[width=0.9\linewidth]{sections/figures/node_distribution.png}
 \caption{网络拓扑示意图。}
 \label{fig:network_paths_placeholder}
 \end{figure}

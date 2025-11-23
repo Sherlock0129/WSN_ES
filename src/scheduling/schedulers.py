@@ -9,6 +9,7 @@ import numpy as np
 from routing.energy_transfer_routing import eetor_find_path_adaptive
 
 
+
 # ------------------ 通用基类 ------------------
 class BaseScheduler(object):
     def __init__(self, node_info_manager, K=2, max_hops=5):
@@ -146,6 +147,10 @@ class BaseScheduler(object):
         feedback_score += efficiency_score
         details['efficiency_score'] = efficiency_score
         details['efficiency'] = efficiency
+        # 记录原始能量传输指标，便于诊断
+        details['sent_total'] = sent
+        details['delivered_total'] = delivered
+        details['total_loss'] = max(0.0, sent - delivered)
         
         # 4. 整体能量水平变化 - 权重 0.1
         # 总能量增加是好的（考虑采集），减少是坏的
@@ -184,6 +189,66 @@ class BaseScheduler(object):
     def post_step(self, network, t, feedback):
         """在一步传能后（拿到 stats）做自更新，可选"""
         pass
+
+
+# ------------------ Threshold：最简单阈值法（对照用） ------------------
+class ThresholdScheduler(BaseScheduler):
+    """
+    极简阈值法调度器（对照实验用）
+    - 相对阈值：以全体普通节点的平均能量 E_bar 为中心划分供需
+      receivers: current_energy < (1 - δ) * E_bar
+      donors:    current_energy > (1 + δ) * E_bar
+      默认 δ = 0.05（5% 缓冲带，避免抖动）
+    - 匹配策略：对每个 receiver，就近优先选最多 K 个 donor
+    - 发送量：保持固定 E_char；duration 固定为 1（由执行器/信息表应用）
+    - 路径：eetor_find_path_adaptive（单/多跳自适应），找不到则跳过
+    """
+    def __init__(self, node_info_manager, K=2, max_hops=5, delta_ratio=0.05):
+        BaseScheduler.__init__(self, node_info_manager, K, max_hops)
+        self.delta_ratio = float(delta_ratio)
+
+    def plan(self, network, t):
+        info_nodes = self.nim.get_info_nodes()
+        id2real = {n.node_id: n for n in network.nodes}
+        # 过滤普通节点
+        nodes = self._filter_regular_nodes(info_nodes)
+        plans = []
+        used_donors = set()
+
+        if not nodes:
+            return plans
+
+        # 相对阈值：围绕 E_bar 划分供/需
+        energies = [n.current_energy for n in nodes]
+        E_bar = float(sum(energies) / len(energies)) if energies else 0.0
+        delta = self.delta_ratio * E_bar
+        low_cut = E_bar - delta
+        high_cut = E_bar + delta
+
+        receivers = [n for n in nodes if n.current_energy < low_cut]
+        donors = [n for n in nodes if n.current_energy > high_cut]
+
+        # 对每个 receiver：按距离近的 donor 匹配
+        for r in receivers:
+            cand = [d for d in donors if d is not r and d not in used_donors]
+            if not cand:
+                continue
+            cand.sort(key=lambda d: r.distance_to(d))
+            quota = self.K
+            for d in cand:
+                if quota <= 0:
+                    break
+                dist = r.distance_to(d)
+                path = eetor_find_path_adaptive(nodes, d, r, max_hops=self.max_hops, node_info_manager=self.nim)
+                if path is None:
+                    continue
+                receiver = id2real[r.node_id]
+                donor = id2real[d.node_id]
+                real_path = [id2real[nn.node_id] for nn in path]
+                plans.append({'receiver': receiver, 'donor': donor, 'path': real_path, 'distance': dist})
+                used_donors.add(d)
+                quota -= 1
+        return plans
 
 
 # ------------------ Baseline：与你 run_routing 类似的启发式 ------------------

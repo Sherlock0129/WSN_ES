@@ -1,0 +1,353 @@
+\section{实验设计与分析}
+
+\subsection{实验目标与总体协议}
+
+本章的实验旨在验证第四章中提出的机制在多个维度上的综合效益，重点研究以下核心问题：
+
+\begin{itemize}
+  \item \textbf{边界外移：}验证 AOEI 价格信号与数字孪生缓存机制是否在相同资源约束下显著拓展帕累托边界。
+  \item \textbf{路径治理：}通过 EETOR 路由与前瞻强度优化，验证是否能够显著延长网络寿命和平衡网络能量。
+  \item \textbf{公平鲁棒性：}测试弱势保护与非平稳自适应机制，验证在牺牲效率的前提下是否能提高公平性和稳定性。
+\end{itemize}
+
+为控制实验的统计误差，对所有配置进行 10 次独立的随机种子重复，并报告均值及其 95\% 的置信区间（Bootstrap 方法，1000 次重采样）。
+
+---
+
+\subsection{实验场景与配置假设}
+
+本节详细描述实验所使用的网络场景、资源供给模型及制度配置，确保实验的公平性并为不同机制的比较提供标准化的基础。
+
+\begin{table}[!t]
+\centering
+\caption{实验场景与关键参数（统一资源约束）}
+\label{tab:sim_params}
+\begin{tabular}{@{}llp{4cm}@{}}
+  \toprule
+  \textbf{参数类别} & \textbf{参数名称} & \textbf{取值或假设}                         \\
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{网络拓扑与规模}}                                \\
+                & 节点数量 \(N\)    & 30                                     \\
+                & 部署区域          & \(5 \times 5\) m\(^2\)                 \\
+                & 拓扑类型          & 能量空洞（启用）                               \\
+                & 物理中心初始能量倍数    & 10×普通节点                                \\
+
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{节点能量状态}}                                 \\
+                & 初始能量 \(E_0\)  & 40000~43000 J                          \\
+                & 电池容量 \(C\)    & 3.5 mAh, 工作电压 3.7 V                    \\
+                & 安全阈值区间        & 低阈值 0.10， 高阈值 0.90（归一化）                \\
+                & 单次传输功率        & 300 J/min，效率模型 \(\eta(d)=0.6/d^{2.0}\) \\
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{可再生供给模型}}                                \\
+                & 光伏面积          & 0.10 m\(^2\)，转换效率 0.20                 \\
+                & 峰值辐照度         & 1500 W/m\(^2\)，有效日照 6:00--18:00        \\
+                & 辐照曲线          & 正弦周期模型                                 \\
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{被动传能触发策略}}                               \\
+                & 检查间隔          & 每 1 分钟评估全网能量分布                         \\
+                & 低能比例阈值        & 低能节点占比超过 0.05 时触发                      \\
+                & 方差阈值          & 能量方差超过 0.05 时触发调节                      \\
+
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{前瞻候选规模优化}}                               \\
+                & 前瞻时间窗         & 60 分钟预测未来需求                            \\
+                & 滞回带宽          & 0.20，用于防止频繁切换                          \\
+
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{AOEI 驱动调度}}                              \\
+                & AOEI 权重       & 0.10，信息量权重 0.05                        \\
+                & Lyapunov 漂移参数 & \(V=100\)，平衡效率与稳定                      \\
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{能量传输路由约束}}                               \\
+                & 最大跳数          & 5                                      \\
+                & 路径效率下限        & \(\eta_{\text{th}} = 0.15\)            \\
+  \midrule
+  \multicolumn{3}{@{}l}{\textit{仿真长度与统计协议}}                              \\
+                & 总时长           & 10080 分钟（7 天）                          \\
+                & 独立重复次数        & 10 组随机种子                               \\
+                & 显著性检验         & Wilcoxon 秩和检验（双侧）                      \\
+                & 置信区间          & 95\% Bootstrap（1000 次重采样）              \\
+  \bottomrule
+\end{tabular}
+\end{table*}
+
+---
+
+\subsection{评估指标}
+
+为全面评估机制的表现，本研究采用以下几个指标：
+
+\begin{itemize}
+  \item \textbf{网络寿命}（首个节点死亡时间）：越大越好。
+  \item \textbf{能量均衡度}（CV与方差）：越低越好。
+  \item \textbf{能量效率}（有效接收/总消耗）：越高越好。
+  \item \textbf{传输效率}（路径效率分布与低效路径占比）：越高越好、低效占比越低越好。
+  \item \textbf{信息新鲜度}（AOEI相关）：越新鲜越好。
+\end{itemize}
+
+---
+
+\subsection{对照实验与理论框架}
+
+为与第四章中的机制要素一一对应，实验以 M1--M4 为主线设计四类主实验（E1--E4），并辅以系统化对照与消融。
+
+\subsubsection{实验主线（E1--E4）与理论映射}
+\begin{itemize}
+  \item E1（M1 智能被动触发）vs. 固定周期/静态阈值：检验价格化触发对时机选择、振荡抑制与寿命的作用。
+  \item E2（M2 信息透明层）vs. 无信息奖励/无缓存：检验 InfoNode 与价值加权上报对通信成本与触发准确率的影响。
+  \item E3（信息上报制度）机会主义 vs. Adaptive distributed clustering routing（ADCR ）点对点 ：检验制度对信息透明度、公平性与成本的权衡。
+  \item E4（M3+M4 路径治理+自适应时长）vs. 传统 Lyapunov（固定 \(\tau\)）：检验路径外部性治理与跨期时长优化的合效应。
+\end{itemize}
+
+\paragraph{对照方法（Comparators）}
+本文将“Baseline”明确定义为“本方法的完整配置”（价格触发 + 信息透明层/机会主义上报 + 路径治理 + 自适应时长）。所有对比均采用“组件替换”的方式，将Baseline中的某一机制替换为他法/禁用项形成对照，以检验该机制的边际贡献与制度权衡。为保证可复现和公平对比，统一物理/统计协议下设置如下对照方法：
+\begin{itemize}
+  \item 固定周期主动触发（Period-60）：每 60分钟触发一次；
+  \item 传统 Lyapunov 调度（Fixed-\(\tau\)）：以固定传输时长进行队列漂移最小化；
+  \item 无 EETOR（No-EETOR）：使用dijkstra算法计算最短路径进行路由；
+  \item 无 InfoNode（No-InfoNode）：取消缓存，采用Adaptive distributed clustering routing（ADCR）周期上报；
+  \item 无信息奖励（No-InfoReward）：保留缓存，不进行价值加权；
+  \item 固定传输时间（Fixed-Duration）：无前瞻传输时间优化；
+  \item 无公平保护（No-Fairness）：去除弱势加权与保护项。
+\end{itemize}
+
+\paragraph{消融实验（Ablation）}
+围绕 M1--M4 逐项移除关键组件，量化边际贡献：
+\begin{itemize}
+  \item Ablation-1：去除 AOEI 价格信号（M1）\(\Rightarrow\) 观察触发准确率、过度/迟滞传能事件数与首死时间；
+  \item Ablation-2：去除 InfoNode 缓存（M2）\(\Rightarrow\) 观察 AOEI 均值、通信开销与触发误差；
+  \item Ablation-3：禁用去重/动态等待（M2 细则）\(\Rightarrow\) 观察冗余包、通信负担与边际收益；
+  \item Ablation-4：去除 EETOR 硬约束（M3）\(\Rightarrow\) 观察低效多跳占比、单位能量收益与弱势受损概率；
+  \item Ablation-5：固定 K 值（M4）\(\Rightarrow\) 观察欠供/过供事件与单位能量收益；
+  \item Ablation-6：去除公平保护（M1/M3 的公平项）\(\Rightarrow\) 观察 CV、低分位能量与综合目标 \(\eta_E\times (1-\mathrm{CV})\)。
+\end{itemize}
+
+\paragraph{“同时变好”的证据：帕累托与超体积}
+为从理论上证明"让网络整体性能同时变好"，遵循如下评估流程：
+\begin{enumerate}
+  \item 在三组二维目标对上绘制帕累托前沿：效率-公平（\(\eta_E\), CV）、寿命-效率（\(T_{\text{death}}\), \(\eta_E\)）、信息新鲜度-通信开销（\(\overline{\text{AOEI}}\), \(E_{\text{com}}\)）。
+  \item 计算每种方法的凸包前沿并评估超体积指标（Hypervolume, HV）及被支配率（Dominance Rate）。
+  \item 用 10 次独立种子下的 Bootstrap（1000 次）构造 95\% 置信区间，并以配对 Wilcoxon 检验比较“提案 vs. 各对照”的 HV 与关键指标（寿命、CV、效率）。
+  \item 若在多数配置下提案机制的 HV 更大且在上述三组目标对上严格外包（或在绝大多数权衡下非劣），即可判定“同时变好”。
+\end{enumerate}
+上述流程与第 4 章的命题一致：价格信号化 + 路径外部性治理 + 信息透明层 + 自适应时长，将可行解集合整体外移。
+
+为验证提出的机制，进行四类对照实验：
+
+\begin{itemize}
+  \item \textbf{E1 智能被动 vs 固定周期：} 比较价格信号触发与固定周期触发，验证价格化调度是否能提升效率、延长寿命并减少振荡。
+  \item \textbf{E2 信息价值剖析：} 去除信息奖励或信息感知，观察高价值节点的服务优先级变化以及效率、公平、信息新鲜度的退化。
+  \item \textbf{E3 上报制度对比：} 比较机会主义上报与周期聚类、直接上报，分析信息透明度、通信负担与触发准确率之间的制度权衡。
+  \item \textbf{E4 自适应时长调度：} 对比固定参数的Lyapunov与时长优化，分析自适应反馈对效率—公平平衡的影响。
+\end{itemize}
+
+这些实验为后续结果的解读提供结构化视角，使得每个指标的变化可以追溯到具体的制度要素。
+
+
+\subsubsection{可视化与帕累托分析}
+
+利用指标可视化与帕累托分析，展示制度设计如何推动目标表现的改善：
+
+\begin{itemize}
+  \item \textbf{机制与指标映射：} 将寿命、能量均衡、触发频率等指标映射到价格机制、信息治理和路径约束，揭示制度设计对系统效率的影响。
+  \item \textbf{路径治理与外部性：} 通过路径效率和低效路径占比，阐释路径治理对系统公平与效率的贡献。
+  \item \textbf{多指标权衡：} 分析效率—公平、寿命—效率等组合上的帕累托前沿，展示制度设计如何推动可行解空间的外移。
+\end{itemize}
+
+---
+
+\subsection{结果分析：对照对比与总体效益}
+
+本节在统一资源与统计协议下（7天仿真、10个随机种子、95\% Bootstrap 置信区间、配对 Wilcoxon 检验）汇总 E1--E4 的关键发现，并从“效率-公平-时效-寿命”四维度给出总体效益结论。
+
+\paragraph{触发策略与寿命表现（E1）}
+与固定周期（60分钟）的主动触发策略相比，价格信号驱动的智能被动触发在延长网络寿命和降低系统开销方面表现出显著优势。如图\ref{fig:e1_triggers_vs_energy}所示，智能被动触发将传能次数从1543次大幅减少至504次，累计发送能量也从3857.5 kJ相应降低至1260.0 kJ，两项指标的降幅均达到67.3\%。
+
+能量轨迹的对比（图\ref{fig:e1_energy_over_time}）进一步揭示了这两种策略对网络生存状态的截然不同影响。在智能被动触发下，所有节点的能量水平均被维持在健康水平，无一死亡。而固定周期触发由于其盲目性和高频率，导致了能量的快速耗散，最终有11个节点（超过三分之一）能量耗尽而死亡。这证明了价格化触发以“低频高质”的方式，有效避免了不必要的能量传输，从而显著延长了网络寿命。
+
+% E1 figures: energy trajectory and triggers vs energy
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e1_energy_over_time_period60.png}
+  \caption{E1：节点能量随时间的演化对比。上图为智能被动传能，下图为固定60分钟主动传能。}
+  \label{fig:e1_energy_over_time}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e1_triggers_energy_costs.png}
+  \caption{E1：触发次数与累计发送能量对比。}
+  \label{fig:e1_triggers_vs_energy}
+\end{figure}
+
+
+\paragraph{信息层治理效果（E2）}
+信息价值在维持系统稳定性和信息新鲜度方面起着关键作用。如图\ref{fig:e2_aoei_hist}所示，当去除信息价值奖励后，网络的平均信息年龄（AOEI）从99.3分钟显著恶化至165.0分钟，表明系统的状态感知变得迟钝。
+
+这种信息新鲜度的降低直接影响了调度的准确性，导致了能量轨迹的不稳定。从图\ref{fig:e2_energy_no_info_reward}中可以看出，在缺乏信息奖励的情况下，节点的能量波动明显加剧，部分节点能量水平持续下降，增加了网络过早失效的风险。这验证了信息价值是抑制冗余上报、维持调度精度的核心机制。
+
+% E2 figures: AOEI histogram and no-info-reward energy trajectory
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e2_aoei_hist.png}
+  \caption{E2：不同信息层配置下的 AOEI 分布（越左越新鲜）。}
+  \label{fig:e2_aoei_hist}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e2_energy_over_time_no_info_reward.png}
+  \caption{E2：移除信息奖励后的节点能量演化（波动与同步失效风险上升）。}
+  \label{fig:e2_energy_no_info_reward}
+\end{figure}
+
+
+% Baseline energy trajectory figure (DurationAware + Opportunistic)
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e0_baseline.png}
+  \caption{Baseline（DurationAware + 机会主义上报）：节点能量随时间的演化，用于与不同制度/策略进行对比。}
+  \label{fig:e0_baseline}
+\end{figure}
+
+\paragraph{通信上报制度（E3）}
+本节仅比较两种制度：机会主义上报（本方法的信息透明层）与 ADCR。最新结果显示二者在通信代价、触发频率、体验反馈与弱势覆盖上呈现清晰的制度权衡。
+
+首先，从通信代价与触发频率看（图\ref{fig:e3_comm_costs_reports}）：机会主义上报的信息通信能耗仅为 21.01 kJ，而 ADCR 达到 140.95 kJ，后者高出约 6.7 倍；在上报/传能频次上，ADCR 为 613 次，略高于机会主义的 504 次，表明 ADCR 的制度会更频繁地驱动网络动作并带来更高的通信/协调开销。
+
+其次，从体验与公平维度看（图\ref{fig:e3_feedback_fairness}）：机会主义上报的平均反馈分数为 3.80，显著高于 ADCR 的 0.30，表明在既定资源约束下，机会主义策略能以更少的通信行动带来更高的总体满意度与调度效果；同时，ADCR 在弱势节点覆盖率上达到 100\%，优于机会主义的 83\%，体现其对低能节点的“强覆盖”偏好，但这一公平性收益伴随了明显的通信能耗与频次攀升。
+
+最后，能量轨迹（图\ref{fig:e3_adcr_energy_traj}）揭示了 ADCR 在全时域上的能量演化形态：多段“快速回落—短时回补”的锯齿形波动较为突出，后期整体能量下沉更明显。这与其更高的触发频率与通信/协调负担一致，提示 ADCR 更倾向以高频干预换取覆盖性；而机会主义上报在不显著增加触发频次的前提下，通过价值加权与信息缓存抑制了无效上报与过度干预，从而以更低成本支撑更高的主观反馈分数。
+
+% E3 figures: comm costs & reports, feedback fairness
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e3_comm_costs_reports.png}
+  \caption{E3：通信成本与上报/传能频次（仅比较机会主义 vs ADCR）。机会主义：21.01 kJ, 504 次；ADCR：140.95 kJ, 613 次。}
+  \label{fig:e3_comm_costs_reports}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e3_feedback_fairness.png}
+  \caption{E3：体验与公平（仅比较机会主义 vs ADCR）。机会主义：反馈 3.80，弱势覆盖 83\%；ADCR：反馈 0.30，弱势覆盖 100\%。}
+  \label{fig:e3_feedback_fairness}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e3_adcr.png}
+  \caption{E3：ADCR 的节点能量轨迹。可见多段锯齿式波动与后期能量下沉，印证高频干预带来的能量负担。}
+  \label{fig:e3_adcr_energy_traj}
+\end{figure}
+
+
+\paragraph{路径治理与自适应调度（E4）}
+自适应调度与路径治理机制的协同作用显著提升了系统的稳定性和效率。如图\ref{fig:e4_feedback_scores_adaptive}所示，自适应调度器的总反馈分数（Total Score）在初期波动后，其10步移动平均线（MA）逐渐收敛到一个稳定为正的区间，表明系统能够根据网络状态动态调整策略并维持较高的性能满意度。
+
+同时，EETOR路径治理在抑制低效传输方面效果显著。从图\ref{fig:e4_path_eff}(a)的路径效率分布可以看出，与无EETOR约束的对照相比，提案机制的路径效率分布明显向右侧（高效区）偏移。量化对比（图\ref{fig:e4_path_eff}(b)）显示，在效率阈值为0.15时，提案机制的低效路径占比仅为9.3%，低于基线的10.6%。这证明了路径治理在减少无效能量损耗、提升单位能量收益方面的直接贡献。
+
+% E4 figures: feedback evolution and path efficiency
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e4_feedback_scores_adaptive.png}
+  \caption{E4：自适应调度器反馈分数的演化，总分（Total Score）的移动平均线（MA）显示出收敛趋势。}
+  \label{fig:e4_feedback_scores_adaptive}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e4_path_eff.png}
+  \caption{E4：EETOR路径治理的效率改善证据。(a) 路径效率分布对比；(b) 低效路径（效率$<0.15$）占比对比。}
+  \label{fig:e4_path_eff}
+\end{figure}
+
+% E4 energy trajectory comparison
+\paragraph{能量轨迹对比（E4 补充）}
+对比基线（DurationAware，自适应时长，见图~\ref{fig:e0_baseline}）与传统 Lyapunov（固定~$\tau$，见图~\ref{fig:e4_lyapunov_energy_traj}）可见：自适应时长使能量演化呈现更规整的阶梯式回补与更缓的整体下沉，节点间带宽更窄、最低能量更高；传统 Lyapunov 则在多个阶段出现更快的群体下挫与更深的低谷，后期下沉更明显。这与图~\ref{fig:e4_feedback_scores_adaptive} 的正向收敛反馈一致，表明时长自适应在既定资源约束下提升了稳态与体验，并减少了无效/过度干预。
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/e4_lyapunov.png}
+  \caption{E4：传统 Lyapunov（固定~$\tau$）的节点能量轨迹，与基线（DurationAware，图~\ref{fig:e0_baseline}）对比可见后期更快下沉与更深低谷。}
+  \label{fig:e4_lyapunov_energy_traj}
+\end{figure}
+
+
+\subsubsection{三线表：关键统计汇总}
+为便于交叉对比各机制在核心指标上的表现，以下给出与正文叙述对应的三线表模板（使用 booktabs）。数值可由统计脚本自动填充或手动填写（单位见头）。
+
+\begin{table*}[!t]
+  \centering
+  \setlength{\abovecaptionskip}{4pt}\setlength{\belowcaptionskip}{4pt}
+  \caption{Experiment~1（E1）：触发策略的整体表现（7日均值或累计）}
+  \label{tab:e1_overview}
+  \setlength{\tabcolsep}{5pt} % 减小列间距以适应页面
+  \begin{tabular}{l S[table-format=2.0] S[table-format=4.2] S[table-format=3.2] S[table-format=3.2] S[table-format=2.2] S[table-format=4.2] S[table-format=4.0] S[table-format=2.2]}
+    \toprule
+    \textbf{方法} & {\textbf{\makecell{存活                                                                \\ (节点数)}}} & {\textbf{\makecell{总发送 \\ (kJ)}}} & {\textbf{\makecell{总接收 \\ (kJ)}}} & {\textbf{\makecell{损耗 \\ (kJ)}}} & {\textbf{\makecell{效率 \\ (\%)}}} & {\textbf{\makecell{能量 \\ 方差}}} & {\textbf{\makecell{传能 \\ 次数}}} & {\textbf{\makecell{信息 \\ 能耗(kJ)}}} \\
+    \midrule
+    提案（价格触发）    & 30                    & 1260.00 & 653.98  & 606.02  & 51.90 & 4161.06 & 504  & 21.01 \\
+    基线（固定周期）    & 19                    & 3857.50 & 2301.76 & 1555.74 & 59.67 & 1111.87 & 1543 & 97.84 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+
+\begin{table*}[!t]
+  \centering
+  \setlength{\abovecaptionskip}{4pt}\setlength{\belowcaptionskip}{4pt}
+  \caption{Experiment~2（E2）：信息层组件对能效与通信代价的影响}
+  \label{tab:e2_info}
+  \setlength{\tabcolsep}{4pt} % 减小列间距
+  \begin{tabular}{l S[table-format=2.2] S[table-format=4.2] S[table-format=2.2] S[table-format=1.2] S[table-format=4.0] S[table-format=1.2]}
+    \toprule
+    \textbf{方法}   & {\textbf{\makecell{效率                                        \\ (\%)}}} & {\textbf{\makecell{能量 \\ 方差}}} & {\textbf{\makecell{信息总耗 \\ (kJ)}}} & {\textbf{\makecell{信息/节点 \\ (kJ)}}} & {\textbf{\makecell{收集 \\ 次数}}} & {\textbf{\makecell{反馈 \\ 均值}}} \\
+    \midrule
+    InfoNode+价值上报 & 51.90                 & 4161.06 & 21.01 & 0.68 & 504  & 3.80 \\
+    去除信息奖励        & 50.08                 & 4476.58 & 97.84 & 3.16 & 2299 & 0.72 \\
+    无缓存/周期上报      & 51.54                 & 4084.60 & 21.93 & 0.71 & 480  & 3.71 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\begin{table*}[!t]
+  \centering
+  \setlength{\abovecaptionskip}{4pt}\setlength{\belowcaptionskip}{4pt}
+  \caption{Experiment~3（E3）：上报制度的通信与体验权衡}
+  \label{tab:e3_reporting}
+  \begin{tabular}{lcccccc}
+    \toprule
+    方法         & 传输效率(\%) & 能量方差     & 信息总耗(kJ) & 上报次数 & 低效多跳(\%) & 反馈均值 \\
+    \midrule
+    机会主义上报（提案） & 51.90    & 4161.06  & 21.01    & 504  &          & 3.80 \\
+    ADCR 点对点上报 & 53.98    & 58530.15 & 140.95   & 613  &          & 0.30 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\begin{table*}[!t]
+  \centering
+  \setlength{\abovecaptionskip}{4pt}\setlength{\belowcaptionskip}{4pt}
+  \caption{Experiment~4（E4）：调度策略对比（固定$\tau$ vs 自适应时长）}
+  \label{tab:e4_scheduler}
+  \begin{tabular}{lcccccccc}
+    \toprule
+    方法                   & 存活(结尾) & 总发送(kJ) & 总接收(kJ) & 损耗(kJ) & 传输效率(\%) & 能量方差    & 传能次数 & 信息能耗(kJ) \\
+    \midrule
+    自适应时长（提案）            & 30     & 1260.00 & 653.98  & 606.02 & 51.90    & 4161.06 & 504  & 21.01    \\
+    传统Lyapunov（固定$\tau$） & 30     & 1149.50 & 575.62  & 573.88 & 50.08    & 4476.58 & 2299 & 97.84    \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+
+
+
+\subsection{结论与展望}
+
+根据实验结果，总结机制的优劣，并提出未来的优化方向。重点讨论如何通过制度创新进一步推动系统的动态帕累托边界外移，以及该机制在不同环境下的适应性与鲁棒性。
+
+---
+

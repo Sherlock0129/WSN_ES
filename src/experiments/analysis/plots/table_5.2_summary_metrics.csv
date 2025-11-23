@@ -1,0 +1,5 @@
+Method,Network Lifetime (min),Total Sent Energy (kJ),Total Comm. Cost (kJ),Mean AoEI (min),Mean Path Efficiency (%),Final Energy CV
+Proposed System,10080,1505.0,25.46,485.63,57.52,0.15
+Threshold (Stage 2),3980,1641.0,10.97,359.0,0.0,0.21
+Lyapunov (Stage 3),4080,1718.0,10.78,359.0,65.47,0.21
+DQN (Stage 4),680,3438.0,10.55,359.0,65.01,0.0

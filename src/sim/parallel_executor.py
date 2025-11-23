@@ -218,7 +218,6 @@ class ParallelSimulationExecutor:
             node_info_manager = network.adcr_link.vc
         else:
             # 创建独立的节点信息管理器
-            from info_collection.physical_center import NodeInfoManager
             physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
             if physical_center:
                 initial_pos = tuple(physical_center.position)
@@ -228,7 +227,7 @@ class ParallelSimulationExecutor:
                     sum(n.position[0] for n in nodes) / len(nodes),
                     sum(n.position[1] for n in nodes) / len(nodes)
                 )
-            node_info_manager = NodeInfoManager(initial_position=initial_pos, enable_logging=False)
+            node_info_manager = config_manager.create_virtual_center(initial_position=initial_pos, enable_logging=False)
             node_info_manager.initialize_node_info(network.nodes, initial_time=0)
         
         # 创建调度器

@@ -126,10 +126,11 @@ class SimulationConfig:
     # 能量传输控制
     enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
 
-    # 智能被动传能参数
-    passive_mode: bool = False          # 是否启用智能被动传能模式（False为定时主动传能）
-    check_interval: int = 1000                # 智能检查间隔（分钟）
-    critical_ratio: float = 0.2             # 低能量节点临界比例（0-1）
+    # 智能被动传能/定时主动传能参数
+    passive_mode: bool = True        # 是否启用智能被动传能模式（False为定时主动传能）
+    check_interval: int = 1          # 被动模式：检查频率（分钟）；主动模式不使用
+    active_transfer_interval: int = 20  # 主动模式：定时触发间隔（分钟），仅当 passive_mode=False 时生效
+    critical_ratio: float = 0             # 低能量节点临界比例（0-1）
     energy_variance_threshold: float = 0.05  # 能量方差阈值，超过则触发传能
     cooldown_period: int = 0               # 传能冷却期（分钟），避免频繁触发
     predictive_window: int = 60             # 预测窗口（分钟），用于预测性触发
@@ -374,7 +375,7 @@ class EETORConfig:
     sparse_network_range: float = 10.0      # 稀疏网络使用较大的通信范围
     
     # 信息感知路由参数
-    enable_info_aware_routing: bool = False  # 是否启用信息感知路由
+    enable_info_aware_routing: bool = True  # 是否启用信息感知路由
     info_reward_factor: float = 0.2          # 信息奖励系数（0~1），信息量大的节点优先选择
     # 注意：max_info_wait_time 和 min_info_volume_threshold 在 PathCollectorConfig 中配置
 
@@ -396,8 +397,8 @@ class PathCollectorConfig:
     """
     
     # 基本开关
-    enable_path_collector: bool = False  # 是否启用路径信息收集器
-    replace_adcr: bool = False  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
+    enable_path_collector: bool = True  # 是否启用路径信息收集器
+    replace_adcr: bool = True  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
     
     # 能量消耗模式
     energy_mode: str = "full"  # 能量消耗模式："free"（零能耗，默认）
@@ -415,8 +416,8 @@ class PathCollectorConfig:
     use_solar_model: bool = True  # 是否使用太阳能模型进行估算
     
     # 机会主义信息传递参数
-    enable_opportunistic_info_forwarding: bool = False  # 是否启用机会主义信息传递
-    enable_delayed_reporting: bool = False               # 是否启用延迟上报（False为立即上报）
+    enable_opportunistic_info_forwarding: bool = True  # 是否启用机会主义信息传递
+    enable_delayed_reporting: bool = True               # 是否启用延迟上报（False为立即上报）
     max_wait_time: int = 500                              # 最大等待时间（分钟），超时强制上报（固定模式或自适应模式的基础值）
     min_info_volume_threshold: int = 1                   # 最小信息量阈值（节点数），低于此值不等待
     max_info_volume: int = 1000000                         # 信息量最大值（bits），超过此值强制上报，None表示无限制
@@ -435,6 +436,37 @@ class PathCollectorConfig:
     
     # 日志输出
     enable_logging: bool = True  # 是否启用详细日志
+
+
+@dataclass
+class PeriodicCollectorConfig:
+    """定期上报信息收集器配置参数
+
+    用于替代路径收集器的信息收集机制：
+    - 每个节点固定每隔一定时间（默认60分钟）向物理中心节点发送一次自己的信息
+    - 不依赖能量传输路径，独立运行
+    - 与路径收集器互斥（不能同时使用）
+    """
+
+    # 基本开关
+    enable_periodic_collector: bool = False  # 是否启用定期上报信息收集器
+
+    # 上报参数
+    report_interval: int = 60  # 上报间隔（分钟），默认60分钟
+
+    # 数据包大小
+    base_data_size: int = 1000000  # 基础数据包大小（bits），与路径收集器一致
+
+    # 日志输出
+    enable_logging: bool = True  # 是否启用详细日志
+
+
+@dataclass
+class InfoConfig:
+    """信息层配置参数"""
+
+    enable_energy_estimation: bool = True  # 虚拟中心是否对未上报节点进行能量估算
+    force_report_on_stale: bool = False    # AoI 超限时是否强制上报（即使无信息量）
 
 
 @dataclass
@@ -479,6 +511,8 @@ class ConfigManager:
         self.scheduler_config = SchedulerConfig()
         self.adcr_config = ADCRConfig()
         self.path_collector_config = PathCollectorConfig()
+        self.periodic_collector_config = PeriodicCollectorConfig()
+        self.info_config = InfoConfig()
         self.eetor_config = EETORConfig()
         self.parallel_config = ParallelConfig()
         
@@ -507,6 +541,10 @@ class ConfigManager:
                 self._update_dataclass(self.adcr_config, config_data['adcr'])
             if 'path_collector' in config_data:
                 self._update_dataclass(self.path_collector_config, config_data['path_collector'])
+            if 'periodic_collector' in config_data:
+                self._update_dataclass(self.periodic_collector_config, config_data['periodic_collector'])
+            if 'info' in config_data:
+                self._update_dataclass(self.info_config, config_data['info'])
             if 'eetor' in config_data:
                 self._update_dataclass(self.eetor_config, config_data['eetor'])
             if 'parallel' in config_data:
@@ -527,6 +565,8 @@ class ConfigManager:
                 'scheduler': asdict(self.scheduler_config),
                 'adcr': asdict(self.adcr_config),
                 'path_collector': asdict(self.path_collector_config),
+                'periodic_collector': asdict(self.periodic_collector_config),
+                'info': asdict(self.info_config),
                 'eetor': asdict(self.eetor_config),
                 'parallel': asdict(self.parallel_config)
             }
@@ -567,6 +607,8 @@ class ConfigManager:
                 'scheduler': asdict(self.scheduler_config),
                 'adcr': asdict(self.adcr_config),
                 'path_collector': asdict(self.path_collector_config),
+                'periodic_collector': asdict(self.periodic_collector_config),
+                'info': asdict(self.info_config),
                 'eetor': asdict(self.eetor_config),
                 'parallel': asdict(self.parallel_config)
             }
@@ -797,7 +839,8 @@ class ConfigManager:
             critical_ratio=self.simulation_config.critical_ratio,
             energy_variance_threshold=self.simulation_config.energy_variance_threshold,
             cooldown_period=self.simulation_config.cooldown_period,
-            predictive_window=self.simulation_config.predictive_window
+            predictive_window=self.simulation_config.predictive_window,
+            active_transfer_interval=self.simulation_config.active_transfer_interval
         )
     
     def create_adcr_link_layer(self, network):
@@ -843,7 +886,11 @@ class ConfigManager:
             ch_marker_size=self.adcr_config.ch_marker_size,
             vc_marker_size=self.adcr_config.vc_marker_size,
             line_width=self.adcr_config.line_width,
-            path_line_width=self.adcr_config.path_line_width
+            path_line_width=self.adcr_config.path_line_width,
+            info_enable_energy_estimation=self.info_config.enable_energy_estimation,
+            info_decay_rate=self.path_collector_config.decay_rate,
+            info_use_solar_model=self.path_collector_config.use_solar_model,
+            info_force_report_on_stale=self.info_config.force_report_on_stale
         )
     
     def create_path_collector(self, virtual_center, physical_center=None):
@@ -874,6 +921,52 @@ class ConfigManager:
             info_value_decay_rate=self.path_collector_config.info_value_decay_rate
         )
     
+    def create_periodic_collector(self, virtual_center, physical_center=None):
+        """
+        创建PeriodicInfoCollector对象
+        
+        :param virtual_center: 虚拟中心实例（用于节点信息表管理）
+        :param physical_center: 物理中心节点（ID=0，信息上报目标）
+        """
+        from info_collection.periodic_collector import PeriodicInfoCollector
+        return PeriodicInfoCollector(
+            virtual_center=virtual_center,
+            physical_center=physical_center,
+            report_interval=self.periodic_collector_config.report_interval,
+            base_data_size=self.periodic_collector_config.base_data_size,
+            enable_logging=self.periodic_collector_config.enable_logging
+        )
+    
+    def create_virtual_center(self, initial_position, enable_logging=True, history_size: int = 1000, archive_path: str = None):
+        """
+        创建虚拟中心（NodeInfoManager），自动应用信息层配置
+        """
+        from info_collection.physical_center import NodeInfoManager
+        return NodeInfoManager(
+            initial_position=initial_position,
+            enable_logging=enable_logging,
+            history_size=history_size,
+            archive_path=archive_path,
+            enable_energy_estimation=self.info_config.enable_energy_estimation,
+            decay_rate_default=self.path_collector_config.decay_rate,
+            use_solar_model=self.path_collector_config.use_solar_model,
+            force_report_on_stale=self.info_config.force_report_on_stale
+        )
+
+    def validate_info_collector_config(self):
+        """
+        验证信息收集器配置的互斥性
+
+        规则：
+        - 路径收集器和定期收集器不能同时启用
+        - 如果同时启用，抛出异常
+
+        :raises ValueError: 如果配置冲突
+        """
+        if (self.path_collector_config.enable_path_collector and
+            self.periodic_collector_config.enable_periodic_collector):
+            print("提示：路径收集器与定期收集器将同时启用，并共享同一个虚拟中心。")
+
     def __str__(self) -> str:
         return json.dumps({
             'node': asdict(self.node_config),

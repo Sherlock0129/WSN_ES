@@ -1,5 +1,3 @@
-% IEEE conference paper skeleton for S2 manuscript (modular version)
-% 模块化版本：各章节分离到 sections/ 目录
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
 
@@ -14,62 +12,47 @@
 \usepackage{hyperref}
 \usepackage[UTF8]{ctex}
 \usepackage{enumitem}
-\usepackage{booktabs}  % 三线表支持
-\usepackage{multirow}  % 跨行表格支持
-\usepackage{mdframed}  % 可分页的背景框
+\usepackage{booktabs}  
+\usepackage{multirow} 
+\usepackage{mdframed}  
 \usepackage{tikz}
 \usetikzlibrary{positioning}
 \usetikzlibrary{shapes.geometric, arrows}
-% 页眉页脚设置（IEEE会议论文标准）
+
 \usepackage{fancyhdr}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 
-% Temporary switch: use inline bibliography to avoid BibTeX errors during skeleton phase.
-% Set to \draftbibfalse later to switch back to BibTeX.
-\newif\ifdraftbib
-\draftbibtrue
-\ifdraftbib
-\makeatletter
-\AtBeginDocument{%
-  \immediate\write\@auxout{\string\bibstyle{IEEEtran}}%
-  \immediate\write\@auxout{\string\bibdata{references}}%
-  \immediate\write\@auxout{\string\citation{placeholder2025}}%
-}
-\makeatother
-\fi
 
 \begin{document}
 
-% 页眉页脚设置
 \pagestyle{fancy}
-\fancyhf{}  % 清空默认页眉页脚
-\fancyhead[C]{\small 融合AOEI驱动与数字孪生技术的能量共享经济机制研究}
-\fancyfoot[C]{\thepage}  % 页码居中
-\renewcommand{\headrulewidth}{0pt}  % 去掉页眉线（IEEE标准）
+\fancyhf{}
+\fancyhead[C]{\small Research on Energy-Sharing Economic Mechanisms Integrating AoEI-Driven Approaches and Digital Twin Technology }
+
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
 \renewcommand{\footrulewidth}{0pt}
 
-% 中文题名
-\title{融合AOEI驱动与数字孪生技术的能量共享经济机制研究}
+\title{Research on Energy-Sharing Economic Mechanisms Integrating AoEI-Driven Approaches and Digital Twin Technology}
 
 \author{\IEEEauthorblockN{Author Name}
-\IEEEauthorblockA{\textit{Department/School} \\
-\textit{University Name}\\
-City, Country \\
-email@university.edu}
+  \IEEEauthorblockA{\textit{Department/School} \\
+    \textit{University Name}\\
+    City, Country \\
+    email@university.edu}
 }
 
 \maketitle
 \begin{abstract}
-本文面向无线传感器网络（WSN）能量受限与信息时效性不足的双重挑战，提出一套以经济学机制为先导、以工程技术为落地的一体化能量共享框架。核心思想是将"能量信息年龄（Age of Energy Information, AOEI）"内生化为价格信号，驱动"何时/对谁/以何强度"触发传能；并以数字孪生化的 InfoNode 提升状态可得性与市场透明度，配合机会主义信息上报、去重与动态等待以降低通信能耗与冗余开销；同时采用面向能量传输的专用路由 EETOR（效率阈值 + 最大跳数 + 弱势保护）抑制低效多跳，再结合传输时长/额度的自适应决策与预算清算、分位数阈值与动态预算等非平稳鲁棒策略。该机制在不改变物理资源总量的前提下，通过价格化触发、状态可得性与路径外部性治理，协同实现效率、均衡/公平、时效与寿命四维度的联合提升，并在理论与实证上呈现"动态帕累托边界外移"。在多类典型拓扑与网络规模设置下，我们与"无共享、Lyapunov、DurationAware、DQN、DDPG"等代表性基线进行对比并开展系统化消融；结果显示：在寿命、能量效率与均衡/公平等核心指标上取得统计显著改进，低效多跳占比与通信开销显著降低。上述证据验证了"经济学机制—技术实现"的可解释设计在 WSN 能量共享中的有效性与普适价值。
+  本文面向无线传感器网络（WSN）能量受限与信息时效性不足的双重挑战，提出一套以经济学机制为先导、以工程技术为落地的一体化能量共享框架。核心思想是将"能量信息年龄（Age of Energy Information, AoEI）"内生化为价格信号，驱动"何时/对谁/以何强度"触发传能；并以数字孪生化的 InfoNode 提升状态可得性与市场透明度，配合机会主义信息上报、去重与动态等待以降低通信能耗与冗余开销；同时采用面向能量传输的专用路由 EETOR（效率阈值 + 最大跳数 + 弱势保护）抑制低效多跳，再结合传输时长/额度的自适应决策与预算清算、分位数阈值与动态预算等非平稳鲁棒策略。该机制在不改变物理资源总量的前提下，通过价格化触发、状态可得性与路径外部性治理，协同实现效率、均衡/公平、时效与寿命四维度的联合提升，并在理论与实证上呈现"动态帕累托边界外移"。在多类典型拓扑与网络规模设置下，本研究与"无共享、Lyapunov、DurationAware、DQN、DDPG"等代表性基线进行对比并开展系统化消融；结果显示：在寿命、能量效率与均衡/公平等核心指标上取得统计显著改进，低效多跳占比与通信开销显著降低。上述证据验证了"经济学机制—技术实现"的可解释设计在 WSN 能量共享中的有效性与普适价值。
 \end{abstract}
 
 \begin{IEEEkeywords}
-无线传感器网络，能量共享，AOEI，数字孪生，经济机制
+  无线传感器网络，能量共享，AoEI，数字孪生，经济机制
 \end{IEEEkeywords}
 
-% ========== 各章节通过 \input 引用 ==========
 \input{sections/01_introduction}
 
 \input{sections/02_related_work}
@@ -84,8 +67,8 @@ email@university.edu}
 
 \input{sections/07_conclusion}
 
-% ========== 参考文献 ==========
-\input{sections/bibliography}
 
+\bibliographystyle{IEEEtran}
+\bibliography{ref}
 \end{document}
 

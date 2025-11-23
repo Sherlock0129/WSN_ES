@@ -34,21 +34,39 @@ def run_simulation_with_config(config_manager: ConfigManager):
     # 创建网络
     network = config_manager.create_network()
     
-    # 创建路径信息收集器（如果需要）
-    if config_manager.path_collector_config.enable_path_collector:
-        from info_collection.physical_center import VirtualCenter
         physical_center = network.get_physical_center()
+    nodes_for_init = (network.get_regular_nodes() if hasattr(network, 'get_regular_nodes')
+                      else network.nodes)
+    vc = None
+
+    def ensure_virtual_center():
+        nonlocal vc
+        if vc is None:
         if physical_center:
             initial_pos = tuple(physical_center.position)
         else:
-            nodes = network.get_regular_nodes() if hasattr(network, 'get_regular_nodes') else network.nodes
-            initial_pos = (sum(n.position[0] for n in nodes) / len(nodes),
-                          sum(n.position[1] for n in nodes) / len(nodes))
-        vc = VirtualCenter(initial_position=initial_pos, enable_logging=True)
+                initial_pos = (
+                    sum(n.position[0] for n in nodes_for_init) / len(nodes_for_init),
+                    sum(n.position[1] for n in nodes_for_init) / len(nodes_for_init)
+                )
+            vc = config_manager.create_virtual_center(
+                initial_position=initial_pos,
+                enable_logging=True
+            )
         vc.initialize_node_info(network.nodes, initial_time=0)
-        network.path_info_collector = config_manager.create_path_collector(vc, physical_center)
+        return vc
+
+    if config_manager.path_collector_config.enable_path_collector:
+        path_vc = ensure_virtual_center()
+        network.path_info_collector = config_manager.create_path_collector(path_vc, physical_center)
     else:
         network.path_info_collector = None
+
+    if config_manager.periodic_collector_config.enable_periodic_collector:
+        periodic_vc = ensure_virtual_center()
+        network.periodic_info_collector = config_manager.create_periodic_collector(periodic_vc, physical_center)
+    else:
+        network.periodic_info_collector = None
     
     # 创建调度器
     scheduler = create_scheduler(config_manager, network)
@@ -61,10 +79,11 @@ def run_simulation_with_config(config_manager: ConfigManager):
     session_dir = simulation.session_dir
     
     # 设置虚拟中心归档路径
+    archive_path = os.path.join(session_dir, "virtual_center_node_info.csv")
     if hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
-        import os
-        archive_path = os.path.join(session_dir, "virtual_center_node_info.csv")
         network.path_info_collector.vc.archive_path = archive_path
+    if hasattr(network, 'periodic_info_collector') and network.periodic_info_collector is not None:
+        network.periodic_info_collector.vc.archive_path = archive_path
     
     simulation.simulate()
     

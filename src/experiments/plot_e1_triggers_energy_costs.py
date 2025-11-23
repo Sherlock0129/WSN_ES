@@ -12,12 +12,12 @@ from matplotlib import rcParams
 # 设置中文字体和字体大小（根据之前的要求，文字和数字需放大2倍）
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
-rcParams['font.size'] = 20  # 基础字体大小（2倍）
-rcParams['axes.labelsize'] = 20
-rcParams['xtick.labelsize'] = 18
-rcParams['ytick.labelsize'] = 18
-rcParams['legend.fontsize'] = 18  # 图例字体大小（2倍）
-rcParams['figure.titlesize'] = 22
+rcParams['font.size'] = 22  # 基础字体大小（2倍）
+rcParams['axes.labelsize'] = 22
+rcParams['xtick.labelsize'] = 20
+rcParams['ytick.labelsize'] = 20
+rcParams['legend.fontsize'] = 20  # 图例字体大小（2倍）
+rcParams['figure.titlesize'] = 24
 
 def load_statistics(json_path):
     """从JSON文件加载统计数据"""
@@ -84,16 +84,16 @@ def plot_e1_triggers_energy_costs(
                             label='Fixed 60-min', color=color_period60,
                             alpha=0.8, edgecolor='black', linewidth=1.5)
     
-    ax1.set_ylabel('Trigger Count', fontsize=20, fontweight='bold')
+    ax1.set_ylabel('Trigger Count', fontsize=22, fontweight='bold')
     ax1.set_xticks(x)
     ax1.set_xticklabels(['Intelligent Passive', 'Fixed 60-min'], fontsize=18)
     ax1.grid(True, alpha=0.3, linestyle='--', axis='y')
     
     # Add value labels on bars
     ax1.text(x[0], passive_transfers, f'{passive_transfers}',
-            ha='center', va='bottom', fontsize=16, fontweight='bold')
+            ha='center', va='bottom', fontsize=18, fontweight='bold')
     ax1.text(x[1], period60_transfers, f'{period60_transfers}',
-            ha='center', va='bottom', fontsize=16, fontweight='bold')
+            ha='center', va='bottom', fontsize=18, fontweight='bold')
     
     # Right plot: Cumulative sent energy comparison
     bars2_passive = ax2.bar(x[0], passive_energy_kj, width,
@@ -103,24 +103,24 @@ def plot_e1_triggers_energy_costs(
                             label='Fixed 60-min', color=color_period60,
                             alpha=0.8, edgecolor='black', linewidth=1.5)
     
-    ax2.set_ylabel('Cumulative Sent Energy (kJ)', fontsize=20, fontweight='bold')
+    ax2.set_ylabel('Cumulative Sent Energy (kJ)', fontsize=22, fontweight='bold')
     ax2.set_xticks(x)
     ax2.set_xticklabels(['Intelligent Passive', 'Fixed 60-min'], fontsize=18)
     ax2.grid(True, alpha=0.3, linestyle='--', axis='y')
     
     # Add value labels on bars
     ax2.text(x[0], passive_energy_kj, f'{passive_energy_kj:.1f}',
-            ha='center', va='bottom', fontsize=16, fontweight='bold')
+            ha='center', va='bottom', fontsize=18, fontweight='bold')
     ax2.text(x[1], period60_energy_kj, f'{period60_energy_kj:.1f}',
-            ha='center', va='bottom', fontsize=16, fontweight='bold')
+            ha='center', va='bottom', fontsize=18, fontweight='bold')
     
     # Set main title
-    fig.suptitle('E1: Trigger Count and Cumulative Energy Cost Comparison', fontsize=22, fontweight='bold', y=0.98)
+    fig.suptitle('E1: Trigger Count and Cumulative Energy Cost Comparison', fontsize=24, fontweight='bold', y=0.98)
     
     # Add unified legend below title
     handles = [bars1_passive, bars1_period60]
     labels = ['Intelligent Passive Transfer', 'Fixed 60-min Periodic Transfer']
-    fig.legend(handles, labels, loc='upper center', ncol=2, fontsize=18, 
+    fig.legend(handles, labels, loc='upper center', ncol=2, fontsize=20, 
               framealpha=0.9, bbox_to_anchor=(0.5, 0.95))
     
     # Add unified reduction percentage annotation below the plots (split into two lines)

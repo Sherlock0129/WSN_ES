@@ -63,7 +63,11 @@ class ADCRLinkLayerVirtual(object):
                  ch_marker_size: int = 10,
                  vc_marker_size: int = 12,
                  line_width: float = 1.0,
-                 path_line_width: float = 2.0):
+                 path_line_width: float = 2.0,
+                 info_enable_energy_estimation: bool = True,
+                 info_decay_rate: float = 5.0,
+                 info_use_solar_model: bool = True,
+                 info_force_report_on_stale: bool = False):
         self.net = network
         self.round_period = int(round_period)
         self.r_neighbor = float(r_neighbor)
@@ -142,7 +146,11 @@ class ADCRLinkLayerVirtual(object):
             initial_position=initial_pos,
             enable_logging=True,
             history_size=1000,  # 保留最近1000条历史记录
-            archive_path=None   # 稍后通过 set_archive_path 设置
+            archive_path=None,   # 稍后通过 set_archive_path 设置
+            enable_energy_estimation=info_enable_energy_estimation,
+            decay_rate_default=info_decay_rate,
+            use_solar_model=info_use_solar_model,
+            force_report_on_stale=info_force_report_on_stale
         )
         
         self.virtual_center = (0.0, 0.0)   # (cx, cy)

@@ -141,6 +141,9 @@ class Network:
         
         # 路径信息收集器（稍后由外部设置）
         self.path_info_collector = None
+        
+        # 定期上报信息收集器（稍后由外部设置，与路径收集器互斥）
+        self.periodic_info_collector = None
     
     def _update_distance_matrix(self):
         """更新距离矩阵（GPU加速）"""

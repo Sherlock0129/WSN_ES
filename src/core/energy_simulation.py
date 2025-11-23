@@ -35,7 +35,8 @@ class EnergySimulation:
                  critical_ratio=0.2,  # 低能量节点临界比例
                  energy_variance_threshold=0.3,  # 能量方差阈值
                  cooldown_period=30,  # 冷却期（分钟）
-                 predictive_window=60):  # 预测窗口（分钟）
+                 predictive_window=60,  # 预测窗口（分钟）
+                 active_transfer_interval=60):  # 主动模式：定时触发间隔（分钟）
         """
         Initialize the energy simulation for the network.
 
@@ -69,7 +70,8 @@ class EnergySimulation:
             critical_ratio=critical_ratio,
             energy_variance_threshold=energy_variance_threshold,
             cooldown_period=cooldown_period,
-            predictive_window=predictive_window
+            predictive_window=predictive_window,
+            active_transfer_interval=active_transfer_interval
         )
 
         # 创建按日期命名的输出目录
@@ -114,15 +116,15 @@ class EnergySimulation:
             # Step 1.5: ADCR链路层处理（如果启用）
             if hasattr(self.network, 'adcr_link') and self.network.adcr_link is not None:
                 self.network.adcr_link.step(t)
+            
+            # Step 1.7: 定期上报信息收集器处理（如果启用）
+            if (hasattr(self.network, 'periodic_info_collector') and 
+                self.network.periodic_info_collector is not None):
+                self.network.periodic_info_collector.step(self.network.nodes, t)
 
-            # Step 1.6: [已禁用] 在检查触发条件前，先同步节点能量到虚拟能量层
-            # 这一步会导致所有节点的AOEI在每个时间步都被重置为0，因此已禁用。
-            # 节点信息的更新现在完全依赖于各自的上报机制（如机会主义、ADCR等）。
-            # if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
-            #     self.scheduler.nim.batch_update_node_info(
-            #         nodes=self.network.nodes,
-            #         current_time=t
-            #     )
+            # Step 1.6:在检查触发条件前，先同步节点能量到虚拟能量层
+            if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                self.scheduler.nim.estimate_all_nodes(current_time=t)
 
             # Step 2: 智能综合决策能量传输触发（使用被动传能管理器）
             should_trigger, trigger_reason = self.passive_manager.should_trigger_transfer(t, self.network)
@@ -166,11 +168,7 @@ class EnergySimulation:
                             from scheduling.schedulers import DurationAwareLyapunovScheduler
                             if isinstance(self.scheduler, DurationAwareLyapunovScheduler):
                                 self.scheduler.nim.check_and_update_locks(t)
-                            # [已移除] 此处不应有全局信息更新，节点信息的更新应由具体的上报机制（如PathCollector）处理
-                            # self.scheduler.nim.batch_update_node_info(
-                            #     nodes=self.network.nodes,
-                            #     current_time=t
-                            # )
+                            self.scheduler.nim.estimate_all_nodes(current_time=t)
                         
                         # 同步自适应K给调度器（若其带 K）
                         if hasattr(self.scheduler, "K"):
@@ -205,27 +203,28 @@ class EnergySimulation:
                     # 设置当前时间
                     self.scheduler.nim.current_time = t
                     # 首先：基于传输计划，更新参与传输的节点的能量（确定性计算）
-                    # 中心节点知道所有传输路径和能量变化，可以精确计算
                     if plans:
                         self.scheduler.nim.apply_energy_transfer_changes(plans, current_time=t)
                     
                     # 然后：估算未上报节点的能量（衰减+太阳能采集）
                     self.scheduler.nim.estimate_all_nodes(current_time=t)
-                    
-                    # 机会主义信息传递：检查超时并强制上报（如果启用路径信息收集器）
-                    if (hasattr(self.network, 'path_info_collector') and 
-                        self.network.path_info_collector is not None and
-                        hasattr(self.network.path_info_collector, 'enable_opportunistic_info_forwarding') and
-                        self.network.path_info_collector.enable_opportunistic_info_forwarding):
-                        max_wait_time = getattr(self.network.path_info_collector, 'max_wait_time', 10)
-                        forced_count = self.scheduler.nim.check_timeout_and_force_report(
-                            current_time=t,
-                            max_wait_time=max_wait_time,
-                            path_collector=self.network.path_info_collector,
-                            network=self.network
-                        )
-                        if forced_count > 0:
-                            print(f"[超时强制上报] 时间步 {t}: {forced_count} 个节点")
+                
+                # 无论本轮是否触发调度，都执行信息层的超时/陈旧检测
+                if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                    path_collector = getattr(self.network, 'path_info_collector', None)
+                    oc_enabled = (
+                        path_collector is not None and
+                        getattr(path_collector, 'enable_opportunistic_info_forwarding', False)
+                    )
+                    max_wait_time = getattr(path_collector, 'max_wait_time', 10) if path_collector else 10
+                    forced_count = self.scheduler.nim.check_timeout_and_force_report(
+                        current_time=t,
+                        max_wait_time=max_wait_time,
+                        path_collector=path_collector if oc_enabled else None,
+                        network=self.network
+                    )
+                    if forced_count > 0:
+                        print(f"[信息层强制上报] 时间步 {t}: {forced_count} 个节点")
             
                 # 计算统计信息
                 stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, pre_transferred_total, self.network)
@@ -246,7 +245,37 @@ class EnergySimulation:
                     feedback_score, feedback_details = self.scheduler.compute_network_feedback_score(
                         pre_state, post_state, stats
                     )
-                    # 记录反馈分数到统计信息
+                    # 扩展反馈细节：将本次选中计划的可用原子项聚合写入
+                    try:
+                        if isinstance(feedback_details, dict):
+                            feedback_details['K_used'] = self.K
+                            feedback_details['trigger_reason'] = trigger_reason if trigger_reason else ''
+                            if isinstance(plans, list) and plans:
+                                # 仅统计已选中/执行的计划层面指标
+                                sel_cnt = len(plans)
+                                total_duration = sum(float(p.get('duration', 0.0)) for p in plans)
+                                total_aoi_cost = sum(float(p.get('aoi_cost', 0.0)) for p in plans)
+                                total_info_gain = sum(float(p.get('info_gain', 0.0)) for p in plans)
+                                total_score_plans = sum(float(p.get('score', 0.0)) for p in plans)
+                                total_delivered_plans = sum(float(p.get('delivered', 0.0)) for p in plans)
+                                total_loss_plans = sum(float(p.get('loss', 0.0)) for p in plans)
+                                feedback_details.update({
+                                    'selected_plan_count': sel_cnt,
+                                    'total_duration': total_duration,
+                                    'avg_duration': (total_duration / sel_cnt) if sel_cnt > 0 else 0.0,
+                                    'total_aoi_cost': total_aoi_cost,
+                                    'avg_aoi_cost': (total_aoi_cost / sel_cnt) if sel_cnt > 0 else 0.0,
+                                    'total_info_gain': total_info_gain,
+                                    'avg_info_gain': (total_info_gain / sel_cnt) if sel_cnt > 0 else 0.0,
+                                    'sum_plan_score': total_score_plans,
+                                    'total_delivered_plans': total_delivered_plans,
+                                    'total_loss_plans': total_loss_plans,
+                                })
+                    except Exception as _e:
+                        # 不影响主流程
+                        pass
+
+                    # 记录反馈分数到统计信息（会把 details 全量落盘）
                     self.stats.record_feedback_score(t, feedback_score, feedback_details)
                     
                     # 打印反馈信息

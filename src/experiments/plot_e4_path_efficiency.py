@@ -12,12 +12,12 @@ import numpy as np
 # Style configuration
 plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
-rcParams['font.size'] = 20
-rcParams['axes.labelsize'] = 20
-rcParams['xtick.labelsize'] = 18
-rcParams['ytick.labelsize'] = 18
-rcParams['legend.fontsize'] = 16
-rcParams['figure.titlesize'] = 22
+rcParams['font.size'] = 26
+rcParams['axes.labelsize'] = 26
+rcParams['xtick.labelsize'] = 22
+rcParams['ytick.labelsize'] = 22
+rcParams['legend.fontsize'] = 20
+rcParams['figure.titlesize'] = 30
 
 def parse_efficiencies_from_plans(session_dir: str) -> list[float]:
     """Parses plans.txt to extract a list of path efficiencies."""
@@ -73,10 +73,12 @@ def plot_e4_path_efficiency(
     ax1.hist(proposed_eff, bins=bins, color='#2E86AB', alpha=0.7, label='Proposed (with EETOR)', density=True)
     ax1.hist(baseline_eff, bins=bins, color='#A23B72', alpha=0.7, label='Baseline (no EETOR)', density=True)
     ax1.axvline(efficiency_threshold, color='red', linestyle='--', linewidth=2, label=f'Efficiency Threshold ({efficiency_threshold})')
-    ax1.set_xlabel('Path Efficiency')
-    ax1.set_ylabel('Density')
-    ax1.set_title('(a) Path Efficiency Distribution')
-    ax1.legend()
+    ax1.set_xlabel('Path Efficiency', fontsize=26, fontweight='bold')
+    ax1.set_ylabel('Density', fontsize=26, fontweight='bold')
+    ax1.set_title('(a) Path Efficiency Distribution', fontsize=28, fontweight='bold', pad=15)
+    ax1.tick_params(axis='x', labelsize=22)
+    ax1.tick_params(axis='y', labelsize=22)
+    ax1.legend(fontsize=20, framealpha=0.9)
     ax1.grid(True, alpha=0.3, linestyle='--')
 
     # --- (b) Right plot: Low-Efficiency Path Ratio ---
@@ -88,9 +90,11 @@ def plot_e4_path_efficiency(
     colors = ['#2E86AB', '#A23B72']
 
     bars = ax2.bar(labels, values, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-    ax2.set_ylabel('Low-Efficiency Path Ratio (%)')
-    ax2.set_title('(b) Low-Efficiency Path Ratio')
+    ax2.set_ylabel('Low-Efficiency Path Ratio (%)', fontsize=22, fontweight='bold')
+    ax2.set_title('(b) Low-Efficiency Path Ratio', fontsize=22, fontweight='bold', pad=15)
     ax2.set_ylim(0, max(values) * 1.2 if values else 10)
+    ax2.tick_params(axis='x', labelsize=22)
+    ax2.tick_params(axis='y', labelsize=22)
     ax2.grid(True, alpha=0.3, linestyle='--', axis='y')
 
     # Add value labels on bars
@@ -100,11 +104,11 @@ def plot_e4_path_efficiency(
                      xy=(bar.get_x() + bar.get_width() / 2, height),
                      xytext=(0, 3),  # 3 points vertical offset
                      textcoords="offset points",
-                     ha='center', va='bottom', fontsize=16, fontweight='bold')
+                     ha='center', va='bottom', fontsize=20, fontweight='bold')
 
     # Overall title and layout
-    fig.suptitle('E4: EETOR Path Governance Efficiency Comparison', fontsize=22, fontweight='bold', y=1.02)
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.suptitle('E4: EETOR Path Governance Efficiency Comparison', fontsize=30, fontweight='bold', y=1.02)
+    plt.tight_layout(rect=[0, 0, 1, 0.94])
 
     # Ensure output directory exists
     output_dir = os.path.dirname(output_path)

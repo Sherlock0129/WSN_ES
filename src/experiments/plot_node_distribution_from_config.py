@@ -76,10 +76,10 @@ def main() -> None:
         show_paths=args.show_paths,
         path_len=None,
         session_dir=session_dir,
-        title_font_size=12,
-        axis_label_font_size=14,
-        tick_font_size=12,
-        legend_font_size=10,
+        title_font_size=20,
+        axis_label_font_size=18,
+        tick_font_size=16,
+        legend_font_size=16,
     )
 
     # If a custom filename is requested, rename/copy the saved file
