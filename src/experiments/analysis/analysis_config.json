@@ -1,0 +1,15 @@
+{
+  "DATA_DIR": "../data",
+  "OUTPUT_DIR": "./plots",
+  "EXPERIMENT_DIRS": {
+    "Proposed System": "a20251119_102529_our",
+    "Threshold (Stage 2)": "20251119_132641_rw_stage2_threshold",
+    "Lyapunov (Stage 3)": "20251119_132823_rw_stage2-3_lyapunov_v02",
+    "DQN (Stage 4)": "20251119_133503_rw_stage4_dqn"
+  }
+}
+
+
+
+
+

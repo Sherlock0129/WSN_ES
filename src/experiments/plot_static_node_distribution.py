@@ -34,6 +34,15 @@ from typing import Iterable, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
+plt.rcParams.update({
+    "font.size": 18,
+    "axes.titlesize": 20,
+    "axes.labelsize": 18,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 16,
+})
+
 
 @dataclass
 class NodePoint:
@@ -146,29 +155,29 @@ def plot_node_distribution_static(
     dpi: int = 300,
 ) -> str:
     os.makedirs(output_dir, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(4.8, 3.6), dpi=dpi)
+    fig, ax = plt.subplots(figsize=(7, 5.5), dpi=dpi)
 
     solar_x = [n.x for n in nodes if n.is_solar]
     solar_y = [n.y for n in nodes if n.is_solar]
     non_x = [n.x for n in nodes if not n.is_solar]
     non_y = [n.y for n in nodes if not n.is_solar]
 
-    ax.scatter(solar_x, solar_y, c="#f5b301", s=20, marker="o", label="Solar nodes", zorder=2)
-    ax.scatter(non_x, non_y, c="#666666", s=20, marker="^", label="Non-solar nodes", zorder=2)
+    ax.scatter(solar_x, solar_y, c="#f5b301", s=45, marker="o", label="Solar nodes", zorder=2)
+    ax.scatter(non_x, non_y, c="#666666", s=45, marker="^", label="Non-solar nodes", zorder=2)
 
     if annotate_ids:
         for n in nodes:
-            ax.text(n.x, n.y, str(n.node_id), fontsize=7, ha="left", va="bottom")
+            ax.text(n.x, n.y, str(n.node_id), fontsize=12, ha="left", va="bottom")
 
     ax.set_xlim(0, width)
     ax.set_ylim(0, height)
     ax.set_aspect("equal", adjustable="box")
     ax.grid(True, alpha=0.3)
-    ax.set_xlabel("X (m)", fontsize=14)
-    ax.set_ylabel("Y (m)", fontsize=14)
-    ax.tick_params(axis="both", labelsize=12)
-    ax.set_title("Node distribution in 2D space", fontsize=12)
-    ax.legend(frameon=False, fontsize=8, loc="upper left")
+    ax.set_xlabel("X (m)", fontsize=18)
+    ax.set_ylabel("Y (m)", fontsize=18)
+    ax.tick_params(axis="both", labelsize=16)
+    ax.set_title("Node distribution in 2D space", fontsize=20)
+    ax.legend(frameon=False, fontsize=16, loc="upper left")
 
     save_path = os.path.join(output_dir, filename)
     fig.tight_layout()

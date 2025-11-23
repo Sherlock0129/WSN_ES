@@ -23,6 +23,15 @@ from typing import Iterable, List
 import matplotlib.pyplot as plt
 import numpy as np
 
+plt.rcParams.update({
+    "font.size": 18,
+    "axes.titlesize": 20,
+    "axes.labelsize": 18,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 16,
+})
+
 
 def plot_aoei_decay(
     lambdas: Iterable[float] = (0.005, 0.01, 0.02),
@@ -39,7 +48,7 @@ def plot_aoei_decay(
     """
     aoei_values = np.arange(0, aoei_max + step, step, dtype=float)
 
-    plt.figure(figsize=(4.0, 3.0), dpi=150)
+    plt.figure(figsize=(8, 5), dpi=300)
     for lambda_value in lambdas:
         info_values = V0 * np.exp(-lambda_value * aoei_values)
         plt.plot(
@@ -49,11 +58,11 @@ def plot_aoei_decay(
             label=f"λ = {lambda_value:g}",
         )
 
-    plt.xlabel("AOEI (time)", fontsize=10)
-    plt.ylabel("Information value V_info", fontsize=10)
-    plt.title("Exponential decay of information value with AOEI", fontsize=10)
+    plt.xlabel("AOEI (time)", fontsize=18)
+    plt.ylabel("Information value V_info", fontsize=18)
+    plt.title("Exponential decay of information value with AOEI", fontsize=20)
     plt.grid(True, alpha=0.3)
-    plt.legend(fontsize=8, frameon=False)
+    plt.legend(fontsize=16, frameon=False)
 
     plt.tight_layout()
     os.makedirs(output_dir, exist_ok=True)

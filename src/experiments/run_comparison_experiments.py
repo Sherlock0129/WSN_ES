@@ -44,21 +44,42 @@ def run_simulation_with_config(config_manager: ConfigManager):
     else:
         network.adcr_link = None
     
-    # 创建路径信息收集器（如果需要）
+    # 验证信息收集器配置的互斥性
+    config_manager.validate_info_collector_config()
+    
+    physical_center = network.get_physical_center()
+    nodes_for_init = (network.get_regular_nodes() if hasattr(network, 'get_regular_nodes')
+                      else network.nodes)
+    vc = None
+
+    def ensure_virtual_center():
+        nonlocal vc
+        if vc is None:
+            if physical_center:
+                initial_pos = tuple(physical_center.position)
+            else:
+                initial_pos = (
+                    sum(n.position[0] for n in nodes_for_init) / len(nodes_for_init),
+                    sum(n.position[1] for n in nodes_for_init) / len(nodes_for_init)
+                )
+            vc = config_manager.create_virtual_center(
+                initial_position=initial_pos,
+                enable_logging=True
+            )
+            vc.initialize_node_info(network.nodes, initial_time=0)
+        return vc
+
     if config_manager.path_collector_config.enable_path_collector:
-        from info_collection.physical_center import VirtualCenter
-        physical_center = network.get_physical_center()
-        if physical_center:
-            initial_pos = tuple(physical_center.position)
-        else:
-            nodes = network.get_regular_nodes() if hasattr(network, 'get_regular_nodes') else network.nodes
-            initial_pos = (sum(n.position[0] for n in nodes) / len(nodes),
-                          sum(n.position[1] for n in nodes) / len(nodes))
-        vc = VirtualCenter(initial_position=initial_pos, enable_logging=True)
-        vc.initialize_node_info(network.nodes, initial_time=0)
-        network.path_info_collector = config_manager.create_path_collector(vc, physical_center)
+        path_vc = ensure_virtual_center()
+        network.path_info_collector = config_manager.create_path_collector(path_vc, physical_center)
     else:
         network.path_info_collector = None
+
+    if config_manager.periodic_collector_config.enable_periodic_collector:
+        periodic_vc = ensure_virtual_center()
+        network.periodic_info_collector = config_manager.create_periodic_collector(periodic_vc, physical_center)
+    else:
+        network.periodic_info_collector = None
     
     # 创建调度器
     scheduler = create_scheduler(config_manager, network)
@@ -75,9 +96,11 @@ def run_simulation_with_config(config_manager: ConfigManager):
     session_dir = simulation.session_dir
     
     # 设置虚拟中心归档路径
+    archive_path = os.path.join(session_dir, "virtual_center_node_info.csv")
     if hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
-        archive_path = os.path.join(session_dir, "virtual_center_node_info.csv")
         network.path_info_collector.vc.archive_path = archive_path
+    if hasattr(network, 'periodic_info_collector') and network.periodic_info_collector is not None:
+        network.periodic_info_collector.vc.archive_path = archive_path
     
     simulation.simulate()
 
@@ -322,29 +345,56 @@ def run_exp3_adcr():
 
 
 def run_exp3_direct_report():
-    """实验3-对照2：每个人直接给中心发（禁用机会主义，立即上报）"""
+    """实验3-对照2：每个人直接给中心发（使用定期上报模式，每个节点每隔360分钟向中心发送一次信息）"""
     print("\n" + "="*80)
-    print("实验3-对照2：每个人直接给中心发")
+    print("实验3-对照2：每个人直接给中心发（定期上报模式）")
     print("="*80)
     
     config_manager = ConfigManager()
-    # 使用PathCollector，但禁用机会主义和延迟上报（立即上报）
-    config_manager.path_collector_config.enable_path_collector = True
-    config_manager.path_collector_config.enable_opportunistic_info_forwarding = False
-    config_manager.path_collector_config.enable_delayed_reporting = False
-    # 禁用ADCR
+    # 使用定期上报收集器，禁用路径收集器和ADCR
+    config_manager.periodic_collector_config.enable_periodic_collector = True
+    config_manager.periodic_collector_config.report_interval = 360  # 360分钟（6小时）上报一次
+    config_manager.path_collector_config.enable_path_collector = False
     config_manager.simulation_config.enable_adcr_link_layer = False
     
     print(f"配置:")
-    print(f"  - enable_path_collector = {config_manager.path_collector_config.enable_path_collector}")
-    print(f"  - enable_opportunistic_info_forwarding = {config_manager.path_collector_config.enable_opportunistic_info_forwarding} (已禁用)")
-    print(f"  - enable_delayed_reporting = {config_manager.path_collector_config.enable_delayed_reporting} (已禁用)")
-    print(f"  - 模式: 立即上报，无机会主义")
+    print(f"  - enable_periodic_collector = {config_manager.periodic_collector_config.enable_periodic_collector}")
+    print(f"  - report_interval = {config_manager.periodic_collector_config.report_interval} 分钟（{config_manager.periodic_collector_config.report_interval // 60} 小时）")
+    print(f"  - enable_path_collector = {config_manager.path_collector_config.enable_path_collector} (已禁用)")
+    print(f"  - enable_adcr_link_layer = {config_manager.simulation_config.enable_adcr_link_layer} (已禁用)")
+    print(f"  - 模式: 定期上报，每个节点每隔{config_manager.periodic_collector_config.report_interval}分钟（{config_manager.periodic_collector_config.report_interval // 60}小时）向中心发送一次信息，不依赖能量传输路径")
     
     session_dir = run_simulation_with_config(config_manager)
     copy_and_rename_result(session_dir, "exp3_direct_report", "每个人直接给中心发")
     
     print("实验3-对照2 完成\n")
+    return session_dir
+
+
+def run_exp3_periodic_report():
+    """实验3-对照3：定期上报模式（每个节点每隔60分钟向中心发送一次信息）"""
+    print("\n" + "="*80)
+    print("实验3-对照3：定期上报模式")
+    print("="*80)
+    
+    config_manager = ConfigManager()
+    # 使用定期上报收集器，禁用路径收集器和ADCR
+    config_manager.periodic_collector_config.enable_periodic_collector = True
+    config_manager.periodic_collector_config.report_interval = 60  # 60分钟上报一次
+    config_manager.path_collector_config.enable_path_collector = False
+    config_manager.simulation_config.enable_adcr_link_layer = False
+    
+    print(f"配置:")
+    print(f"  - enable_periodic_collector = {config_manager.periodic_collector_config.enable_periodic_collector}")
+    print(f"  - report_interval = {config_manager.periodic_collector_config.report_interval} 分钟")
+    print(f"  - enable_path_collector = {config_manager.path_collector_config.enable_path_collector} (已禁用)")
+    print(f"  - enable_adcr_link_layer = {config_manager.simulation_config.enable_adcr_link_layer} (已禁用)")
+    print(f"  - 模式: 定期上报，不依赖能量传输路径")
+    
+    session_dir = run_simulation_with_config(config_manager)
+    copy_and_rename_result(session_dir, "exp3_periodic_report", "定期上报模式")
+    
+    print("实验3-对照3 完成\n")
     return session_dir
 
 
@@ -412,27 +462,171 @@ def run_exp4_duration_aware_only():
     return session_dir
 
 
+# ==================== 实验5：AOEI动态/静态上限 ====================
+
+def run_exp5_dynamic_aoei_cap():
+    """实验5-基准：启用AOEI自适应等待上限"""
+    print("\n" + "="*80)
+    print("实验5-基准：AOEI动态上限（自适应等待）")
+    print("="*80)
+    
+    config_manager = ConfigManager()
+    config_manager.info_config.force_report_on_stale = True
+    config_manager.path_collector_config.enable_path_collector = True
+    config_manager.path_collector_config.enable_opportunistic_info_forwarding = True
+    config_manager.path_collector_config.enable_adaptive_wait_time = True
+    # 基于信息量缩放动态上限，保持延迟上报机制
+    config_manager.path_collector_config.enable_delayed_reporting = True
+    config_manager.path_collector_config.max_wait_time = 100  # 更严格的等待上限
+    
+    print("配置:")
+    print(f"  - enable_path_collector = {config_manager.path_collector_config.enable_path_collector}")
+    print(f"  - enable_opportunistic_info_forwarding = {config_manager.path_collector_config.enable_opportunistic_info_forwarding}")
+    print(f"  - enable_adaptive_wait_time = {config_manager.path_collector_config.enable_adaptive_wait_time}")
+    print(f"  - enable_delayed_reporting = {config_manager.path_collector_config.enable_delayed_reporting}")
+    print(f"  - max_wait_time = {config_manager.path_collector_config.max_wait_time} 分钟")
+    
+    session_dir = run_simulation_with_config(config_manager)
+    copy_and_rename_result(session_dir, "exp5_dynamic_aoei_cap", "AOEI动态上限")
+    
+    print("实验5-基准 完成\n")
+    return session_dir
+
+
+def run_exp5_static_aoei_cap():
+    """实验5-对照：禁用AOEI自适应等待上限（静态阈值）"""
+    print("\n" + "="*80)
+    print("实验5-对照：AOEI静态上限（固定等待）")
+    print("="*80)
+    
+    config_manager = ConfigManager()
+    config_manager.info_config.force_report_on_stale = True
+    config_manager.path_collector_config.enable_path_collector = True
+    config_manager.path_collector_config.enable_opportunistic_info_forwarding = True
+    config_manager.path_collector_config.enable_adaptive_wait_time = False
+    config_manager.path_collector_config.enable_delayed_reporting = True
+    # 统一使用静态上限，保持其他参数一致
+    config_manager.path_collector_config.max_wait_time = 200
+    
+    print("配置:")
+    print(f"  - enable_path_collector = {config_manager.path_collector_config.enable_path_collector}")
+    print(f"  - enable_opportunistic_info_forwarding = {config_manager.path_collector_config.enable_opportunistic_info_forwarding}")
+    print(f"  - enable_adaptive_wait_time = {config_manager.path_collector_config.enable_adaptive_wait_time} (已禁用)")
+    print(f"  - enable_delayed_reporting = {config_manager.path_collector_config.enable_delayed_reporting}")
+    print(f"  - max_wait_time = {config_manager.path_collector_config.max_wait_time} 分钟（固定阈值）")
+    
+    session_dir = run_simulation_with_config(config_manager)
+    copy_and_rename_result(session_dir, "exp5_static_aoei_cap", "AOEI静态上限")
+    
+    print("实验5-对照 完成\n")
+    return session_dir
+
+
+# ==================== 实验6：ALDP vs 传统Lyapunov ====================
+
+def run_exp6_aldp_scheduler():
+    """实验6-基准：AdaptiveDurationAwareLyapunovScheduler（ALDP）"""
+    print("\n" + "="*80)
+    print("实验6-基准：ALDP（AdaptiveDurationAwareLyapunovScheduler）")
+    print("="*80)
+    
+    config_manager = ConfigManager()
+    config_manager.scheduler_config.scheduler_type = "AdaptiveDurationAwareLyapunovScheduler"
+    
+    print("配置:")
+    print(f"  - scheduler_type = {config_manager.scheduler_config.scheduler_type}")
+    print(f"  - duration range = {config_manager.scheduler_config.duration_min}~{config_manager.scheduler_config.duration_max} 分钟")
+    print(f"  - V初始值 = {config_manager.scheduler_config.adaptive_lyapunov_v}")
+    
+    session_dir = run_simulation_with_config(config_manager)
+    copy_and_rename_result(session_dir, "exp6_aldp", "ALDP调度器")
+    
+    print("实验6-基准 完成\n")
+    return session_dir
+
+
+def run_exp6_traditional_lyapunov():
+    """实验6-对照：传统LyapunovScheduler"""
+    print("\n" + "="*80)
+    print("实验6-对照：传统LyapunovScheduler")
+    print("="*80)
+    
+    config_manager = ConfigManager()
+    config_manager.scheduler_config.scheduler_type = "LyapunovScheduler"
+    
+    print("配置:")
+    print(f"  - scheduler_type = {config_manager.scheduler_config.scheduler_type}")
+    print(f"  - V = {config_manager.scheduler_config.lyapunov_v}")
+    print(f"  - K = {config_manager.scheduler_config.lyapunov_k}")
+    
+    session_dir = run_simulation_with_config(config_manager)
+    copy_and_rename_result(session_dir, "exp6_traditional_lyapunov", "传统Lyapunov")
+    
+    print("实验6-对照 完成\n")
+    return session_dir
+
+
+# ==================== 实验7：能量估算影响 ====================
+
+def run_exp7_with_estimation():
+    """实验7-基准：启用虚拟中心能量估算"""
+    print("\n" + "="*80)
+    print("实验7-基准：启用能量估算")
+    print("="*80)
+
+    config_manager = ConfigManager()
+    config_manager.info_config.enable_energy_estimation = True
+    config_manager.path_collector_config.enable_path_collector = True
+    config_manager.periodic_collector_config.enable_periodic_collector = False
+
+    print("配置:")
+    print(f"  - enable_energy_estimation = {config_manager.info_config.enable_energy_estimation}")
+    print(f"  - enable_path_collector = {config_manager.path_collector_config.enable_path_collector}")
+    print(f"  - enable_periodic_collector = {config_manager.periodic_collector_config.enable_periodic_collector}")
+
+    session_dir = run_simulation_with_config(config_manager)
+    copy_and_rename_result(session_dir, "exp7_with_estimation", "启用能量估算")
+
+    print("实验7-基准 完成\n")
+    return session_dir
+
+
+def run_exp7_without_estimation():
+    """实验7-对照：禁用能量估算，仅依赖上报信息"""
+    print("\n" + "="*80)
+    print("实验7-对照：关闭能量估算，路径+强制上报")
+    print("="*80)
+
+    config_manager = ConfigManager()
+    config_manager.info_config.enable_energy_estimation = False
+    config_manager.path_collector_config.enable_path_collector = True
+    config_manager.path_collector_config.enable_delayed_reporting = False  # 路径信息立即上报
+    config_manager.periodic_collector_config.enable_periodic_collector = True
+    config_manager.periodic_collector_config.report_interval = 120  # 每2小时强制上报一次
+
+    print("配置:")
+    print(f"  - enable_energy_estimation = {config_manager.info_config.enable_energy_estimation} (已禁用)")
+    print(f"  - enable_path_collector = {config_manager.path_collector_config.enable_path_collector}")
+    print(f"  - enable_delayed_reporting = {config_manager.path_collector_config.enable_delayed_reporting}")
+    print(f"  - enable_periodic_collector = {config_manager.periodic_collector_config.enable_periodic_collector}")
+    print(f"  - report_interval = {config_manager.periodic_collector_config.report_interval} 分钟")
+
+    session_dir = run_simulation_with_config(config_manager)
+    copy_and_rename_result(session_dir, "exp7_without_estimation", "禁用能量估算")
+
+    print("实验7-对照 完成\n")
+    return session_dir
+
+
 # ==================== 主函数 ====================
 
 def main():
-    """主函数：只运行E2的基准和no_info_reward实验"""
+    """主函数：仅运行实验5（动态/静态 AOEI 上限对比）"""
     print("="*80)
-    print("运行 E2 对照实验 (基准 vs. 无信息奖励)")
+    print("运行实验5：AOEI动态上限 vs 静态上限")
     print("="*80)
-
-    # 实验2：信息价值
-    print("\n" + "="*80)
-    print("开始实验2：信息价值")
-    print("="*80)
-    print("运行 E2-基准（启用信息价值）...")
-    run_exp2_baseline_with_info()
-    
-    print("运行 E2-对照1（去掉调度器信息价值奖励）...")
-    run_exp2_no_info_reward()
-
-    print("\n" + "="*80)
-    print("E2部分实验完成！")
-    print("="*80)
+    run_exp5_dynamic_aoei_cap()
+    run_exp5_static_aoei_cap()
 
 
 if __name__ == "__main__":

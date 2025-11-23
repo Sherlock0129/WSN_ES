@@ -1,180 +1,323 @@
-\section{机制设计：在动态帕累托边界上重构能量共享网络}
+\section{系统设计：信息与能量双生系统}\label{sec:mech_design}
 
-本章以"经济学问题（E）—经济学理论（EM）—技术问题（T）—机制设计（TM）"为主线重新阐述能量共享无线传感器网络（WSN）的机制设计。本节与传统的算法补丁不同，着重说明如何通过制度创新扩展系统的可行解空间，将网络从\textbf{静态帕累托边界}推向\textbf{动态帕累托边界}。在此框架中，能量信息年龄（AOEI）不仅是数据更新的时间标记，更是内生的价格信号；路径不仅要满足通信可达，更要满足能量经济性；调度不仅是单期最优，更是跨期优化；公平不再是牺牲效率的附加约束，而是内嵌在调度函数中的权重。下面按照问题—机制的映射展开。
+\subsection{核心问题与系统设计}
 
-\subsection{问题—映射—目标框架}
+当系统框架本身不发生改变时，传统能量共享 WSN 难以进一步突破的一个重要原因是其性能瓶颈不是技术层面的，而是\textbf{系统设计层面的}。传统能量共享 WSN 在其默认的决策规则中隐含了多项机制性限制：未考虑到信息年龄这一通信量、节点状态不可得或滞后，从而局限于\textbf{信息系统独立于能量系统}，导致高昂的通信开销进而形成能量空洞，网络能量分布失衡等问题。
 
-假设网络在时刻 $t$ 的状态包括节点能量 $E_i(t)$、拓扑与链路特性 $d_{ij}$、环境能量采集 $H_i(t)$ 以及信息状态 $A_i(t)$ 等。我们关心的目标向量 $\mathbf{g}(t)$ 包括：效率——有效接收能量占比和能量损耗降低；公平/均衡——能量方差或变异系数（CV）降低，以及对低能分位节点的保护；时效性——信息新鲜度与重要信息的优先度；寿命——首个节点死亡时间最大化。现有 WSN 的调度算法通常将这些指标视为相互权衡，构成所谓的静态帕累托前沿；本章则通过机制设计使多个目标同时改善，拓展动态帕累托边界。
+只有通过系统设计创新，使系统能够智能地识别关键节点、优化传输路径、动态调整传输策略同时整合能量与信息系统，降低通信开销，才可能在不增加总能量预算的前提下，同时实现网络寿命的显著延长和能量分布的充分平衡。基于此，本文提出一个\textbf{信息与能量双生系统}，从根本上整合能量与信息系统，通过 IoT-centric architecture 实现能量与信息的深度融合与协同优化。
+
+\textbf{IoT-centric architecture 共同实现了信息与能量双生系统}，从根本上整合了能量与信息系统。本章将详细阐述每个 IoT-centric 层中的关键技术的核心作用、数学模型、算法实现以及技术间的耦合关系，说明它们如何协同工作，共同解决"信息系统独立于能量系统"这一核心问题。
+
+假设网络在时刻 $t$ 的状态包括节点能量 $E_i(t)$、拓扑与链路特性 $d_{ij}$、环境能量采集 $H_i(t)$ 以及信息状态 $A_i(t)$ 等。我们关心的核心目标包括：（1）\textbf{网络寿命}——首个节点死亡时间 $T_{\text{death}}$ 最大化，即尽可能延长网络生存时间；（2）\textbf{能量平衡}——能量变异系数（CV）和能量方差最小化，即尽可能平衡各节点间的能量分布。现有 WSN 的调度算法通常在这两个目标之间难以同时优化：延长寿命需要减少能量传输，但这会加剧能量不平衡；平衡能量需要频繁传输，但这又会加速能量消耗。本章则通过 IoT-centric architecture 设计，在不增加总能量消耗的前提下，同时实现网络寿命的显著延长和能量分布的充分平衡。
+
+\subsection{IoT Information Layer：AOEI能量信息年龄优先级技术}
+
+\subsubsection{核心作用与问题解决}
+
+\textbf{IoT Information Layer 通过AOEI能量信息年龄优先级技术持续监测各节点的能量信息年龄}。系统维护一个动态AOI上限，当节点的能量信息年龄达到该上限时触发能量共享需求信号；同时，AOEI值作为关键因素被纳入多个奖励函数，用于优化能量传输决策和路径选择。该技术将"能量信息新鲜度 $\times$ 能量紧迫度"作为非中心节点的内生优先级信号，动态驱动能量共享触发、排序和预算清算，突破传统效率—公平权衡。
+
+传统 WSN 调度缺少可解释的内在优先级信号，往往依赖过期状态或静态阈值，导致"该救的不救、该等的不等"的资源错配。更重要的是，传统方法中信息系统的优先级信号与能量系统的决策相互独立，无法有效整合，这正是"信息系统独立于能量系统"问题的典型表现。为了突破这种局限，AOEI能量信息年龄优先级技术将信息新鲜度（AOEI）与节点能量紧迫度统一映射为优先级信号，使信息与能量系统耦合，并据此驱动传能触发和排序，从根本上整合能量与信息系统。
+
+\subsubsection{数学模型}
 
 形式上，我们将 $A_i(t)$ 定义为节点 $i$ 当前的信息年龄（Age of Energy Information），信息量记为 $I_i(t)$。信息价值由指数衰减模型给出：
 \begin{equation}
 V_i(t)=V_0\,\mathrm{e}^{-\lambda A_i(t)}\times I_i(t),
 \end{equation}
-其中 $V_0$ 为归一化常数，$\lambda$ 为衰减系数。为了将信息价值与能量需求统一为可比较的触发与排序依据，我们进一步定义节点 $i$ 的\textbf{价格信号}为
+其中 $V_0$ 为归一化常数，$\lambda$ 为衰减系数。为了将信息价值与能量需求统一为可比较的触发与排序依据，我们进一步定义节点 $i$ 的\textbf{优先级信号}为
 \begin{equation}
 P_i(t) = f\bigl(V_i(t),\,\Delta_i(t),\,\omega_i(t)\bigr),
-\label{eq:price_signal}
 \end{equation}
-其中 $\Delta_i(t)=\theta_i-E_i(t)$ 表示能量缺口，$\omega_i(t)$ 为公平权重（例如对弱势节点加权），$f$ 为组合函数。价格高表示节点更急需能量。
+其中 $\Delta_i(t)=\theta_i-E_i(t)$ 表示能量缺口，$\omega_i(t)$ 为公平权重（例如对弱势节点加权），$f$ 为组合函数。优先级高表示节点更急需能量。
 
-在实现层面，我们并不显式维护每个节点连续取值的 $P_i(t)$，而是将价格信号在网络尺度上离散化为若干可观测的触发统计量：低能节点比例、能量变异系数以及极低能节点的存在性。它们分别刻画了
-\emph{“多少节点急需能量”}、
-\emph{“能量分布有多不均衡”} 和
-\emph{“是否存在极端弱势节点”}，
-可看作对 $\{P_i(t)\}$ 分布的工程近似。后续的触发与排序规则，即是基于这一价格信号离散表示给出的具体决策机制。
+\textbf{动态AOI上限机制}：系统为每个节点维护一个动态AOI上限 $A_{\max,i}(t)$，该上限根据信息量动态调整：
+\begin{equation}
+A_{\max,i}(t) = \frac{A_{\max,0}}{1 + I_i(t) / \gamma},
+\end{equation}
+其中 $A_{\max,0}$ 为基准AOI上限，$\gamma$ 为刻度因子。信息量越大，AOI上限越小，促使节点更快上报，减少信息滞后。当节点的信息年龄 $A_i(t) \ge A_{\max,i}(t)$ 时，触发能量信息上报。
 
-为构建完整的市场透明层，引入\textbf{InfoNode} 作为每个物理节点的数字孪生账户，维护其最新、历史和预测状态，并提供查询接口。通过机会主义上报与去重/动态等待策略，可以在低通信开销下保持状态可得性。为了防止过度消耗和负外部性，我们在路径层面引入能量效率阈值和最大跳数限制，同时在调度层引入前瞻性仿真决定传输强度 $K$ 和传输时长 $\tau$。这些机制在共同的价格信号与信息治理框架下，将信息价格化、透明化、公平化和动态化，形成一个多维目标上的“向外”扩展机制网络。
-
-\subsection{E1：价格信号的离散化\texorpdfstring{$\rightarrow$}{→}EM1：如何将连续价格信号离散化为可观测的触发判据？\texorpdfstring{$\rightarrow$}{→}T1：触发与排序规则\texorpdfstring{$\rightarrow$}{→}TM1：内生定价与智能触发}
-
-\paragraph{经济学问题（E1）} 在能量共享网络中，每个节点 $i$ 的价格信号 $P_i(t)$ 反映了其能量需求的紧迫程度。然而，传统 WSN 调度往往依赖过期状态或静态阈值，难以反映全网价格信号的动态变化，容易导致资源配置与节点实际紧迫程度不匹配，出现救助与等待次序上的系统性失衡。
-
-\paragraph{经济学理论（EM1）} 如何将连续价格信号离散化为可观测的触发判据？价格理论指出，市场中的价格信号通过供需关系反映资源的稀缺性。在能量共享网络中，节点能量越低、信息越陈旧，其价格信号 $P_i(t)$ 越高。然而，直接维护每个节点的连续价格信号在工程上不可行。根据信息经济学理论，我们可以将价格信号在网络尺度上离散化为若干可观测的统计量，这些统计量能够近似刻画价格分布的集中度、离散度和极端值，从而为触发决策提供可操作的基础。
-
-\paragraph{技术问题（T1）} 需要设计一种计算简单、可解释的价格离散化方案，将节点层面的连续价格信号转化为可直接用于触发与排序的网络级判据，使触发决策能够在工程上落地。
-
-\paragraph{机制设计（TM1）} 智能被动传能方法将节点层面的连续价格信号 $\{P_i(t)\}$ 离散化为以下三类网络级触发分量：
+智能被动传能方法给出了以下三项触发指标：
 \begin{enumerate}
   \item \textbf{低能量节点比例}：
   \begin{equation}
   r_{\mathrm{low}}(t)=\frac{\bigl|\{i\mid E_i(t)<\theta_i^{\mathrm{low}}\}\bigr|}{N},
   \end{equation}
-  其中 $E_i(t)<\theta_i^{\mathrm{low}}$ 可以理解为节点 $i$ 的价格 $P_i(t)$ 超过某一紧迫阈值，$r_{\mathrm{low}}(t)$ 刻画了高价节点在网络中的占比，当 $r_{\mathrm{low}}(t)$ 超过设定阈值 $r_{\mathrm{crit}}$ 时触发传能；
+  当 $r_{\mathrm{low}}(t)$ 超过设定阈值 $r_{\mathrm{crit}}$ 时触发传能；
   \item \textbf{能量变异系数}：
   \begin{equation}
   \mathrm{CV}(t)=\frac{\sigma\bigl(E_1(t),\dots,E_N(t)\bigr)}{\mu\bigl(E_1(t),\dots,E_N(t)\bigr)},
   \end{equation}
-  在价格视角下，能量分布越不均衡，对应的价格分布越“尖锐”，说明一部分节点的 $\Delta_i(t)$ 与 $\omega_i(t)$ 叠加后被放大。故当 CV 超过阈值 $\mathrm{CV}_{\mathrm{th}}$ 时触发传能，以抑制价格分布的极端不均衡；
-  \item \textbf{极低能量节点}：若存在节点 $i$ 满足 $E_i(t)<0.5\theta_i^{\mathrm{low}}$，则对应其价格 $P_i(t)$ 处于全网最高档，视为紧急状态，立即触发传能。
+  当 CV 超过阈值 $\mathrm{CV}_{\mathrm{th}}$ 时触发传能；
+  \item \textbf{极低能量节点}：若存在节点 $i$ 满足 $E_i(t)<0.5\theta_i^{\mathrm{low}}$，则立即触发传能。
 \end{enumerate}
-从价格信号视角看，上述三项分别对应“高价节点占比过大”“价格分布高度不均”“存在极端高价节点”三种场景，是对连续 $P_i(t)$ 分布的分段近似，从而将（\ref{eq:price_signal}）式中难以直接观测的价格信号，转化为可直接用于触发与排序的判据。
-
 为了避免频繁触发，算法引入检查间隔 $T_{\mathrm{check}}$ 与冷却期 $T_{\mathrm{cool}}$。当时间不在检查时刻或冷却期尚未结束时，直接返回"不触发"。同时，若检测到极低能量节点，则绕过冷却期以实现抢占式触发。
 
-伪代码实现如下：
+\subsubsection{算法实现}
+
+AOEI能量信息年龄优先级技术的算法实现包括三个核心部分：动态AOI上限计算、能量信息上报触发判断和能量传输触发判断。下面详细阐述每个部分的实现细节。
+
+\textbf{1. 动态AOI上限计算与上报触发}：
+
+该部分的核心是根据节点当前的信息量动态调整AOI上限，当信息年龄达到上限时触发能量信息上报。具体实现流程如下：
+
 \begin{algorithmic}[1]
-\REQUIRE 当前时刻 $t$，节点能量集合 $\{E_i(t)\}_{i=1}^N$，阈值 $\theta_i^{\mathrm{low}}$、$r_{\mathrm{crit}}$、$\mathrm{CV}_{\mathrm{th}}$，检查间隔 $T_{\mathrm{check}}$ 和冷却期 $T_{\mathrm{cool}}$
-\ENSURE 是否触发传能
-\IF{$t \bmod T_{\mathrm{check}} \neq 0$ \textbf{or} $(t - \text{last\_transfer\_time}) < T_{\mathrm{cool}}$}
-    \STATE \textbf{return} False
-\ENDIF
-\STATE 计算 $r_{\mathrm{low}}(t)$ 和 $\mathrm{CV}(t)$
-\IF{$r_{\mathrm{low}}(t) > r_{\mathrm{crit}}$ \textbf{or} $\mathrm{CV}(t) > \mathrm{CV}_{\mathrm{th}}$ \textbf{or} $\exists i : E_i(t) < 0.5\theta_i^{\mathrm{low}}$}
-    \STATE \textbf{return} True
+\REQUIRE 当前时刻 $t$，节点信息年龄 $A_i(t)$，信息量 $I_i(t)$，基准AOI上限 $A_{\max,0}$，刻度因子 $\gamma$
+\ENSURE 是否触发能量信息上报
+\STATE \textbf{步骤1：计算动态AOI上限}
+\STATE $A_{\max,i}(t) \leftarrow A_{\max,0} / (1 + I_i(t) / \gamma)$
+\STATE \COMMENT{信息量越大，AOI上限越小，促使节点更快上报}
+\STATE
+\STATE \textbf{步骤2：判断是否触发上报}
+\IF{$A_i(t) \ge A_{\max,i}(t)$}
+    \STATE \textbf{return} True  \COMMENT{信息年龄达到上限，触发能量信息上报}
 \ELSE
-    \STATE \textbf{return} False
+    \STATE \textbf{return} False \COMMENT{信息年龄未达上限，继续等待}
 \ENDIF
 \end{algorithmic}
 
-上述机制将 AOEI 价格信号在网络尺度上离散化为三类触发分量，并通过检查间隔与冷却期抑制振荡，从而以低计算与通信开销实现对 $\{P_i(t)\}$ 的近似调度，为后续的排序与路径选择提供了一致的价格基础，也为扩展帕累托边界奠定了基础。
+\textbf{实现细节说明}：
+\begin{itemize}
+    \item \textbf{自适应调整机制}：当节点信息量 $I_i(t)$ 增加时，分母 $(1 + I_i(t) / \gamma)$ 增大，导致 $A_{\max,i}(t)$ 减小，从而缩短上报等待时间，确保重要信息及时上报。
+    \item \textbf{参数设置}：基准AOI上限 $A_{\max,0}$ 通常设置为30-60分钟，刻度因子 $\gamma$ 根据网络规模和信息量分布调整，典型值为100-500。
+    \item \textbf{触发时机}：当 $A_i(t) \ge A_{\max,i}(t)$ 时，节点立即触发能量信息上报，避免信息过度滞后。
+\end{itemize}
 
+% 图占位：动态AOI上限调整示意图
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{sections/figures/aoei_adaptive_threshold.png}
+\caption{动态AOI上限调整示意图。横轴为信息量，纵轴为AOI上限。信息量越大，AOI上限越小，促使节点更快上报。}
+\label{fig:aoei_adaptive_threshold}
+\end{figure}
 
-\subsection{E2：市场不透明\texorpdfstring{$\rightarrow$}{→}EM2：如何以最低成本实现市场信息透明化？\texorpdfstring{$\rightarrow$}{→}T2：低开销高时效状态获取\texorpdfstring{$\rightarrow$}{→}TM2：InfoNode数字孪生与机会主义上报}
+\noindent\textbf{图~\ref{fig:aoei_adaptive_threshold} 说明：}曲线展示了随着信息量 $I_i(t)$ 增大，动态阈值 $A_{\max,i}(t)$ 如何以反比例收缩。左端（信息量低）对应容忍更长的等待时间以节省通信，右端（信息量高）则迅速下压阈值，确保高价值数据立即触发上报。图中多个标注点对应典型信息量档位，帮助调度器在仿真中设定不同业务场景下的触发区间。
 
-\paragraph{经济学问题（E2）} 信息不对称和市场不透明是能源共享系统中的主要障碍。若调度器无法获取实时状态，便无法正确估值和匹配节点需求，导致错误定价和逆向选择。
+\textbf{2. 能量传输触发判断}：
 
-\paragraph{经济学理论（EM2）} 如何以最低成本实现市场信息透明化？信息经济学理论表明，完全信息透明虽然能提高市场效率，但会产生高昂的信息收集和传输成本。根据科斯定理，最优的信息披露策略应该平衡信息价值与通信成本。当信息价值随时间衰减（如 AOEI 模型所示）时，应该采用机会主义上报策略：信息价值高时及时上报，信息价值低时延迟上报以减少通信开销。这种自适应等待机制能够在保持信息新鲜度的同时最小化通信成本，实现市场透明化的成本效益最优化。
+该部分根据网络整体能量状态判断是否需要触发能量传输，包括低能量节点比例、能量变异系数和极低能量节点三个指标。
 
-\paragraph{技术问题（T2）} 需要构建一个低开销、高时效的信息透明层，使调度器能够获取实时状态，正确估值和匹配节点需求，避免错误定价和逆向选择。
+\begin{algorithmic}[1]
+\REQUIRE 当前时刻 $t$，节点能量集合 $\{E_i(t)\}_{i=1}^N$，阈值 $\theta_i^{\mathrm{low}}$、$r_{\mathrm{crit}}$、$\mathrm{CV}_{\mathrm{th}}$，检查间隔 $T_{\mathrm{check}}$ 和冷却期 $T_{\mathrm{cool}}$
+\ENSURE 是否触发传能
+\STATE \textbf{步骤1：检查触发时机}
+\IF{$t \bmod T_{\mathrm{check}} \neq 0$ \textbf{or} $(t - \text{last\_transfer\_time}) < T_{\mathrm{cool}}$}
+    \STATE \textbf{return} False \COMMENT{不在检查时刻或处于冷却期，不触发}
+\ENDIF
+\STATE
+\STATE \textbf{步骤2：计算能量状态指标}
+\STATE 计算低能量节点比例：$r_{\mathrm{low}}(t) \leftarrow |\{i \mid E_i(t) < \theta_i^{\mathrm{low}}\}| / N$
+\STATE 计算能量变异系数：$\mathrm{CV}(t) \leftarrow \sigma(E_1(t), \ldots, E_N(t)) / \mu(E_1(t), \ldots, E_N(t))$
+\STATE
+\STATE \textbf{步骤3：判断是否触发传能}
+\IF{$r_{\mathrm{low}}(t) > r_{\mathrm{crit}}$ \textbf{or} $\mathrm{CV}(t) > \mathrm{CV}_{\mathrm{th}}$}
+    \STATE \textbf{return} True \COMMENT{能量分布失衡，触发传能}
+\ELSIF{$\exists i : E_i(t) < 0.5\theta_i^{\mathrm{low}}$}
+    \STATE \textbf{return} True \COMMENT{存在极低能量节点，立即触发（绕过冷却期）}
+\ELSE
+    \STATE \textbf{return} False \COMMENT{能量状态正常，不触发}
+\ENDIF
+\end{algorithmic}
 
-\paragraph{机制设计（TM2）} 对于实现虚拟节点层 InfoNode，主要模型包括：
+\textbf{实现细节说明}：
+\begin{itemize}
+    \item \textbf{检查间隔机制}：$T_{\mathrm{check}}$ 通常设置为10-30分钟，避免频繁检查造成计算开销。
+    \item \textbf{冷却期机制}：$T_{\mathrm{cool}}$ 通常设置为30-60分钟，防止连续触发导致能量浪费。
+    \item \textbf{抢占式触发}：当检测到极低能量节点（$E_i(t) < 0.5\theta_i^{\mathrm{low}}$）时，绕过冷却期立即触发，确保关键节点及时获得能量。
+    \item \textbf{多指标融合}：同时考虑低能量节点比例和能量变异系数，全面评估网络能量分布状态。
+\end{itemize}
+
+\textbf{3. AOEI值纳入奖励函数}：
+
+AOEI值作为关键因素被纳入多个奖励函数，用于优化能量传输决策和路径选择。具体应用包括：
+
+\begin{itemize}
+    \item \textbf{路径选择奖励函数}：在路径选择时，优先选择能够降低目标节点AOEI的路径：
+    \[
+    R_{\text{path}} = w_{\text{aoei}} \cdot (A_{\text{before}} - A_{\text{after}}),
+    \]
+    其中 $A_{\text{before}}$ 和 $A_{\text{after}}$ 分别为传输前后的AOEI值，$w_{\text{aoei}}$ 为权重系数。
+    
+    \item \textbf{传输时长优化奖励函数}：在Cross-Layer Scheduling Layer的ALDP自适应时长规划技术中，AOEI值被纳入时效惩罚项，详见Cross-Layer Scheduling Layer部分。
+\end{itemize}
+
+上述技术确保优先级信号由节点能量与信息新鲜度内生生成，减少了传能误配和能量浪费，为延长网络寿命和平衡能量分布奠定基础。
+
+\subsubsection{技术耦合关系}
+
+AOEI能量信息年龄优先级技术作为IoT Information Layer的核心技术，与其他层技术紧密耦合。一方面，IoT Digital-Twin Layer的数字孪生账户提供及时的节点状态信息，使得优先级信号和触发判断基于新鲜数据；另一方面，触发决策确定了何时进行能量传输，为后续Cross-Layer Scheduling Layer和Opportunistic IoT Routing Layer提供触发事件。具体而言，优先级触发选定受助者与施助者后，会调用Cross-Layer Scheduling Layer的ALDP自适应时长规划技术决策传输时长；在选择路径并确定节点对后，Opportunistic IoT Routing Layer的EETOR机会主义信息收集技术利用该路径上的中继节点收集沿途节点信息。反过来，优先级技术中的公平权重$\omega_i$可由数字孪生账户中的账户或历史数据提供，优先级也间接影响信息报告的优先级和反馈。因此，IoT Information Layer、IoT Digital-Twin Layer、Cross-Layer Scheduling Layer和Opportunistic IoT Routing Layer在体系中形成连贯闭环，共同驱动全局优化目标。
+
+\subsection{IoT Digital-Twin Layer：数字孪生状态同步技术}
+
+\subsubsection{核心作用与问题解决}
+
+\textbf{IoT Digital-Twin Layer 通过数字孪生状态同步技术为每个物理节点维护一个数字孪生账户}。在节点的真实信息尚未上报到sink节点之前，通过理论能量计算（基于能量衰减模型、太阳能采集模型等物理方法）维护虚拟节点能量表，实现低通信开销下的实时高保真状态同步，显著减少因信息滞后导致的错误调度与资源浪费，确保系统在低通信开销下保持全局状态的新鲜度。
+
+信息不对称和系统不透明是能源共享系统中的主要障碍。若调度器无法获取实时状态，便无法正确估值和匹配节点需求，导致错误优先级分配和状态误判。传统方法中，信息收集需要独立的通信开销，形成"信息系统独立于能量系统"的问题。数字孪生状态同步技术通过在sink节点构建数字孪生系统，利用能量传输路径同步状态，避免独立的通信开销，从而整合能量与信息系统。
+
+\subsubsection{数学模型}
+
+为构建完整的系统透明层，引入\textbf{数字孪生账户} 作为每个物理节点的数字孪生账户，维护其最新、历史和预测状态，并提供查询接口。对于实现IoT Digital-Twin Layer 数字孪生账户，主要模型包括：
+
 \begin{enumerate}
+  \item \textbf{理论能量计算模型}：对于节点 $i$，在时刻 $t$ 的理论能量 $E_i^{\text{est}}(t)$ 基于上一次已知能量 $E_i(t_0)$（$t_0$ 为上次上报时间）计算：
+  \begin{equation}
+  \begin{split}
+  E_i^{\text{est}}(t) = \min\Big\{C_i, &E_i(t_0) - E_{\text{cons},i}(t-t_0) + E_{h,i}(t-t_0)\\
+  &- E_{\text{send},i}(t-t_0) + E_{\text{recv},i}(t-t_0)\Big\},
+  \end{split}
+  \end{equation}
+  其中 $C_i$ 为电池容量，$E_{\text{cons},i}$ 为能量消耗（感知+通信），$E_{h,i}$ 为能量采集（太阳能），$E_{\text{send},i}$ 和 $E_{\text{recv},i}$ 分别为发送和接收能量（基于已知的传输计划）。
+  
   \item \textbf{信息价值函数}：
   \begin{equation}
   V_{\mathrm{info}}(t)=\mathrm{info\_volume}(t)\times e^{-\beta\,\mathrm{waiting\_age}(t)},
   \end{equation}
   其中 \texttt{info\_volume} 为未上报的信息量，\texttt{waiting\_age} 为等待时长（当前时间减去 \texttt{info\_waiting\_since}），$\beta$ 为衰减系数。
+  
   \item \textbf{自适应等待时间}：为平衡信息价值与通信开销，最大等待时长根据信息量动态调整：
   \begin{equation}
   T_{\max}^{\mathrm{adaptive}}=\frac{T_{\max}}{1+\mathrm{info\_volume}/\gamma},
   \end{equation}
   其中 $T_{\max}$ 为基准等待时间，$\gamma$ 为刻度因子。信息量越大，$T_{\max}^{\mathrm{adaptive}}$ 越小，促使节点更快上报，减少信息滞后。
+  
   \item \textbf{强制上报与去重机制}：若等待时间超出上限或信息价值低于阈值，则触发强制上报；上报沿传能路径顺带进行，并基于源节点集合去除重复信息。
 \end{enumerate}
 
-% 图占位：AOEI 衰减曲线（保留位置，后续以代码生成图替换）
+\subsubsection{算法实现}
+
+数字孪生账户 实现维护每个节点的信息量、等待时间和上报标记。更新流程包括理论能量估算、信息上报触发和状态同步三个核心步骤。下面详细阐述每个步骤的实现细节。
+
+\textbf{1. 理论能量估算}：
+
+对于每个节点 $i$，如果 $t - t_{\text{last\_update},i} > 0$（即存在信息滞后），则基于物理模型估算当前能量。具体实现如下：
+
+\begin{algorithmic}[1]
+\REQUIRE 节点 $i$，当前时刻 $t$，上次更新时刻 $t_0$，上次已知能量 $E_i(t_0)$，已知传输计划
+\ENSURE 估算能量 $E_i^{\text{est}}(t)$
+\STATE \textbf{步骤1：计算基础能量变化}
+\STATE $\Delta t \leftarrow t - t_0$ \COMMENT{时间间隔}
+\STATE $E_{\text{cons}} \leftarrow E_{\text{sen}} \cdot \Delta t + E_{\text{com}} \cdot \Delta t$ \COMMENT{能量消耗}
+\STATE $E_{\text{harvest}} \leftarrow \eta_{\text{solar}} \cdot A_i \cdot G(t) \cdot \Delta t$ \COMMENT{能量采集}
+\STATE
+\STATE \textbf{步骤2：计算传输相关能量变化}
+\STATE 根据已知传输计划计算 $E_{\text{send},i}$ 和 $E_{\text{recv},i}$
+\STATE
+\STATE \textbf{步骤3：计算估算能量}
+\STATE $E_i^{\text{est}}(t) \leftarrow E_i(t_0) - E_{\text{cons}} + E_{\text{harvest}} - E_{\text{send},i} + E_{\text{recv},i}$
+\STATE $E_i^{\text{est}}(t) \leftarrow \min\{C_i, \max\{0, E_i^{\text{est}}(t)\}\}$ \COMMENT{限制在[0, $C_i$]范围内}
+\STATE
+\STATE \textbf{步骤4：更新数字孪生账户}
+\STATE 更新数字孪生账户中的能量值：$E_i(t) \leftarrow E_i^{\text{est}}(t)$
+\STATE 标记为估算值：$\text{is\_estimated}_i \leftarrow \text{True}$
+\STATE 更新估算时间：$t_{\text{est},i} \leftarrow t$
+\end{algorithmic}
+
+\textbf{实现细节说明}：
+\begin{itemize}
+    \item \textbf{能量消耗模型}：$E_{\text{cons}} = E_{\text{sen}} \cdot \Delta t + E_{\text{com}} \cdot \Delta t$，其中 $E_{\text{sen}}$ 为感知能耗（通常为0.1 J/分钟），$E_{\text{com}}$ 为通信能耗（根据通信量计算）。
+    \item \textbf{能量采集模型}：$E_{\text{harvest}} = \eta_{\text{solar}} \cdot A_i \cdot G(t) \cdot \Delta t$，其中 $\eta_{\text{solar}} = 0.2$ 为太阳能转换效率，$A_i = 0.1$ m$^2$ 为面板面积，$G(t)$ 为日内辐照度。
+    \item \textbf{传输计划调整}：根据已知的能量传输计划，调整发送和接收能量，确保估算值尽可能准确。
+    \item \textbf{边界约束}：估算能量限制在 $[0, C_i]$ 范围内，避免出现负值或超过容量。
+\end{itemize}
+
+% 图占位：理论能量计算流程图
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.9\linewidth]{figures/aoei_decay.png}
-\caption{信息价值随 AOEI 的指数衰减示意。}
-\label{fig:aoei_decay_placeholder}
+\includegraphics[width=0.9\linewidth]{sections/figures/infonode_energy_estimation.png}
+\caption{数字孪生账户理论能量计算流程图。基于上次已知能量、能量消耗、能量采集和传输计划，计算当前时刻的理论能量。}
+\label{fig:infonode_energy_estimation}
 \end{figure}
 
-InfoNode 实现维护每个节点的信息量、等待时间和上报标记。更新流程如下：
-\begin{enumerate}
-  \item 节点定时更新信息量和 \texttt{info\_waiting\_since}；计算等待时间 $\Delta t$ 和自适应上限 $T_{\max}^{\mathrm{adaptive}}$。
-  \item 若 $\Delta t \ge T_{\max}^{\mathrm{adaptive}}$ 或 $V_{\mathrm{info}}$ 低于阈值，则触发强制上报。上报时将当前节点状态附着于能量传输路径，避免额外通信开销，并通过去重策略防止重复上报。
-  \item 上报完成后重置 \texttt{info\_volume} 和 \texttt{info\_waiting\_since}，将最新状态写入 InfoNode。
-\end{enumerate}
-这种机制使系统在近乎零通信开销下保持全局状态的新鲜度，减少信息滞后导致的匹配误差，为动态价格计算与公平分配提供实时数据支撑。
+\noindent\textbf{图~\ref{fig:infonode_energy_estimation} 说明：}该流程图细化了IoT Digital-Twin Layer如何在两次真实上报之间维持状态新鲜度：首先依据上次上报时间与能耗模型推演基础能量变化，再叠加采能、传能计划带来的增减，最终将估算值写回数字孪生账户。流程中的边界约束、估算标记与时间戳更新确保Cross-Layer Scheduling Layer能够区分“理论值”与“实测值”，避免误用陈旧信息。
 
-\subsection{E3：路径负外部性\texorpdfstring{$\rightarrow$}{→}EM3：如何通过路径治理机制内部化能量传输的负外部性？\texorpdfstring{$\rightarrow$}{→}T3：能量传输的路径治理\texorpdfstring{$\rightarrow$}{→}TM3：EETOR 专用路由与效率阈值}
+\textbf{2. 信息上报触发}：
 
-\paragraph{经济学问题（E3）} 多跳能量传输会累积能量损耗。传统路由以通信延迟或连通性为主，忽视能量效率，导致大量低效路径，使中继节点过度消耗，形成负外部性。
+节点定时更新信息量和等待时间，根据自适应等待时间上限和信息价值判断是否触发强制上报。
 
-\paragraph{经济学理论（EM3）} 如何通过路径治理机制内部化能量传输的负外部性？外部性理论指出，当个体的行为对他人产生未补偿的成本时，市场会出现效率损失。在能量传输中，选择低效路径会导致中继节点过度消耗，这种成本并未在路径选择决策中被充分考虑。根据庇古税理论，可以通过引入效率阈值和路径评分函数，将负外部性成本显式化：效率低的路径被拒绝，中继节点的能量成本被纳入路径代价计算，从而引导系统选择社会最优路径，实现负外部性的内部化。
+\begin{algorithmic}[1]
+\REQUIRE 节点 $i$，当前时刻 $t$，信息量 $I_i(t)$，等待开始时间 $t_{\text{wait},i}$，基准等待时间 $T_{\max}$，刻度因子 $\gamma$，衰减系数 $\beta$
+\ENSURE 是否触发强制上报
+\STATE \textbf{步骤1：计算等待时间和自适应上限}
+\STATE $\Delta t \leftarrow t - t_{\text{wait},i}$ \COMMENT{当前等待时间}
+\STATE $T_{\max}^{\mathrm{adaptive}} \leftarrow T_{\max} / (1 + I_i(t) / \gamma)$ \COMMENT{自适应等待时间上限}
+\STATE
+\STATE \textbf{步骤2：计算信息价值}
+\STATE $V_{\mathrm{info}} \leftarrow I_i(t) \times e^{-\beta \cdot \Delta t}$ \COMMENT{信息价值指数衰减}
+\STATE
+\STATE \textbf{步骤3：判断是否触发上报}
+\IF{$\Delta t \ge T_{\max}^{\mathrm{adaptive}}$ \textbf{or} $V_{\mathrm{info}} < V_{\text{th}}$}
+    \STATE \textbf{return} True \COMMENT{等待时间超限或信息价值过低，触发强制上报}
+\ELSE
+    \STATE \textbf{return} False \COMMENT{继续等待，利用能量传输路径捎带上报}
+\ENDIF
+\end{algorithmic}
 
-\paragraph{技术问题（T3）} 需要针对能量传输设计专用路由，控制损耗并保护弱势节点，避免传统路由忽视能量效率导致的负外部性。
-
-\paragraph{机制设计（TM3）}实现EETOR（Energy-Efficient Transfer Opportunistic
-Routing） 的核心公式包括：
-\begin{enumerate}
-  \item \textbf{单跳效率模型}：
-  \begin{equation}
-  \eta(d)=\frac{\eta_0}{d^{\gamma}},\quad 0<\eta_0<1,\;\gamma>0.
-  \end{equation}
-  路径 $\mathcal{P}=\{p_1,p_2,\dots,p_H\}$ 的总效率为各跳效率的乘积：
-  \begin{equation}
-  \eta_{\mathcal{P}}=\prod_{h=1}^{H}\eta\bigl(d_h\bigr).
-  \end{equation}
-  \item \textbf{硬约束}：拒绝效率低于阈值 $\eta_{\mathcal{P}}<\eta_{\mathrm{th}}$ 或跳数超过 $H_{\max}$ 的路径，以避免极低效率和过长路径。
-  \item \textbf{路径评分函数}：
-  \begin{equation}
-  S_{\mathcal{P}} = w_1 E_{\mathrm{recv}} - w_2 E_{\mathrm{loss}} + w_3\,\mathbf{1}_{\mathrm{solar}} - w_4\,\mathbf{1}_{\mathrm{weak}},
-  \end{equation}
-  其中 $E_{\mathrm{recv}}=\eta_{\mathcal{P}}E_{\mathrm{sent}}$，$E_{\mathrm{loss}}=(1-\eta_{\mathcal{P}})E_{\mathrm{sent}}$；$\mathbf{1}_{\mathrm{solar}}$ 表示捐赠节点是否为太阳能节点，若是则奖励；$\mathbf{1}_{\mathrm{weak}}$ 表示中继节点是否为弱势节点，若是则惩罚，权重 $w_i$ 可按需调节。
-  \item \textbf{期望代价函数}：
-  \begin{equation}
-  C(u)=\frac{E_{\mathrm{com}}(u,\text{next})}{\eta_{\mathcal{P}}}+\sum_{v\in\mathcal{P}}C(v),
-  \end{equation}
-  其中 $E_{\mathrm{com}}$ 为通信能耗。能量低的节点代价通过 \texttt{get\_energy\_state\_penalty} 放大，太阳能节点代价减小，体现不同节点状态对成本的影响。
-\end{enumerate}
-
-EETOR（Energy-Efficient Transfer Opportunistic
-Routing） 采用启发式动态规划：
-\begin{enumerate}
-  \item \textbf{邻居构建}：对每个节点构建候选邻居集合，保留满足最大通信距离和单跳效率阈值的邻居，同时排除锁定节点。
-  \item \textbf{期望代价计算}：递归计算每个候选邻居的期望代价 $C(u)$，考虑通信能耗和路径效率。
-  \item \textbf{前缀贪心选择}：按效率与代价比 $\eta/C$ 排序邻居，从高效低代价的节点中贪心加入前缀，直到加入更多中继不再降低期望代价为止。
-  \item \textbf{弱势保护与奖惩}：在评分和代价计算中对弱势节点施加惩罚，对太阳能节点施加奖励，保证中继节点不会因反复被选而提前耗尽能量。
-\end{enumerate}
-最终，算法输出满足硬约束且评分最优的路径，实现能量与信息的高效传输，减少负外部性。
-
-
-\subsection{E4：传输时长错配\texorpdfstring{$\rightarrow$}{→}EM4：如何通过跨期优化实现单次传输的多维收益最大化？\texorpdfstring{$\rightarrow$}{→}T4：多维收益与惩罚平衡\texorpdfstring{$\rightarrow$}{→}TM4：自适应传输时长决策}
-
-\paragraph{经济学问题（E4）} 在能量共享无线传感器网络中，传统的调度方案往往为每次能量传输设定一个固定时长 \(\tau\)。这种固定时长无法根据路径效率、接收节点的能量需求、信息新鲜度以及潜在的信息量动态调整供给：过短的传输导致频繁启动和控制开销过大，过长的传输虽然一次可送更多能量并带回更多信息，但容易造成能量过度消耗并拉长信息时滞，因而在效率、公平与寿命之间形成不可突破的 trade\,\text{-}off。
-
-\paragraph{经济学理论（EM4）} 如何通过跨期优化实现单次传输的多维收益最大化？跨期选择理论指出，最优决策需要平衡当前收益与未来成本。在能量传输中，传输时长 \(\tau\) 的选择涉及多个维度的权衡：能量收益（接收能量）、损耗惩罚（传输损耗）、时效惩罚（信息年龄增长）和信息奖励（信息收集）。根据 Lyapunov 漂移加罚理论，可以通过构建综合评分函数，将多维目标统一为单一优化问题，通过前瞻性仿真选择使综合收益最大的传输时长，实现跨期优化下的多维收益最大化。
-
-\paragraph{技术问题（T4）} 需要针对每一次能量传输，根据当前路径效率、能量缺口和可采集的信息量，动态选择最合适的 \(\tau\)。目标是在保证足够能量供给的同时，降低能量损耗和信息时效损失，并激励利用传输时机收集信息，从而推动系统突破静态帕累托边界。
-
-\paragraph{机制设计（TM4）}
-设最小和最大传输时长为 \(\tau_{\min}\) 与 \(\tau_{\max}\)（如 1--5 分钟），每条候选传输路径 \(\mathcal{P}\) 的效率 \(\eta_{\mathcal{P}}\) 由前述 EETOR 路由给出。对每个候选时长 \(\tau\in[\tau_{\min},\tau_{\max}]\)，计算以下指标：
+\textbf{实现细节说明}：
 \begin{itemize}
-    \item \textbf{能量收益 \(B_{\text{energy}}(\tau)\)}：设发送功率为 \(E_{\text{char}}\)，则发送能量为 \(E_{\text{sent}}(\tau)=\tau E_{\text{char}}\)，接收能量为 \(E_{\text{recv}}(\tau)=\eta_{\mathcal{P}}E_{\text{sent}}(\tau)\)。若接收节点能量缺口为 \(\Delta\)，其归一化缺口 \(Q_{\text{norm}}=\Delta/\bar{E}\)（\(\bar{E}\) 为平均能量），则能量收益为
+    \item \textbf{自适应等待时间}：信息量越大，等待时间上限越小，促使节点更快上报重要信息。
+    \item \textbf{信息价值衰减}：信息价值随时间指数衰减，确保陈旧信息不会无限期等待。
+    \item \textbf{路径捎带机制}：当不触发强制上报时，节点等待能量传输路径经过，将信息捎带上报，避免独立通信开销。
+    \item \textbf{去重策略}：上报时基于源节点集合去除重复信息，减少通信量。
+\end{itemize}
+
+\textbf{3. 状态同步}：
+
+当节点信息上报到sink节点后，更新数字孪生账户中的状态信息。
+
+\begin{algorithmic}[1]
+\REQUIRE 节点 $i$，上报的能量 $E_i^{\text{report}}$，上报的信息年龄 $A_i^{\text{report}}$，当前时刻 $t$
+\ENSURE 更新后的数字孪生账户状态
+\STATE \textbf{步骤1：更新能量状态}
+\STATE $E_i(t) \leftarrow E_i^{\text{report}}$ \COMMENT{使用实际上报值}
+\STATE $\text{is\_estimated}_i \leftarrow \text{False}$ \COMMENT{标记为实测值}
+\STATE $t_{\text{last\_update},i} \leftarrow t$ \COMMENT{更新最后更新时间}
+\STATE
+\STATE \textbf{步骤2：更新信息状态}
+\STATE $A_i(t) \leftarrow A_i^{\text{report}}$ \COMMENT{更新信息年龄}
+\STATE $\text{info\_volume}_i \leftarrow 0$ \COMMENT{重置信息量}
+\STATE $t_{\text{wait},i} \leftarrow t$ \COMMENT{重置等待开始时间}
+\STATE
+\STATE \textbf{步骤3：更新历史记录}
+\STATE 将 $(t, E_i(t), A_i(t))$ 添加到历史记录
+\STATE 更新统计信息（平均能量、能量方差等）
+\end{algorithmic}
+
+这种技术使系统在近乎零通信开销下保持全局状态的新鲜度，减少信息滞后导致的匹配误差，为动态优先级计算与公平分配提供实时数据支撑。
+
+\subsubsection{技术耦合关系}
+
+数字孪生状态同步技术作为IoT Digital-Twin Layer的核心技术，与IoT Information Layer、Cross-Layer Scheduling Layer和Opportunistic IoT Routing Layer技术相辅相成。一方面，数字孪生账户为IoT Information Layer的AOEI能量信息年龄优先级技术和触发判断提供了最新的能量和信息状态（包括理论估算值），确保触发判断反映当前需求；另一方面，IoT Information Layer的AOEI优先级信号可作为信息报告的权重因子，引导带有高价值信息的节点优先上报。数字孪生账户利用能量传输事件同步状态，与Opportunistic IoT Routing Layer的EETOR路径相结合：节点将状态附带于传输路径中，路径上的中继节点可以顺带同步信息。这种耦合方式使得信息获取和能量转移相互绑定，从根本上降低了通信开销。此外，数字孪生账户所维护的历史数据和信誉账户可用于后续对节点公平性和可靠性的评估，进而影响Cross-Layer Scheduling Layer的协调设计和预算分配。因此，IoT Digital-Twin Layer既依赖于其他层提供触发和传输机会，又为IoT Information Layer的优先级信号化和Cross-Layer Scheduling Layer的跨期调度提供必要的信息基础，形成有机闭环。
+
+\subsection{Cross-Layer Scheduling Layer：ALDP自适应时长规划技术}
+
+\subsubsection{核心作用与问题解决}
+
+\textbf{Cross-Layer Scheduling Layer基于AOEI优先级信号和数字孪生账户提供的状态信息，采用ALDP自适应时长规划技术}，通过自适应参数的Lyapunov优化进行前瞻性传输能量时长规划，依据能量收益、损耗惩罚、信息时效惩罚和信息增益奖励四个因素对候选传输时长进行打分，动态选择综合收益最大的传输时长，使供能强度与传输时长随供需变化自适应调整，避免静态配给导致的长期效用损失。在此基础上，Cross-Layer Scheduling Layer进行全局调度决策，识别能量紧迫且信息过时的节点作为受助者，选择能量充足且路径高效的节点作为施助者，在延长网络寿命与平衡能量分布间进行协调优化，实现能量与信息的协同优化。
+
+在能量共享无线传感器网络中，传统的调度方案往往为每次能量传输设定一个固定时长 $\tau$。这种固定时长无法根据路径效率、接收节点的能量需求、信息新鲜度以及潜在的信息量动态调整供给：过短的传输导致频繁启动和控制开销过大，过长的传输虽然一次可送更多能量并带回更多信息，但容易造成能量过度消耗并拉长信息时滞，因而在效率、公平与寿命之间形成不可突破的 trade-off。更重要的是，传统方法未能在时长规划中考虑信息价值，无法实现能量与信息的协同优化，这正是"信息系统独立于能量系统"问题的又一表现。ALDP自适应时长规划技术通过在时长规划中考虑信息价值，实现能量与信息的协同优化，从根本上整合能量与信息系统。
+
+\subsubsection{数学模型}
+
+设最小和最大传输时长为 $\tau_{\min}$ 与 $\tau_{\max}$（如 1--5 分钟），每条候选传输路径 $\mathcal{P}$ 的效率 $\eta_{\mathcal{P}}$ 由路径选择算法给出。对每个候选时长 $\tau\in[\tau_{\min},\tau_{\max}]$，计算以下指标：
+
+\begin{itemize}
+    \item \textbf{能量收益 $B_{\text{energy}}(\tau)$}：设发送功率为 $E_{\text{char}}$，则发送能量为 $E_{\text{sent}}(\tau)=\tau E_{\text{char}}$，接收能量为 $E_{\text{recv}}(\tau)=\eta_{\mathcal{P}}E_{\text{sent}}(\tau)$。若接收节点能量缺口为 $\Delta$，其归一化缺口 $Q_{\text{norm}}=\Delta/\bar{E}$（$\bar{E}$ 为平均能量），则能量收益为
     \[
     B_{\text{energy}}(\tau)=E_{\text{recv}}(\tau)\cdot Q_{\text{norm}}.
     \]
-    \item \textbf{损耗惩罚 \(P_{\text{loss}}(\tau)\)}：能量损失为 \(E_{\text{loss}}(\tau)=E_{\text{sent}}(\tau)-E_{\text{recv}}(\tau)\)。根据 Lyapunov 漂移加罚框架，引入调节系数 \(V\) 作为损耗惩罚权重，定义
+    
+    \item \textbf{损耗惩罚 $P_{\text{loss}}(\tau)$}：能量损失为 $E_{\text{loss}}(\tau)=E_{\text{sent}}(\tau)-E_{\text{recv}}(\tau)$。根据 Lyapunov 漂移加罚框架，引入调节系数 $V$ 作为损耗惩罚权重，定义
     \[
     P_{\text{loss}}(\tau)=V\,E_{\text{loss}}(\tau).
     \]
-    \item \textbf{时效惩罚 \(P_{\text{aoi}}(\tau)\)}：AoI 随时间线性增长，信息时效损失与 \(\tau\) 成正比。设时效惩罚权重为 \(w_{\text{aoi}}\)，则
+    
+    \item \textbf{时效惩罚 $P_{\text{aoi}}(\tau)$}：AoI 随时间线性增长，信息时效损失与 $\tau$ 成正比。设时效惩罚权重为 $w_{\text{aoi}}$，则
     \[
     P_{\text{aoi}}(\tau)=w_{\text{aoi}}\,\tau\,Q_{\text{norm}}.
     \]
-    \item \textbf{信息奖励 \(R_{\text{info}}(\tau)\)}：假设信息收集速率为 \(r_{\text{info}}\) 单位/分钟，信息增益为 \(G_{\text{info}}(\tau)=r_{\text{info}}\,\tau\)。若接收节点有待上报的信息，则全部纳入奖励；否则仅计入一半，用权重 \(w_{\text{info}}\) 控制奖励力度：
+    注意：这里AOEI值作为关键因素被纳入奖励函数，体现了IoT Information Layer的AOEI能量信息年龄优先级技术与Cross-Layer Scheduling Layer的ALDP自适应时长规划技术的耦合。
+    
+    \item \textbf{信息奖励 $R_{\text{info}}(\tau)$}：假设信息收集速率为 $r_{\text{info}}$ 单位/分钟，信息增益为 $G_{\text{info}}(\tau)=r_{\text{info}}\,\tau$。若接收节点有待上报的信息，则全部纳入奖励；否则仅计入一半，用权重 $w_{\text{info}}$ 控制奖励力度：
     \[
     R_{\text{info}}(\tau)=w_{\text{info}}\,G_{\text{info}}(\tau)\times\begin{cases}
         1,& \text{有新信息待收集},\\
@@ -182,78 +325,397 @@ Routing） 采用启发式动态规划：
     \end{cases}
     \]
 \end{itemize}
+
 定义综合评分函数：
 \[
 \text{Score}(\tau)=B_{\text{energy}}(\tau)-P_{\text{loss}}(\tau)-P_{\text{aoi}}(\tau)+R_{\text{info}}(\tau).
 \]
-调度器遍历所有候选时长，计算 \(\text{Score}(\tau)\)，选取得分最高的时长 \(\tau^*\) 作为本次传输的持续时间。
+调度器遍历所有候选时长，计算 $\text{Score}(\tau)$，选取得分最高的时长 $\tau^*$ 作为本次传输的持续时间。
 
-伪代码如下：
+\subsubsection{算法实现}
+
+ALDP自适应时长规划技术的算法实现包括三个核心步骤：参数初始化、候选时长评分和最优时长选择。下面详细阐述每个步骤的实现细节。
+
+\textbf{1. 参数初始化}：
+
+在开始评分之前，需要计算归一化能量缺口和初始化相关变量。
+
 \begin{algorithmic}[1]
-\REQUIRE 候选路径 \(\mathcal{P}\)，候选时长集合 \([\tau_{\min},\tau_{\max}]\)，节点能量缺口 \(\Delta\)，平均能量 \(\bar{E}\)，路径效率 \(\eta_{\mathcal{P}}\)，权重 \(V, w_{\text{aoi}}, w_{\text{info}}\) 和信息速率 \(r_{\text{info}}\)
-\ENSURE 最优传输时长 \(\tau^*\)
-\STATE 计算 \(Q_{\text{norm}}\leftarrow\Delta/\bar{E}\)
-\STATE 初始化 \(\tau^*\leftarrow\tau_{\min},\ \text{bestScore}\leftarrow -\infty\)
-\FOR{\(\tau\) 从 \(\tau_{\min}\) 到 \(\tau_{\max}\)}
-    \STATE \(E_{\text{sent}}\leftarrow\tau E_{\text{char}}\)
-    \STATE \(E_{\text{recv}}\leftarrow\eta_{\mathcal{P}}E_{\text{sent}}\)
-    \STATE \(B_{\text{energy}}\leftarrow E_{\text{recv}}\cdot Q_{\text{norm}}\)
-    \STATE \(P_{\text{loss}}\leftarrow V\,(E_{\text{sent}}-E_{\text{recv}})\)
-    \STATE \(P_{\text{aoi}}\leftarrow w_{\text{aoi}}\,\tau\,Q_{\text{norm}}\)
-    \STATE \(G_{\text{info}}\leftarrow r_{\text{info}}\,\tau\)
-    \STATE 根据是否存在新信息确定 \(R_{\text{info}}\)
-    \STATE \(\text{score}\leftarrow B_{\text{energy}} - P_{\text{loss}} - P_{\text{aoi}} + R_{\text{info}}\)
-    \IF{\(\text{score} > \text{bestScore}\)}
-        \STATE 更新 \(\text{bestScore}\leftarrow\text{score},\ \tau^*\leftarrow\tau\)
-    \ENDIF
-\ENDFOR
-\RETURN \(\tau^*\)
+\REQUIRE 候选路径 $\mathcal{P}$，候选时长集合 $[\tau_{\min},\tau_{\max}]$，节点能量缺口 $\Delta$，平均能量 $\bar{E}$，路径效率 $\eta_{\mathcal{P}}$，权重 $V, w_{\text{aoi}}, w_{\text{info}}$ 和信息速率 $r_{\text{info}}$
+\ENSURE 最优传输时长 $\tau^*$
+\STATE \textbf{步骤1：计算归一化能量缺口}
+\STATE $Q_{\text{norm}} \leftarrow \Delta / \bar{E}$ \COMMENT{归一化能量缺口，用于权重调整}
+\STATE
+\STATE \textbf{步骤2：初始化最优解}
+\STATE $\tau^* \leftarrow \tau_{\min}$ \COMMENT{初始化为最小时长}
+\STATE $\text{bestScore} \leftarrow -\infty$ \COMMENT{初始化为负无穷}
+\STATE $\Delta\tau \leftarrow (\tau_{\max} - \tau_{\min}) / N_{\text{steps}}$ \COMMENT{时长步长，$N_{\text{steps}}$为搜索步数}
 \end{algorithmic}
 
-该决策机制源自代码库中的 \emph{DurationAwareLyapunovScheduler} 实现，其核心思想是用 Lyapunov 漂移加罚的方法平衡能量收益、损耗惩罚、时效惩罚和信息奖励。通过动态选择传输时长，它能够在不增加总能量投入的情况下，实现单位能量收益最大化，降低 AoI 增长速度，并鼓励在传输期间收集信息，从而在效率、公平性与寿命等维度同时提升系统性能。
+\textbf{2. 候选时长评分}：
 
-\paragraph{自适应参数调整机制} 为进一步提升系统对动态环境的适应能力，\emph{AdaptiveLyapunovScheduler} 和 \emph{AdaptiveDurationAwareLyapunovScheduler} 引入了基于网络反馈分数的参数自适应调整机制。该机制通过评估每次调度对网络整体状态的影响，动态调整 Lyapunov 权重参数 \(V\)，使系统能够在不同场景下自动优化权衡策略。
+对每个候选时长，计算能量收益、损耗惩罚、时效惩罚和信息奖励，得到综合评分。
 
-\textbf{反馈分数计算：} 在每次调度完成后，系统计算网络反馈分数 \(S_{\text{feedback}}\)，综合考虑四个维度：
-\begin{enumerate}
-    \item \textbf{能量均衡性改善}（权重 0.4）：通过能量标准差的变化衡量，\(\Delta_{\text{std}} = \sigma_{\text{pre}} - \sigma_{\text{post}}\)，标准差减少表示均衡性改善；
-    \item \textbf{网络存活率变化}（权重 0.3）：通过存活节点数量的变化衡量，\(\Delta_{\text{alive}} = N_{\text{alive,post}} - N_{\text{alive,pre}}\)；
-    \item \textbf{能量传输效率}（权重 0.2）：通过有效接收能量与发送能量的比值衡量，\(\eta_{\text{transfer}} = E_{\text{delivered}} / E_{\text{sent}}\)；
-    \item \textbf{整体能量水平变化}（权重 0.1）：通过总能量的变化衡量，\(\Delta_{\text{total}} = E_{\text{total,post}} - E_{\text{total,pre}}\)。
-\end{enumerate}
-反馈分数定义为：
-\[
-S_{\text{feedback}} = 0.4 \cdot \frac{\Delta_{\text{std}}}{\sigma_{\text{pre}}} + 0.3 \cdot \frac{\Delta_{\text{alive}}}{N} + 0.2 \cdot (\eta_{\text{transfer}} - 0.5) + 0.1 \cdot \frac{\Delta_{\text{total}}}{E_{\text{total,pre}}},
-\]
-其中正值表示正向影响，负值表示负向影响。
+\begin{algorithmic}[1]
+\FOR{$\tau = \tau_{\min}$ \textbf{to} $\tau_{\max}$ \textbf{step} $\Delta\tau$}
+    \STATE \textbf{步骤1：计算能量传输量}
+    \STATE $E_{\text{sent}}(\tau) \leftarrow \tau \cdot E_{\text{char}}$ \COMMENT{发送能量}
+    \STATE $E_{\text{recv}}(\tau) \leftarrow \eta_{\mathcal{P}} \cdot E_{\text{sent}}(\tau)$ \COMMENT{接收能量（考虑路径效率）}
+    \STATE $E_{\text{loss}}(\tau) \leftarrow E_{\text{sent}}(\tau) - E_{\text{recv}}(\tau)$ \COMMENT{能量损耗}
+    \STATE
+    \STATE \textbf{步骤2：计算能量收益}
+    \STATE $B_{\text{energy}}(\tau) \leftarrow E_{\text{recv}}(\tau) \cdot Q_{\text{norm}}$ \COMMENT{能量收益与缺口成正比}
+    \STATE
+    \STATE \textbf{步骤3：计算损耗惩罚}
+    \STATE $P_{\text{loss}}(\tau) \leftarrow V \cdot E_{\text{loss}}(\tau)$ \COMMENT{Lyapunov漂移加罚框架}
+    \STATE
+    \STATE \textbf{步骤4：计算时效惩罚}
+    \STATE $P_{\text{aoi}}(\tau) \leftarrow w_{\text{aoi}} \cdot \tau \cdot Q_{\text{norm}}$ \COMMENT{AOEI值纳入奖励函数}
+    \STATE
+    \STATE \textbf{步骤5：计算信息奖励}
+    \STATE $G_{\text{info}}(\tau) \leftarrow r_{\text{info}} \cdot \tau$ \COMMENT{信息收集增益}
+    \IF{接收节点有待上报信息}
+        \STATE $R_{\text{info}}(\tau) \leftarrow w_{\text{info}} \cdot G_{\text{info}}(\tau) \cdot 1.0$ \COMMENT{有新信息，全额奖励}
+    \ELSE
+        \STATE $R_{\text{info}}(\tau) \leftarrow w_{\text{info}} \cdot G_{\text{info}}(\tau) \cdot 0.5$ \COMMENT{无新信息，减半奖励}
+    \ENDIF
+    \STATE
+    \STATE \textbf{步骤6：计算综合评分}
+    \STATE $\text{score}(\tau) \leftarrow B_{\text{energy}}(\tau) - P_{\text{loss}}(\tau) - P_{\text{aoi}}(\tau) + R_{\text{info}}(\tau)$
+    \STATE
+    \STATE \textbf{步骤7：更新最优解}
+    \IF{$\text{score}(\tau) > \text{bestScore}$}
+        \STATE $\text{bestScore} \leftarrow \text{score}(\tau)$
+        \STATE $\tau^* \leftarrow \tau$
+    \ENDIF
+\ENDFOR
+\end{algorithmic}
 
-\textbf{自适应调整策略：} 系统维护一个滑动窗口记录最近 \(W\) 次调度的反馈分数（典型值 \(W=10\)），并基于以下策略调整参数 \(V\)：
-\begin{enumerate}
-    \item \textbf{持续负反馈调整}：当平均反馈分数 \(\bar{S} < -\theta_{\text{sens}}\)（\(\theta_{\text{sens}}\) 为敏感度阈值）时，根据具体问题诊断调整：
-    \begin{itemize}
-        \item 若传输效率过低（\(\eta_{\text{transfer}} < 0.3\)），增大 \(V \leftarrow \min(V_{\max}, V \cdot (1+\alpha)\)），更重视损耗惩罚，倾向选择更近的路径；
-        \item 若能量分布不均衡（标准差增加），减小 \(V \leftarrow \max(V_{\min}, V \cdot (1-\alpha)\)），更重视均衡性，增加对低能量节点的传输；
-        \item 若出现节点死亡，显著减小 \(V \leftarrow \max(V_{\min}, V \cdot (1-1.5\alpha)\)），优先救活节点。
-    \end{itemize}
-    \item \textbf{趋势恶化预防}：当最近 3 次反馈趋势明显下降（\(\bar{S}_{\text{recent}} < \bar{S} - 1.0\)）且效率过低时，预防性增大 \(V\)；
-    \item \textbf{正反馈微调}：当平均反馈分数 \(\bar{S} > \theta_{\text{sens}}\) 且效率与均衡性均良好时，可轻微减小 \(V\) 以增加吞吐量；
-    \item \textbf{重置机制}：若最近 5 次反馈均为负且 \(V\) 偏离初始值较大，重置 \(V \leftarrow V_{\text{initial}}\)，避免参数漂移。
-\end{enumerate}
-其中 \(\alpha\) 为调整速率（典型值 0.1），\(V_{\min}\) 和 \(V_{\max}\) 为参数边界。
-
-该自适应机制使系统能够根据网络状态的动态变化自动调整 Lyapunov 权重，在效率、均衡性和存活率之间实现动态平衡，进一步提升系统在非平稳环境下的鲁棒性和性能表现。
-
-
-\subsection{小结：机制网络如何推动动态帕累托边界外移}
-
-通过上述四类问题—机制的分析，本文的设计不只是调整算法参数，而是对能量共享系统的制度逻辑进行重构：
-
+\textbf{实现细节说明}：
 \begin{itemize}
-  \item \textbf{价格信号化}（TM1）使节点需求可量化可比较，解决了信息不对称导致的错配；
-  \item \textbf{信息透明化}（TM2）通过 InfoNode 数字孪生大幅降低信息滞后，实现低成本高时效的全局状态获取；
-  \item \textbf{路径治理化}（TM3）引入效率阈值和跳数限制，并构建能量经济学意义的评分函数，治理负外部性；
-  \item \textbf{跨期优化化}（TM4）采用前瞻仿真动态调整时长，实现长远视角下的资源配置；
-
+    \item \textbf{搜索步数}：$N_{\text{steps}}$ 通常设置为10-20，在计算精度和效率之间平衡。
+    \item \textbf{Lyapunov参数}：$V$ 为调节系数，控制损耗惩罚的权重，通常设置为0.5-2.0。
+    \item \textbf{时效惩罚权重}：$w_{\text{aoi}}$ 控制AOEI对时长决策的影响，通常设置为0.1-0.5。
+    \item \textbf{信息奖励权重}：$w_{\text{info}}$ 控制信息收集的激励力度，通常设置为0.2-1.0。
+    \item \textbf{信息状态判断}：通过查询数字孪生账户判断接收节点是否有待上报信息，决定信息奖励的系数。
 \end{itemize}
 
-这些机制相互耦合，构成了一个新的制度性框架，使能量共享无线传感器网络在不改变总能量输入的条件下，实现效率、公平、时效和寿命的同时提升，真正突破静态帕累托前沿，向动态帕累托边界扩展。这种正和博弈的局面为未来的能源共享与自治网络提供了新的理论与实践路径。
+% 图占位：ALDP评分函数随时长变化示意图
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.7\linewidth]{sections/figures/aldp_score_function.png}
+\caption{ALDP评分函数随时长变化示意图。横轴为传输时长，纵轴为综合评分。评分函数综合考虑能量收益、损耗惩罚、时效惩罚和信息奖励，选择得分最高的时长。}
+\label{fig:aldp_score_function}
+\end{figure*}
+
+\noindent\textbf{图~\ref{fig:aldp_score_function} 说明：}图中五条曲线分别对应能量收益、损耗惩罚、时效惩罚、信息奖励以及最终综合得分。随着传输时长增加，能量收益与信息奖励线性增长，但损耗与AoI惩罚也随之放大，导致综合得分呈现“先升后降”的最优点。调度器即通过遍历该评分曲线，挑选峰值对应的$\tau^\star$，实现供能强度与信息捎带之间的动态平衡。
+
+\textbf{3. 最优时长选择}：
+
+选择综合评分最高的时长作为最优传输时长。
+
+\begin{algorithmic}[1]
+\STATE \textbf{输出最优传输时长}
+\RETURN $\tau^*$ \COMMENT{返回最优传输时长}
+\end{algorithmic}
+
+该决策技术源自代码库中的 \emph{DurationAwareLyapunovScheduler} 实现，其核心思想是用 Lyapunov 漂移加罚的方法平衡能量收益、损耗惩罚、时效惩罚和信息奖励。通过动态选择传输时长，它能够在不增加总能量投入的情况下，实现单位能量收益最大化，降低 AoI 增长速度，并鼓励在传输期间收集信息，从而在效率、公平性与寿命等维度同时提升系统性能。
+
+\subsubsection{技术耦合关系}
+
+ALDP自适应时长规划技术作为Cross-Layer Scheduling Layer的核心技术，与IoT Information Layer、IoT Digital-Twin Layer及Opportunistic IoT Routing Layer技术共同构成端到端决策链。具体地，接收节点的能量缺口 $\Delta$ 和信息量来自IoT Digital-Twin Layer的数字孪生账户；IoT Information Layer的AOEI优先级为需求归一化提供了权重，AOEI值作为关键因素被纳入时效惩罚项。该技术的输出 $\tau^*$ 影响了下一次信息年龄和能量分布，从而反馈给IoT Information Layer的优先级信号和触发周期：长时间高效传输会降低接收节点的 AOEI，从而改变后续触发的优先级；同时，传输持续时间影响能量消耗速率，间接影响Opportunistic IoT Routing Layer的路径选择和公平度。此外，门限动态调整过程利用整个网络的运行指标，使得跨期调度在系统反馈下与其他层技术联动，实现全局优化目标的协同演化。传输路径确定后，Opportunistic IoT Routing Layer的EETOR机会主义信息收集技术利用该路径上的中继节点收集沿途节点信息。
+
+\subsection{Opportunistic IoT Routing Layer：EETOR机会主义信息收集技术}
+
+\subsubsection{核心作用与问题解决}
+
+\textbf{Opportunistic IoT Routing Layer负责路径收集与中继决策，优先选择将其他路由的目标节点作为中继节点，形成多跳能量传输路径}。在能量传输过程中，Opportunistic IoT Routing Layer通过EETOR机会主义信息收集技术利用传输路径上的中继节点收集沿途节点的状态信息，将信息收集从独立的网络行为转变为能量传输的"副产品"，实现能量传输与信息收集的深度融合，从根本上整合能量与信息系统，降低通信开销。收集到的信息反馈回IoT Information Layer，更新数字孪生账户状态，形成闭环反馈。
+
+在能量传输过程中，传统方法往往需要独立的通信开销来收集节点状态信息，形成"信息孤岛"。这正是"信息系统独立于能量系统"问题的典型表现：信息收集需要独立的通信开销，导致高昂的通信成本，进而形成能量空洞和网络能量分布失衡。EETOR机会主义信息收集技术通过将能量传输路径上的中继节点作为信息收集点，在能量传输过程中顺带收集沿途节点的状态信息，从根本上整合能量与信息系统，实现能量传输与信息收集的协同，降低通信开销。
+
+\subsubsection{数学模型}
+
+实现EETOR（Energy-Efficient Transfer Opportunistic Routing）机会主义信息收集技术的核心在于：当能量传输路径确定后，将该路径上的中继节点作为信息收集点，沿途收集节点状态信息。设传输路径为 $\mathcal{P} = \{v_0, v_1, \ldots, v_k\}$，其中 $v_0$ 为源节点，$v_k$ 为目标节点，$\{v_1, \ldots, v_{k-1}\}$ 为中继节点。对于路径上的每个节点 $v_i$，其待上报的信息量记为 $B_{v_i}$，信息年龄为 $A_{v_i}$。路径的总信息增益 $G_{\text{info}}(\mathcal{P})$ 定义为沿途可收集的、经过新鲜度加权的信息总量：
+\begin{equation}
+G_{\text{info}}(\mathcal{P}) = \sum_{v_i \in \mathcal{P}} B_{v_i} \cdot e^{-\lambda_A A_{v_i}},
+\end{equation}
+其中 $\lambda_A$ 为信息年龄衰减系数，确保优先收集最新鲜或最陈旧（最急需更新）的信息。
+
+\textbf{路径选择优化}：在路径选择时，不仅考虑能量传输效率，还考虑信息收集增益。定义路径的综合评分函数：
+\begin{equation}
+\text{Score}(\mathcal{P}) = \alpha \cdot \eta_{\mathcal{P}} + (1-\alpha) \cdot \frac{G_{\text{info}}(\mathcal{P})}{G_{\max}},
+\end{equation}
+其中 $\eta_{\mathcal{P}}$ 为路径能量传输效率，$G_{\max}$ 为最大可能的信息增益，$\alpha \in [0,1]$ 为权重参数。优先选择综合评分高的路径，实现能量传输与信息收集的协同优化。
+
+\subsubsection{算法实现}
+
+EETOR机会主义信息收集技术的算法实现包括四个核心步骤：路径选择优化、信息收集、信息聚合与捎带、信息更新。下面详细阐述每个步骤的实现细节。
+
+\textbf{1. 路径选择优化}：
+
+在路径选择时，不仅考虑能量传输效率，还考虑信息收集增益，实现能量传输与信息收集的协同优化。
+
+\begin{algorithmic}[1]
+\REQUIRE 候选路径集合 $\{\mathcal{P}_j\}$，路径效率 $\{\eta_{\mathcal{P}_j}\}$，信息增益 $\{G_{\text{info}}(\mathcal{P}_j)\}$，权重 $\alpha$，最大信息增益 $G_{\max}$
+\ENSURE 最优路径 $\mathcal{P}^*$
+\STATE \textbf{步骤1：初始化}
+\STATE $\mathcal{P}^* \leftarrow \emptyset$ \COMMENT{初始化为空路径}
+\STATE $\text{bestScore} \leftarrow -\infty$ \COMMENT{初始化为负无穷}
+\STATE
+\STATE \textbf{步骤2：计算每条路径的综合评分}
+\FOR{每条候选路径 $\mathcal{P}_j$}
+    \STATE 计算归一化信息增益：$G_{\text{norm},j} \leftarrow G_{\text{info}}(\mathcal{P}_j) / G_{\max}$
+    \STATE 计算综合评分：$\text{score}_j \leftarrow \alpha \cdot \eta_{\mathcal{P}_j} + (1-\alpha) \cdot G_{\text{norm},j}$
+    \STATE \COMMENT{$\alpha$控制能量效率与信息收集的权衡，通常设置为0.6-0.8}
+    \IF{$\text{score}_j > \text{bestScore}$}
+        \STATE $\text{bestScore} \leftarrow \text{score}_j$
+        \STATE $\mathcal{P}^* \leftarrow \mathcal{P}_j$
+    \ENDIF
+\ENDFOR
+\STATE
+\STATE \textbf{步骤3：输出最优路径}
+\RETURN $\mathcal{P}^*$
+\end{algorithmic}
+
+\textbf{实现细节说明}：
+\begin{itemize}
+    \item \textbf{信息增益计算}：对于路径 $\mathcal{P}_j = \{v_0, v_1, \ldots, v_k\}$，信息增益为：
+    \[
+    G_{\text{info}}(\mathcal{P}_j) = \sum_{v_i \in \mathcal{P}_j} B_{v_i} \cdot e^{-\lambda_A A_{v_i}},
+    \]
+    其中 $B_{v_i}$ 为节点 $v_i$ 的待上报信息量，$A_{v_i}$ 为信息年龄，$\lambda_A$ 为衰减系数。
+    \item \textbf{权重参数}：$\alpha$ 控制能量效率与信息收集的权衡，$\alpha$ 越大，越重视能量效率；$\alpha$ 越小，越重视信息收集。
+    \item \textbf{路径效率}：$\eta_{\mathcal{P}_j}$ 为路径的累积能量传输效率，考虑多跳路径损耗。
+\end{itemize}
+
+% 图占位：EETOR路径选择与信息收集示意图
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.8\linewidth]{sections/figures/eetor_path_selection.png}
+\caption{EETOR路径选择与信息收集示意图。路径选择时综合考虑能量传输效率和信息收集增益，在能量传输过程中顺带收集沿途节点信息。}
+\label{fig:eetor_path_selection}
+\end{figure*}
+
+\noindent\textbf{图~\ref{fig:eetor_path_selection} 说明：}示意图展示了两个目标节点的典型能量路径：Target Node1由Source Node1经Relay 1\&2供能，且与Source Node2的直接链路形成路径交织；Target Node2则依赖Target Node1作为中继完成后续传递。沿途紫色文本框表示信息捎带点，橙色箭头标示不同路径的能量损耗，且满足$t' > t$。图中两个目标节点所携带的能量信息整理于表~\ref{tab:eetor_targets}。\textbf{设当前时间戳为$T$，在Target Node2未上报至sink节点前，路由1（routing1）的整体AOEI为$T - t$，路由2（routing2）的整体AOEI为$T - t'$。}基于动态AOEI上限机制，Target Node2拥有更多数据包，因此会先于Target Node1将两条路由上所有节点的能量信息上报至sink节点，以刷新数字孪生系统中的节点能量信息。
+\begin{table}[t]
+    \centering
+    \caption{EETOR示例中两个目标节点携带的能量信息}
+    \label{tab:eetor_targets}
+    \begin{tabular}{lcccc}  % 明确5列：1列“指标”+2列Target1+2列Target2
+    \toprule
+    \multirow{2}{*}{} & \multicolumn{2}{c}{Target Node1} & \multicolumn{2}{c}{Target Node2} \\
+    \cmidrule(lr){2-3} \cmidrule(lr){4-5}  % 二级表头分隔线
+    & 节点 & 时间戳 & 节点 & 时间戳 \\
+    \midrule
+    供能路径 & \multicolumn{2}{l}{Source1$\rightarrow$Relay1$\rightarrow$Relay2$\rightarrow$T1} 
+    & \multicolumn{2}{l}{Source2$\rightarrow$T1$\rightarrow$T2} \\  % 供能路径跨2列
+    \midrule
+    \multirow{6}{*}{能量信息}  % 能量信息共6行，修正\multirow行数
+    & Source Node1 & t & Source Node1 & t \\
+    & Relay Node1 & t & Relay Node1 & t \\
+    & Relay Node2 & t & Relay Node2 &  t \\
+    & Target Node1 & t &  Target Node1 & t \\
+    &  &  & Source Node2 & t' \\
+    &  &  & Target Node1 & t' \\
+    &  &  & Target Node2 & t' \\
+    \bottomrule
+    \end{tabular}
+    \end{table}
+
+\textbf{2. 信息收集}：
+
+当能量传输数据包经过路径上的每个中继节点时，该节点将其本地待上报信息进行压缩和摘要后附加到数据包中。
+
+\begin{algorithmic}[1]
+\REQUIRE 最优路径 $\mathcal{P}^* = \{v_0, v_1, \ldots, v_k\}$，能量传输数据包 $pkt$
+\ENSURE 包含沿途节点信息的数据包 $pkt'$
+\STATE \textbf{步骤1：初始化信息聚合缓冲区}
+\STATE $\text{info\_buffer} \leftarrow \emptyset$ \COMMENT{信息聚合缓冲区}
+\STATE $\text{visited\_nodes} \leftarrow \emptyset$ \COMMENT{已访问节点集合（用于去重）}
+\STATE
+\STATE \textbf{步骤2：沿路径收集信息}
+\FOR{路径上的每个节点 $v_i \in \mathcal{P}^*$}
+    \IF{$v_i \notin \text{visited\_nodes}$}
+        \STATE 获取节点 $v_i$ 的待上报信息：$B_{v_i}, A_{v_i}$
+        \STATE 压缩信息：$B_{v_i}^{\text{compressed}} \leftarrow \text{compress}(B_{v_i})$
+        \STATE 计算信息摘要：$\text{hash}_i \leftarrow \text{hash}(B_{v_i})$
+        \STATE 添加到缓冲区：$\text{info\_buffer} \leftarrow \text{info\_buffer} \cup \{(v_i, B_{v_i}^{\text{compressed}}, A_{v_i}, \text{hash}_i)\}$
+        \STATE $\text{visited\_nodes} \leftarrow \text{visited\_nodes} \cup \{v_i\}$
+    \ENDIF
+\ENDFOR
+\STATE
+\STATE \textbf{步骤3：将信息附加到数据包}
+\STATE $pkt'.\text{info\_payload} \leftarrow \text{info\_buffer}$ \COMMENT{将信息附加到数据包的信息载荷字段}
+\RETURN $pkt'$
+\end{algorithmic}
+
+\textbf{实现细节说明}：
+\begin{itemize}
+    \item \textbf{信息压缩}：使用压缩算法（如gzip、LZ4等）压缩节点信息，减少通信开销。
+    \item \textbf{信息摘要}：使用哈希函数（如MD5、SHA-256等）计算信息摘要，用于去重和完整性校验。
+    \item \textbf{去重机制}：通过 $\text{visited\_nodes}$ 集合避免重复收集同一节点的信息。
+    \item \textbf{数据包结构}：能量传输数据包预留信息载荷字段，用于捎带节点信息。
+\end{itemize}
+
+\textbf{3. 信息聚合与捎带}：
+
+为减少冗余，采用布隆过滤器等机制进行路径内的去重，确保最终到达目标节点的是增量信息。
+
+\begin{algorithmic}[1]
+\REQUIRE 包含沿途节点信息的数据包 $pkt'$，目标节点 $v_k$
+\ENSURE 聚合后的信息 $\text{info\_aggregated}$
+\STATE \textbf{步骤1：初始化布隆过滤器}
+\STATE $\text{bloom\_filter} \leftarrow \text{new BloomFilter}(m, k)$ \COMMENT{$m$为位数组大小，$k$为哈希函数数量}
+\STATE $\text{info\_aggregated} \leftarrow \emptyset$
+\STATE
+\STATE \textbf{步骤2：去重并聚合信息}
+\FOR{数据包中的每条信息 $(v_i, B_{v_i}^{\text{compressed}}, A_{v_i}, \text{hash}_i)$}
+    \IF{$\text{hash}_i \notin \text{bloom\_filter}$}
+        \STATE $\text{bloom\_filter}.\text{add}(\text{hash}_i)$ \COMMENT{添加到布隆过滤器}
+        \STATE $\text{info\_aggregated} \leftarrow \text{info\_aggregated} \cup \{(v_i, B_{v_i}^{\text{compressed}}, A_{v_i})\}$
+    \ENDIF
+\ENDFOR
+\STATE
+\STATE \textbf{步骤3：输出聚合信息}
+\RETURN $\text{info\_aggregated}$
+\end{algorithmic}
+
+\textbf{实现细节说明}：
+\begin{itemize}
+    \item \textbf{布隆过滤器}：使用布隆过滤器进行快速去重，空间复杂度低，但可能存在假阳性（不会出现假阴性）。
+    \item \textbf{参数设置}：布隆过滤器的位数组大小 $m$ 和哈希函数数量 $k$ 根据网络规模和信息量调整。
+    \item \textbf{增量信息}：只保留未收集过的信息，减少通信开销和存储空间。
+\end{itemize}
+
+\textbf{4. 信息更新}：
+
+收集到的信息用于更新数字孪生账户，实现状态同步。
+
+\begin{algorithmic}[1]
+\REQUIRE 聚合后的信息 $\text{info\_aggregated}$，当前时刻 $t$
+\ENSURE 更新后的数字孪生账户状态
+\STATE \textbf{步骤1：解析信息}
+\FOR{每条信息 $(v_i, B_{v_i}^{\text{compressed}}, A_{v_i}) \in \text{info\_aggregated}$}
+    \STATE 解压缩信息：$B_{v_i} \leftarrow \text{decompress}(B_{v_i}^{\text{compressed}})$
+    \STATE 提取节点状态：$(E_i, A_i, I_i) \leftarrow \text{parse}(B_{v_i})$
+    \STATE
+    \STATE \textbf{步骤2：更新数字孪生账户}
+    \STATE 更新能量状态：$\text{DT}[v_i].E(t) \leftarrow E_i$
+    \STATE 更新信息年龄：$\text{DT}[v_i].A(t) \leftarrow A_i$
+    \STATE 更新信息量：$\text{DT}[v_i].I(t) \leftarrow I_i$
+    \STATE 标记为实测值：$\text{DT}[v_i].\text{is\_estimated} \leftarrow \text{False}$
+    \STATE 更新最后更新时间：$\text{DT}[v_i].t_{\text{last\_update}} \leftarrow t$
+    \STATE
+    \STATE \textbf{步骤3：更新历史记录}
+    \STATE 将 $(t, E_i, A_i, I_i)$ 添加到 $\text{DT}[v_i].\text{history}$
+\ENDFOR
+\STATE
+    \STATE \textbf{步骤4：触发后续处理}
+    \STATE 触发IoT Information Layer的AOEI能量信息年龄优先级技术重新计算优先级信号
+    \STATE 触发Cross-Layer Scheduling Layer的ALDP自适应时长规划技术重新评估能量传输需求
+\end{algorithmic}
+
+通过这种方式，EETOR 将信息收集从一个独立的网络行为，转变为能量传输的"副产品"，在能量传输过程中顺带收集沿途节点信息，实现能量传输与信息收集的协同，降低通信开销，并最大化网络透明度。
+
+\subsubsection{技术耦合关系}
+
+EETOR机会主义信息收集技术作为Opportunistic IoT Routing Layer的核心技术，建立在IoT Information Layer的AOEI优先级、IoT Digital-Twin Layer的数字孪生账户和Cross-Layer Scheduling Layer的ALDP自适应时长规划技术之上：在IoT Information Layer的优先级触发和Cross-Layer Scheduling Layer的时长规划确定传输路径后，EETOR利用该路径上的中继节点收集沿途节点信息。路径上各节点的状态信息（包括能量水平和信息量）来源于IoT Digital-Twin Layer的数字孪生账户缓存。能量传输和信息上报同时进行，收集到的信息进一步完善IoT Digital-Twin Layer的数字孪生账户数据，并反馈回IoT Information Layer更新优先级信号。通过将信息收集与能量传输绑定，Opportunistic IoT Routing Layer与IoT Information Layer、IoT Digital-Twin Layer、Cross-Layer Scheduling Layer等技术形成互补，在降低通信开销的同时提升网络透明度，共同推动网络目标的协同达成。
+
+\subsection{小结：IoT-centric架构共同实现信息与能量双生系统}
+
+% 图 \ref{fig:coupling_detailed} 以IoT-centric架构形式展示了本文的系统设计，并刻画了各层之间的前向驱动、反馈调节与跨层耦合关系。通过上述IoT-centric架构的分析可以看到，
+本文的设计并非对传统算法进行局部调参，而是从系统设计层面对能量共享网络的运行逻辑进行整体重构，以延长网络寿命和平衡能量分布为核心目标：
+
+\begin{itemize}
+\item \textbf{IoT Information Layer}：通过AOEI能量信息年龄优先级技术持续监测各节点的能量信息年龄，系统维护一个动态AOI上限，当节点的能量信息年龄达到该上限时触发能量共享需求信号，同时将AOEI值作为关键因素纳入多个奖励函数，用于优化能量传输决策和路径选择；
+\item \textbf{IoT Digital-Twin Layer}：通过数字孪生状态同步技术为每个物理节点维护一个数字孪生账户，在节点的真实信息尚未上报到sink节点之前，通过理论能量计算维护虚拟节点能量表，实现低通信开销下的实时高保真状态同步；
+\item \textbf{Cross-Layer Scheduling Layer}：基于AOEI优先级信号和数字孪生账户提供的状态信息，采用ALDP自适应时长规划技术，通过自适应参数的Lyapunov优化进行前瞻性传输能量时长规划，依据能量收益、损耗惩罚、信息时效惩罚和信息增益奖励四个因素对候选传输时长进行打分，动态选择综合收益最大的传输时长，实现能量与信息的协同优化；
+\item \textbf{Opportunistic IoT Routing Layer}：负责路径收集与中继决策，优先选择将其他路由的目标节点作为中继节点，形成多跳能量传输路径，通过EETOR机会主义信息收集技术利用传输路径上的中继节点收集沿途节点的状态信息，将信息收集从独立的网络行为转变为能量传输的"副产品"；
+\item \textbf{Edge Visualization Layer}：从IoT Digital-Twin Layer获取聚合状态，实时监控网络寿命、能量分布、网络状态与能量变化等关键指标。
+\end{itemize}
+
+% 图中的正向箭头展示了信息流与能量流的因果传播：IoT Information Layer驱动IoT Digital-Twin Layer、IoT Digital-Twin Layer支持Cross-Layer Scheduling Layer、Cross-Layer Scheduling Layer决定Opportunistic IoT Routing Layer、Opportunistic IoT Routing Layer产生新状态；而反馈箭头则表明系统状态在下一周期重新调整IoT Information Layer与IoT Digital-Twin Layer，实现自洽的动态闭环。同时，虚线横向箭头展现了关键的跨层耦合：如AOEI值纳入奖励函数影响调度决策、数字孪生账户状态支配时长决策、路径信息收集反向更新数字孪生账户等，从而形成一个互补而非单向依赖的系统体系。
+
+这些技术在IoT-centric架构中的联动不仅提升节点间能量分配的效率，也同时增强能量平衡性与整体寿命。在不改变能量输入总量的前提下，它们通过协同互动，使系统能够同时实现网络寿命的显著延长和能量分布的充分平衡，形成一种"协同增益"式的系统增益格局。\textbf{IoT-centric处理架构（IoT Information Layer、IoT Digital-Twin Layer、Cross-Layer Scheduling Layer、Opportunistic IoT Routing Layer、Edge Visualization Layer）共同实现了信息与能量双生系统}：IoT Information Layer通过AOEI技术控制能量信息上报时机，并将AOEI值纳入奖励函数；IoT Digital-Twin Layer通过数字孪生状态同步技术维护虚拟节点能量表，减少信息滞后影响；Cross-Layer Scheduling Layer通过ALDP技术实现前瞻性传输时长规划；Opportunistic IoT Routing Layer通过EETOR技术实现能量传输与信息收集的深度融合；Edge Visualization Layer提供实时监控与反馈。这IoT-centric架构相互耦合、协同工作，从根本上整合了能量与信息系统，解决了"信息系统独立于能量系统"这一核心问题，为未来自治型能量共享网络提供了新的理论框架与可实施路径。
+
+% \begin{figure*}[t]
+% \centering
+% \resizebox{0.8\textwidth}{!}{ % 将图像宽度设为整个双栏的宽度
+% \begin{tikzpicture}[
+%     module/.style={rectangle, rounded corners, draw=black, very thick,
+%                    minimum width=4.8cm, minimum height=2cm,
+%                    align=center, fill=gray!10},  % 使用稳重的蓝色背景，适当的淡蓝色
+%     arrow/.style={->, very thick, draw=black!80},  % 设置箭头颜色为深灰色，稳重
+%     var/.style={font=\normalsize, align=center},
+%     feedback/.style={->, thick, draw=green!50!black, dashed},  % 反馈箭头使用深绿色，且为虚线
+%     cross/.style={->, thick, draw=orange!80!black, dashed}, % 横向箭头使用橙色
+%     background/.style={fill=gray!10, rounded corners}  % 设置背景色为浅灰色
+% ]
+
+% %---------------------------------
+% % Nodes (top-down)
+% %---------------------------------
+
+% \node[module] (M1) {
+%     \textbf{IoT Information Layer：AOEI 能量信息年龄优先级技术}\\[1mm]
+%     动态AOI上限触发能量共享需求信号\\
+%     AOEI值纳入奖励函数
+% };
+
+% \node[module, below=1.4cm of M1] (M2) {
+%     \textbf{IoT Digital-Twin Layer：数字孪生状态同步技术}\\[1mm]
+%     理论能量计算维护虚拟节点能量表\\
+%     利用能量传输路径同步状态
+% };
+
+% \node[module, below=1.4cm of M2] (M3) {
+%     \textbf{Cross-Layer Scheduling Layer：ALDP 自适应时长规划技术}\\[1mm]
+%     前瞻性传输能量时长规划\\
+%     能量与信息协同优化
+% };
+
+% \node[module, below=1.4cm of M3] (M4) {
+%     \textbf{Opportunistic IoT Routing Layer：EETOR 机会主义信息收集技术}\\[1mm]
+%     能量传输路径收集信息\\
+%     信息收集作为能量传输的副产品
+% };
+
+% \node[module, below=1.6cm of M4] (FB) {
+%     \textbf{网络新状态}\\[1mm]
+%     $E'(t)$, $A'(t)$, $I'(t)$\\
+%     → 更新数字孪生账户 → 更新优先级 → 再触发下一周期
+% };
+
+% %---------------------------------
+% % Forward arrows
+% %---------------------------------
+
+% \draw[arrow] (M1) -- node[var, right]{优先级信号\\$P_i(t)$} (M2);
+% \draw[arrow] (M2) -- node[var, right]{全局状态 $S(t)$} (M3);
+% \draw[arrow] (M3) -- node[var, right]{$\tau^*$, 传输路径 $\mathcal{P}$} (M4);
+% \draw[arrow] (M4) -- node[var, right]{$G_{\text{info}}$, 更新状态} (FB);
+
+% %---------------------------------
+% % Feedback arrows
+% %---------------------------------
+% \draw[feedback] (FB.west) -- ++(-4,0) |- node[var, left]{新能量 $E'$\\新AoI $A'$} (M1.west);
+% \draw[feedback] (FB.east) -- ++(3,0) |- node[var, right]{新状态同步} (M2.east);
+
+% %---------------------------------
+% % Lateral arrows (cross-layer coupling)
+% %---------------------------------
+
+% % From M1 to M3: prices influence routing
+% \draw[cross] (M1.east) -- ++(2,0) |- node[var, right]{AOEI值纳入\\奖励函数} (M3.east);
+
+% % From M2 to M3: AoI and info volume affect scheduling
+% \draw[cross] (M2.west) -- ++(-2,0) |- node[var, left]{AoI, 信息量\\影响时长决策} (M3.west);
+
+% % from M4 to M2: collected info updates 数字孪生账户
+% \draw[cross] (M4.east) -- ++(1,0) |- node[var, right]{收集的信息\\更新状态} (M2.east);
+
+% \end{tikzpicture}
+% }
+% \caption{能量共享无线传感器网络的IoT-centric架构耦合关系图。IoT-centric架构（IoT Information Layer—IoT Digital-Twin Layer—Cross-Layer Scheduling Layer—Opportunistic IoT Routing Layer—Edge Visualization Layer）通过跨层变量（优先级、状态、时长、信息增益）实现闭环协同，在延长网络寿命和平衡能量分布两个核心目标上同时优化，共同实现信息与能量双生系统。}
+% \label{fig:coupling_detailed}
+% \end{figure*}

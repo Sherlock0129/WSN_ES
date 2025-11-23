@@ -418,21 +418,36 @@ def run_simulation_with_config(
     else:
         network.adcr_link = None
 
+    physical_center = network.get_physical_center()
+    nodes_for_init = (network.get_regular_nodes() if hasattr(network, "get_regular_nodes")
+                      else network.nodes)
+    virtual_center = None
+
+    def ensure_virtual_center():
+        nonlocal virtual_center
+        if virtual_center is None:
+            if physical_center:
+                initial_pos = tuple(physical_center.position)
+            else:
+                initial_pos = (
+                    sum(n.position[0] for n in nodes_for_init) / len(nodes_for_init),
+                    sum(n.position[1] for n in nodes_for_init) / len(nodes_for_init),
+                )
+            virtual_center = cfg.create_virtual_center(initial_position=initial_pos, enable_logging=True)
+            virtual_center.initialize_node_info(network.nodes, initial_time=0)
+        return virtual_center
+
     if cfg.path_collector_config.enable_path_collector:
-        physical_center = network.get_physical_center()
-        if physical_center:
-            initial_pos = tuple(physical_center.position)
-        else:
-            nodes = network.get_regular_nodes() if hasattr(network, "get_regular_nodes") else network.nodes
-            initial_pos = (
-                sum(n.position[0] for n in nodes) / len(nodes),
-                sum(n.position[1] for n in nodes) / len(nodes),
-            )
-        virtual_center = VirtualCenter(initial_position=initial_pos, enable_logging=True)
-        virtual_center.initialize_node_info(network.nodes, initial_time=0)
-        network.path_info_collector = cfg.create_path_collector(virtual_center, physical_center)
+        vc_inst = ensure_virtual_center()
+        network.path_info_collector = cfg.create_path_collector(vc_inst, physical_center)
     else:
         network.path_info_collector = None
+
+    if cfg.periodic_collector_config.enable_periodic_collector:
+        vc_inst = ensure_virtual_center()
+        network.periodic_info_collector = cfg.create_periodic_collector(vc_inst, physical_center)
+    else:
+        network.periodic_info_collector = None
 
     scheduler = create_scheduler(cfg, network)
     if hasattr(network, "path_info_collector") and network.path_info_collector is not None:
@@ -443,9 +458,11 @@ def run_simulation_with_config(
     simulation = cfg.create_energy_simulation(network, scheduler)
     session_dir = Path(simulation.session_dir)
 
+    archive_path = session_dir / "virtual_center_node_info.csv"
     if hasattr(network, "path_info_collector") and network.path_info_collector is not None:
-        archive_path = session_dir / "virtual_center_node_info.csv"
         network.path_info_collector.vc.archive_path = str(archive_path)
+    if hasattr(network, "periodic_info_collector") and network.periodic_info_collector is not None:
+        network.periodic_info_collector.vc.archive_path = str(archive_path)
 
     simulation.simulate()
 

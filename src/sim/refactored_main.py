@@ -47,7 +47,7 @@ def create_scheduler(config_manager: ConfigManager, network):
     scheduler_type = config_manager.scheduler_config.scheduler_type
     scheduler_params = config_manager.get_scheduler_params()
     
-    # 获取节点信息管理器（从ADCR或PathCollector）
+    # 获取节点信息管理器（从ADCR、PathCollector或PeriodicCollector）
     node_info_manager = None
     if hasattr(network, 'adcr_link') and network.adcr_link is not None:
         node_info_manager = network.adcr_link.vc
@@ -55,9 +55,11 @@ def create_scheduler(config_manager: ConfigManager, network):
     elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
         node_info_manager = network.path_info_collector.vc
         logger.info("调度器使用PathCollector的节点信息管理器")
+    elif hasattr(network, 'periodic_info_collector') and network.periodic_info_collector is not None:
+        node_info_manager = network.periodic_info_collector.vc
+        logger.info("调度器使用PeriodicCollector的节点信息管理器")
     else:
         # 如果没有信息管理器，创建一个独立的
-        from info_collection.physical_center import NodeInfoManager
         physical_center = network.get_physical_center() if hasattr(network, 'get_physical_center') else None
         if physical_center:
             initial_pos = tuple(physical_center.position)
@@ -67,7 +69,7 @@ def create_scheduler(config_manager: ConfigManager, network):
                 sum(n.position[0] for n in nodes) / len(nodes),
                 sum(n.position[1] for n in nodes) / len(nodes)
             )
-        node_info_manager = NodeInfoManager(initial_position=initial_pos, enable_logging=False)
+        node_info_manager = config_manager.create_virtual_center(initial_position=initial_pos, enable_logging=False)
         node_info_manager.initialize_node_info(network.nodes, initial_time=0)
         logger.info("调度器创建了独立的节点信息管理器")
     
@@ -162,7 +164,12 @@ def create_scheduler(config_manager: ConfigManager, network):
     logger.info(f"创建调度器: {scheduler_type}")
     logger.info("=" * 60)
     
-    if scheduler_type == "LyapunovScheduler":
+    if scheduler_type == "ThresholdScheduler":
+        from scheduling.schedulers import ThresholdScheduler
+        scheduler = ThresholdScheduler(**scheduler_params)
+        logger.info("使用极简阈值法调度器 (ThresholdScheduler)")
+    elif scheduler_type == "LyapunovScheduler":
+
         scheduler = LyapunovScheduler(**scheduler_params)
         logger.info("使用标准 Lyapunov 调度器")
     elif scheduler_type == "AdaptiveLyapunovScheduler":
@@ -376,40 +383,47 @@ def _run_single_simulation(config_manager: ConfigManager, config_file: str = Non
         logger.info("ADCR链路层已禁用")
         network.adcr_link = None
     
-    # 2.6. 创建路径信息收集器（可选）
+    # 2.6. 创建信息收集器（路径 / 定期）
+    vc = None
+
+    def ensure_virtual_center():
+        nonlocal vc
+        if network.adcr_link is not None:
+            vc = network.adcr_link.vc
+            return vc
+        if vc is None:
+            physical_center = network.get_physical_center()
+            if physical_center:
+                initial_pos = tuple(physical_center.position)
+            else:
+                nodes = network.get_regular_nodes() if hasattr(network, 'get_regular_nodes') else network.nodes
+                initial_pos = (
+                    sum(n.position[0] for n in nodes) / len(nodes),
+                    sum(n.position[1] for n in nodes) / len(nodes)
+                )
+            vc = config_manager.create_virtual_center(initial_position=initial_pos, enable_logging=True)
+            vc.initialize_node_info(network.nodes, initial_time=0)
+            logger.info(f"创建独立虚拟中心，位置: ({initial_pos[0]:.3f}, {initial_pos[1]:.3f})")
+        return vc
+
     if config_manager.path_collector_config.enable_path_collector:
         logger.info("创建路径信息收集器...")
         with handle_exceptions("路径信息收集器创建", recoverable=True):
-            # 确保有虚拟中心（来自ADCR或独立创建）
-            if network.adcr_link is not None:
-                # 使用ADCR的虚拟中心
-                vc = network.adcr_link.vc
-                logger.info("使用ADCR的虚拟中心")
-            else:
-                # 创建独立的虚拟中心
-                from info_collection.physical_center import VirtualCenter
-                # 获取物理中心节点位置（如果启用）
-                physical_center = network.get_physical_center()
-                if physical_center:
-                    initial_pos = tuple(physical_center.position)
-                else:
-                    # 如果没有物理中心，使用几何中心
-                    nodes = network.get_regular_nodes() if hasattr(network, 'get_regular_nodes') else network.nodes
-                    initial_pos = (
-                        sum(n.position[0] for n in nodes) / len(nodes),
-                        sum(n.position[1] for n in nodes) / len(nodes)
-                    )
-                vc = VirtualCenter(initial_position=initial_pos, enable_logging=True)
-                vc.initialize_node_info(network.nodes, initial_time=0)
-                logger.info(f"创建独立虚拟中心，位置: ({initial_pos[0]:.3f}, {initial_pos[1]:.3f})")
-            
-            # 创建路径信息收集器，传递物理中心节点
             physical_center = network.get_physical_center()
-            network.path_info_collector = config_manager.create_path_collector(vc, physical_center)
+            network.path_info_collector = config_manager.create_path_collector(ensure_virtual_center(), physical_center)
             logger.info(f"路径信息收集器创建完成 (物理中心: {'ID=' + str(physical_center.node_id) if physical_center else '未启用'})")
     else:
         logger.info("路径信息收集器已禁用")
         network.path_info_collector = None
+
+    if config_manager.periodic_collector_config.enable_periodic_collector:
+        logger.info("创建定期上报信息收集器...")
+        with handle_exceptions("定期信息收集器创建", recoverable=True):
+            physical_center = network.get_physical_center()
+            network.periodic_info_collector = config_manager.create_periodic_collector(ensure_virtual_center(), physical_center)
+            logger.info(f"定期信息收集器创建完成 (物理中心: {'ID=' + str(physical_center.node_id) if physical_center else '未启用'})")
+    else:
+        network.periodic_info_collector = None
     
     # 3. 创建调度器
     logger.info("创建调度器...")
@@ -434,12 +448,17 @@ def _run_single_simulation(config_manager: ConfigManager, config_file: str = Non
             # ADCR的虚拟中心
             network.adcr_link.set_archive_path(simulation.session_dir)
             logger.info("虚拟中心归档路径已设置（ADCR）")
-        elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
-            # PathCollector的独立虚拟中心
-            import os
-            archive_path = os.path.join(simulation.session_dir, "virtual_center_node_info.csv")
-            network.path_info_collector.vc.archive_path = archive_path
-            logger.info(f"虚拟中心归档路径已设置（PathCollector）: {archive_path}")
+        else:
+            if hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+                import os
+                archive_path = os.path.join(simulation.session_dir, "virtual_center_node_info.csv")
+                network.path_info_collector.vc.archive_path = archive_path
+                logger.info(f"虚拟中心归档路径已设置（PathCollector）: {archive_path}")
+            if hasattr(network, 'periodic_info_collector') and network.periodic_info_collector is not None:
+                import os
+                archive_path = os.path.join(simulation.session_dir, "virtual_center_node_info.csv")
+                network.periodic_info_collector.vc.archive_path = archive_path
+                logger.info(f"虚拟中心归档路径已设置（PeriodicCollector）: {archive_path}")
         
         simulation.simulate()
         logger.info("仿真完成")
@@ -455,9 +474,13 @@ def _run_single_simulation(config_manager: ConfigManager, config_file: str = Non
         if hasattr(network, 'adcr_link') and network.adcr_link is not None:
             network.adcr_link.vc.force_flush_archive()
             logger.info("虚拟中心归档已保存（ADCR）")
-        elif hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
-            network.path_info_collector.vc.force_flush_archive()
-            logger.info("虚拟中心归档已保存（PathCollector）")
+        else:
+            if hasattr(network, 'path_info_collector') and network.path_info_collector is not None:
+                network.path_info_collector.vc.force_flush_archive()
+                logger.info("虚拟中心归档已保存（PathCollector）")
+            if hasattr(network, 'periodic_info_collector') and network.periodic_info_collector is not None:
+                network.periodic_info_collector.vc.force_flush_archive()
+                logger.info("虚拟中心归档已保存（PeriodicCollector）")
     
     # 5. 生成可视化
     if config_manager.simulation_config.enable_visualization:

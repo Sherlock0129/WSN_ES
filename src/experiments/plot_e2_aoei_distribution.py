@@ -11,12 +11,12 @@ from matplotlib import rcParams
 # Style configuration
 plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
-rcParams['font.size'] = 20
-rcParams['axes.labelsize'] = 20
-rcParams['xtick.labelsize'] = 18
-rcParams['ytick.labelsize'] = 18
-rcParams['legend.fontsize'] = 18
-rcParams['figure.titlesize'] = 22
+rcParams['font.size'] = 22
+rcParams['axes.labelsize'] = 22
+rcParams['xtick.labelsize'] = 20
+rcParams['ytick.labelsize'] = 20
+rcParams['legend.fontsize'] = 20
+rcParams['figure.titlesize'] = 24
 
 def load_aoei_data(csv_path: str) -> pd.Series:
     """Loads the AOEI column from the virtual_center_node_info.csv file."""
@@ -63,9 +63,9 @@ def plot_e2_aoei_distribution(
     ax.axvline(mean_no_reward, color='#A23B72', linestyle='--', linewidth=2, label=f'Mean (No Reward): {mean_no_reward:.1f}')
 
     # Set labels, title, and legend
-    ax.set_xlabel('Age of Energy Information (AOEI, minutes)', fontsize=20, fontweight='bold')
-    ax.set_ylabel('Density', fontsize=20, fontweight='bold')
-    ax.set_title('E2: AOEI Distribution with and without Information Reward', fontsize=22, fontweight='bold', pad=20)
+    ax.set_xlabel('Age of Energy Information (AOEI, minutes)', fontsize=22, fontweight='bold')
+    ax.set_ylabel('Density', fontsize=22, fontweight='bold')
+    ax.set_title('E2: AOEI Distribution with and without Information Reward', fontsize=24, fontweight='bold', pad=24)
     ax.legend(loc='upper right', framealpha=0.9)
     ax.grid(True, alpha=0.3, linestyle='--')
     ax.set_xlim(left=0)

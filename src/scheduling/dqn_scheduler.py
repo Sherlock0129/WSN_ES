@@ -245,12 +245,29 @@ class DQNAgent:
         }, filepath)
     
     def load(self, filepath):
-        """加载模型"""
+        """加载模型，自动对齐网络输入维度并重建结构（如需）
+        返回：加载后的 state_dim
+        """
         checkpoint = torch.load(filepath, map_location=self.device)
+        # 从权重推断维度
+        q_w1 = checkpoint['q_network']['fc1.weight']
+        expected_state_dim = q_w1.shape[1]
+        hidden_dim = checkpoint['q_network']['fc2.weight'].shape[0]
+        action_dim = checkpoint['q_network']['fc4.weight'].shape[0]
+        # 若当前网络输入维度不同，重建网络结构
+        current_in = self.q_network.fc1.in_features if hasattr(self.q_network, 'fc1') else None
+        if current_in != expected_state_dim or action_dim != self.action_dim:
+            self.action_dim = int(action_dim)
+            self.q_network = QNetwork(expected_state_dim, self.action_dim, hidden_dim).to(self.device)
+            self.target_network = QNetwork(expected_state_dim, self.action_dim, hidden_dim).to(self.device)
+            self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.optimizer.param_groups[0]['lr'] if self.optimizer else 1e-3)
+        # 加载权重
         self.q_network.load_state_dict(checkpoint['q_network'])
         self.target_network.load_state_dict(checkpoint['target_network'])
-        self.optimizer.load_state_dict(checkpoint['optimizer'])
+        if 'optimizer' in checkpoint:
+            self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.epsilon = checkpoint.get('epsilon', self.epsilon_end)
+        return int(expected_state_dim)
 
 
 # ==================== DQN Scheduler ====================
@@ -457,9 +474,24 @@ class DQNScheduler(BaseScheduler):
         # 计算当前状态
         current_state = self._compute_state(network, t)
         
+        # 初始化/对齐状态维度（若已加载模型，可能要求特定 state_dim）
+        def _align_state_dim(state: np.ndarray, target_dim: int) -> np.ndarray:
+            if len(state) == target_dim:
+                return state
+            elif len(state) > target_dim:
+                return state[:target_dim]
+            else:
+                pad = np.zeros(target_dim - len(state), dtype=state.dtype)
+                return np.concatenate([state, pad])
+
         # 初始化DQN智能体（第一次调用时）
         if self.agent is None:
-            self.state_dim = len(current_state)
+            # 若之前通过 load_model 指定了 state_dim，则优先使用；否则按当前计算
+            if self.state_dim is None:
+                self.state_dim = len(current_state)
+            else:
+                # 对齐当前 state 到期望维度
+                current_state = _align_state_dim(current_state, self.state_dim)
             self.agent = DQNAgent(
                 state_dim=self.state_dim,
                 action_dim=self.action_dim,
@@ -471,6 +503,14 @@ class DQNScheduler(BaseScheduler):
                 epsilon_end=self.epsilon_end,
                 epsilon_decay=self.epsilon_decay
             )
+        else:
+            # 若已有 agent，则将 state 对齐到 agent 网络的输入维度（更稳妥）
+            try:
+                target_dim = int(self.agent.q_network.fc1.in_features)
+            except Exception:
+                target_dim = int(self.state_dim or len(current_state))
+            current_state = _align_state_dim(current_state, target_dim)
+            self.state_dim = target_dim
         
         # 获取节点信息
         info_nodes = self.nim.get_info_nodes()
@@ -596,10 +636,15 @@ class DQNScheduler(BaseScheduler):
             print(f"[DQN] 模型已保存到: {filepath}")
     
     def load_model(self, filepath):
-        """加载DQN模型"""
+        """加载DQN模型，并同步调度器的 state_dim 到模型输入维度"""
         if self.agent is not None:
-            self.agent.load(filepath)
-            print(f"[DQN] 模型已加载: {filepath}")
+            loaded_state_dim = self.agent.load(filepath)
+            # 同步到调度器，便于后续对齐当前计算的状态向量
+            try:
+                self.state_dim = int(loaded_state_dim)
+            except Exception:
+                pass
+            print(f"[DQN] 模型已加载: {filepath} | state_dim={self.state_dim}")
     
     def get_training_stats(self):
         """获取训练统计信息"""

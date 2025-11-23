@@ -1,7 +1,7 @@
 """
 E3 Figure 2: Feedback score and weak-node service coverage comparison
 
-- Input: three experiment directories (opportunistic, direct report, ADCR)
+- Input: two experiment directories (opportunistic, ADCR)
 - Data needed per directory:
   * simulation_statistics.json -> statistics.feedback.avg_score
   * virtual_center_node_info.csv (or simulation_results.csv) -> node energy to identify weak nodes
@@ -37,12 +37,12 @@ from matplotlib import rcParams
 # Style
 plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
-rcParams['font.size'] = 20
-rcParams['axes.labelsize'] = 20
-rcParams['xtick.labelsize'] = 18
-rcParams['ytick.labelsize'] = 18
-rcParams['legend.fontsize'] = 18
-rcParams['figure.titlesize'] = 22
+rcParams['font.size'] = 26
+rcParams['axes.labelsize'] = 26
+rcParams['xtick.labelsize'] = 22
+rcParams['ytick.labelsize'] = 22
+rcParams['legend.fontsize'] = 24
+rcParams['figure.titlesize'] = 30
 
 # ------------------------ IO helpers ------------------------
 
@@ -230,11 +230,10 @@ def compute_weak_coverage(session_dir: str, bottom_ratio: float = 0.2, debug: bo
 # ------------------------ Plot ------------------------
 
 def plot_e3_feedback_fairness(opportunistic_dir: str,
-                               direct_dir: str,
                                adcr_dir: str,
                                output_path: str = 'paper/figures/e3_feedback_fairness.png') -> None:
-    methods = ['Opportunistic', 'Direct Report', 'ADCR']
-    dirs = [opportunistic_dir, direct_dir, adcr_dir]
+    methods = ['Opportunistic', 'ADCR']
+    dirs = [opportunistic_dir, adcr_dir]
 
     feedback_avgs: List[Optional[float]] = []
     coverage_rates: List[Optional[float]] = []
@@ -255,18 +254,19 @@ def plot_e3_feedback_fairness(opportunistic_dir: str,
     color1 = '#2E86AB'
     bars1 = ax1.bar(x - width/2, y1, width, label='Avg Feedback Score',
                     color=color1, alpha=0.85, edgecolor='black', linewidth=1.5)
-    ax1.set_ylabel('Average Feedback Score', fontsize=20, fontweight='bold', color=color1)
-    ax1.tick_params(axis='y', labelcolor=color1)
+    ax1.set_ylabel('Average Feedback Score', fontsize=26, fontweight='bold', color=color1)
+    ax1.tick_params(axis='x', labelsize=22)
+    ax1.tick_params(axis='y', labelsize=22, labelcolor=color1)
     ax1.set_xticks(x)
-    ax1.set_xticklabels(methods)
+    ax1.set_xticklabels(methods, fontsize=22)
     ax1.grid(True, alpha=0.3, linestyle='--', axis='y')
 
     ax2 = ax1.twinx()
     color2 = '#A23B72'
     bars2 = ax2.bar(x + width/2, y2, width, label='Weak-node Coverage (%)',
                     color=color2, alpha=0.85, edgecolor='black', linewidth=1.5)
-    ax2.set_ylabel('Weak-node Coverage (%)', fontsize=20, fontweight='bold', color=color2)
-    ax2.tick_params(axis='y', labelcolor=color2)
+    ax2.set_ylabel('Weak-node Coverage (%)', fontsize=26, fontweight='bold', color=color2)
+    ax2.tick_params(axis='y', labelsize=22, labelcolor=color2)
 
     def autolabel(bars, ax, fmt: str):
         for b in bars:
@@ -275,18 +275,18 @@ def plot_e3_feedback_fairness(opportunistic_dir: str,
             ax.annotate(label,
                         xy=(b.get_x() + b.get_width()/2, 0 if np.isnan(h) else h),
                         xytext=(0, 3), textcoords='offset points',
-                        ha='center', va='bottom', fontsize=16, fontweight='bold')
+                        ha='center', va='bottom', fontsize=20, fontweight='bold')
 
     autolabel(bars1, ax1, '{:.2f}')
     autolabel(bars2, ax2, '{:.0f}')
 
-    fig.suptitle('E3: Feedback Score and Weak-node Service Coverage', fontsize=22, fontweight='bold', y=1.02)
+    fig.suptitle('E3: Feedback Score and Weak-node Service Coverage', fontsize=30, fontweight='bold', y=1.02)
     handles = [bars1[0], bars2[0]]
     labels = ['Avg Feedback Score', 'Weak-node Coverage (%)']
-    fig.legend(handles, labels, loc='upper center', ncol=2, fontsize=18,
-               framealpha=0.9, bbox_to_anchor=(0.5, 0.96))
+    fig.legend(handles, labels, loc='upper center', ncol=2, fontsize=24,
+               framealpha=0.9, bbox_to_anchor=(0.5, 0.97))
 
-    plt.tight_layout(rect=[0, 0, 1, 0.9])
+    plt.tight_layout(rect=[0, 0, 1, 0.92])
 
     out_dir = os.path.dirname(output_path)
     if out_dir and not os.path.exists(out_dir):
@@ -305,10 +305,9 @@ if __name__ == '__main__':
 
     # Experiment data directories
     opportunistic = os.path.join(data_base_dir, "20251113_195332_exp3_baseline_opportunistic")
-    direct = os.path.join(data_base_dir, "20251113_195613_exp3_direct_report")
-    adcr = os.path.join(data_base_dir, "20251113_195454_exp3_adcr")
+    adcr = os.path.join(data_base_dir, "20251116_230231_exp3_adcr")
 
     # Output path (relative to project root)
     output_path = os.path.join(project_root, "paper", "figures", "e3_feedback_fairness.png")
 
-    plot_e3_feedback_fairness(opportunistic, direct, adcr, output_path=output_path)
+    plot_e3_feedback_fairness(opportunistic, adcr, output_path=output_path)
