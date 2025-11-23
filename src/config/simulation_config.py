@@ -127,8 +127,8 @@ class SimulationConfig:
     enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
 
     # 智能被动传能参数
-    passive_mode: bool = False          # 是否启用智能被动传能模式（False为定时主动传能）
-    check_interval: int = 1000                # 智能检查间隔（分钟）
+    passive_mode: bool = True         # 是否启用智能被动传能模式（False为定时主动传能）
+    check_interval: int = 1               # 智能检查间隔（分钟）
     critical_ratio: float = 0.2             # 低能量节点临界比例（0-1）
     energy_variance_threshold: float = 0.05  # 能量方差阈值，超过则触发传能
     cooldown_period: int = 0               # 传能冷却期（分钟），避免频繁触发
@@ -374,7 +374,7 @@ class EETORConfig:
     sparse_network_range: float = 10.0      # 稀疏网络使用较大的通信范围
     
     # 信息感知路由参数
-    enable_info_aware_routing: bool = False  # 是否启用信息感知路由
+    enable_info_aware_routing: bool = True  # 是否启用信息感知路由
     info_reward_factor: float = 0.2          # 信息奖励系数（0~1），信息量大的节点优先选择
     # 注意：max_info_wait_time 和 min_info_volume_threshold 在 PathCollectorConfig 中配置
 
@@ -396,8 +396,8 @@ class PathCollectorConfig:
     """
     
     # 基本开关
-    enable_path_collector: bool = False  # 是否启用路径信息收集器
-    replace_adcr: bool = False  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
+    enable_path_collector: bool = True  # 是否启用路径信息收集器
+    replace_adcr: bool = True  # 是否替代ADCR（如果True，ADCR仅做聚类不更新虚拟中心）
     
     # 能量消耗模式
     energy_mode: str = "full"  # 能量消耗模式："free"（零能耗，默认）
@@ -415,14 +415,14 @@ class PathCollectorConfig:
     use_solar_model: bool = True  # 是否使用太阳能模型进行估算
     
     # 机会主义信息传递参数
-    enable_opportunistic_info_forwarding: bool = False  # 是否启用机会主义信息传递
-    enable_delayed_reporting: bool = False               # 是否启用延迟上报（False为立即上报）
+    enable_opportunistic_info_forwarding: bool = True  # 是否启用机会主义信息传递
+    enable_delayed_reporting: bool = True               # 是否启用延迟上报（False为立即上报）
     max_wait_time: int = 500                              # 最大等待时间（分钟），超时强制上报（固定模式或自适应模式的基础值）
     min_info_volume_threshold: int = 1                   # 最小信息量阈值（节点数），低于此值不等待
     max_info_volume: int = 1000000                         # 信息量最大值（bits），超过此值强制上报，None表示无限制
     
     # 自适应等待时间参数
-    enable_adaptive_wait_time: bool = True  # 是否启用自适应等待时间上限（True：信息量越大，等待时间上限越低；False：使用固定的max_wait_time）
+    enable_adaptive_wait_time: bool = False  # 是否启用自适应等待时间上限（True：信息量越大，等待时间上限越低；False：使用固定的max_wait_time）
     wait_time_scale_factor: float = None   # 自适应等待时间的缩放因子（None时自动计算为 base_data_size * 10）
                                             # 公式：adaptive_max_wait_time = max_wait_time / (1 + info_volume / scale_factor)
     

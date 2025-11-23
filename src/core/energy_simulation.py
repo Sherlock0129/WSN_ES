@@ -118,11 +118,11 @@ class EnergySimulation:
             # Step 1.6: [已禁用] 在检查触发条件前，先同步节点能量到虚拟能量层
             # 这一步会导致所有节点的AOEI在每个时间步都被重置为0，因此已禁用。
             # 节点信息的更新现在完全依赖于各自的上报机制（如机会主义、ADCR等）。
-            # if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
-            #     self.scheduler.nim.batch_update_node_info(
-            #         nodes=self.network.nodes,
-            #         current_time=t
-            #     )
+            if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
+                self.scheduler.nim.batch_update_node_info(
+                    nodes=self.network.nodes,
+                    current_time=t
+                )
 
             # Step 2: 智能综合决策能量传输触发（使用被动传能管理器）
             should_trigger, trigger_reason = self.passive_manager.should_trigger_transfer(t, self.network)
@@ -167,10 +167,10 @@ class EnergySimulation:
                             if isinstance(self.scheduler, DurationAwareLyapunovScheduler):
                                 self.scheduler.nim.check_and_update_locks(t)
                             # [已移除] 此处不应有全局信息更新，节点信息的更新应由具体的上报机制（如PathCollector）处理
-                            # self.scheduler.nim.batch_update_node_info(
-                            #     nodes=self.network.nodes,
-                            #     current_time=t
-                            # )
+                            self.scheduler.nim.batch_update_node_info(
+                                nodes=self.network.nodes,
+                                current_time=t
+                            )
                         
                         # 同步自适应K给调度器（若其带 K）
                         if hasattr(self.scheduler, "K"):
