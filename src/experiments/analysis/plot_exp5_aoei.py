@@ -20,8 +20,8 @@ EXP5_DATASETS = [
     },
 ]
 
-AOI_MAX = 2000
-NUM_BINS = 5
+AOI_MAX = 1200
+NUM_BINS = 3
 BIN_EDGES = [i * AOI_MAX / NUM_BINS for i in range(NUM_BINS + 1)]
 BIN_LABELS = [f"{int(BIN_EDGES[i])}-{int(BIN_EDGES[i+1])}" for i in range(NUM_BINS)]
 
