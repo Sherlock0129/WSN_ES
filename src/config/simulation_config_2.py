@@ -124,7 +124,7 @@ class SimulationConfig:
     log_level: str = "INFO"              # 日志等级：DEBUG/INFO/WARNING/ERROR
     
     # 能量传输控制
-    enable_energy_sharing: bool = True     # 是否启用节点间能量传输（WET）
+    enable_energy_sharing: bool = False     # 是否启用节点间能量传输（WET）
 
     # 智能被动传能参数
     passive_mode: bool = False       # 是否启用智能被动传能模式（False为定时主动传能）

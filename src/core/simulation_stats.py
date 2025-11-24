@@ -55,7 +55,9 @@ class SimulationStats:
             包含统计信息的字典
         """
         # 计算本次传能后的统计量（基于真实执行后的节点状态/历史）
-        post_energies = np.array([n.current_energy for n in network.nodes], dtype=float)
+        # 注意：计算方差时排除物理中心节点（物理中心不参与能量传输，不应计入方差）
+        regular_nodes = [n for n in network.nodes if not n.is_physical_center]
+        post_energies = np.array([n.current_energy for n in regular_nodes], dtype=float)
         
         # 使用GPU加速计算统计信息
         if self.use_gpu:
@@ -386,7 +388,24 @@ class SimulationStats:
         ax1.legend(loc='best', fontsize=24)
         ax1.grid(True, linestyle='--', alpha=0.5)
         
-        # 2. 各维度分数堆叠图
+        # 2. 各维度分数堆叠图 —— 增加纵向高度
+        # （增加纵向高度，即扩大图表在画布上的高度占比或Y轴范围）
+        ax2 = axes[1]
+        # 扩大该子图的纵坐标显示范围（例如两端留白）
+        y_min = min(
+            min(balance_scores), 
+            min(survival_scores), 
+            min(efficiency_scores), 
+            min(energy_scores)
+        )
+        y_max = max(
+            max(balance_scores), 
+            max(survival_scores), 
+            max(efficiency_scores), 
+            max(energy_scores)
+        )
+        margin = 0.15 * (y_max - y_min + 1e-8)
+        ax2.set_ylim(y_min - margin, y_max + margin)
         ax2 = axes[1]
         
         # 定义明确的颜色和样式
@@ -412,22 +431,24 @@ class SimulationStats:
         ax2.set_title('Dimensional Scores Over Time', fontsize=24, fontweight='bold')
         ax2.set_xlabel('Time Step', fontsize=20)
         ax2.set_ylabel('Score', fontsize=20)
-        # 固定位置到右上角，并稍向下偏移，避免与权重注释重叠
+        # 固定位置到右上角顶格显示
         ax2.legend(loc='upper right', ncol=2, fontsize=18, framealpha=0.9,
-                   bbox_to_anchor=(1.0, 0.93))
+                   bbox_to_anchor=(1.0, 1.0))
         ax2.grid(True, linestyle='--', alpha=0.3)
+
+      
         
-        # 添加注释说明权重
-        info_text = 'Weights: Balance=40%, Survival=30%, Efficiency=20%, Energy=10%'
-        # 将权重说明移动到右上角，置于图例上方区域，避免与曲线/图例遮挡
-        ax2.text(0.98, 0.98, info_text, transform=ax2.transAxes, 
-                fontsize=16, verticalalignment='top', horizontalalignment='right',
-                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+        # # 添加注释说明权重
+        # info_text = 'Weights: Balance=40%, Survival=30%, Efficiency=20%, Energy=10%'
+        # # 将权重说明移动到右上角，置于图例上方区域，避免与曲线/图例遮挡
+        # ax2.text(0.98, 0.98, info_text, transform=ax2.transAxes, 
+        #         fontsize=16, verticalalignment='top', horizontalalignment='right',
+        #         bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
         
         # 3. 正/负/中性影响分布统计（柱状图）
         ax3 = axes[2]
-        positive_count = sum(1 for score in total_scores if score > 1)
-        negative_count = sum(1 for score in total_scores if score < -1)
+        positive_count = sum(1 for score in total_scores if score > 0.01)
+        negative_count = sum(1 for score in total_scores if score < -0.01)
         neutral_count = len(total_scores) - positive_count - negative_count
         
         categories = ['Positive', 'Neutral', 'Negative']

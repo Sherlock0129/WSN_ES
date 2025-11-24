@@ -102,7 +102,7 @@ class BaseScheduler(object):
         else:
             std_change_ratio = 0.0
         
-        balance_score = std_change_ratio * 0.4 * 100  # 乘以100使分数更直观
+        balance_score = std_change_ratio * 0.4 * 10000  # 乘以100使分数更直观
         feedback_score += balance_score
         details['balance_score'] = balance_score
         details['std_change'] = std_change
@@ -136,7 +136,7 @@ class BaseScheduler(object):
             efficiency = delivered / sent
             # 效率分数：效率范围[0, 1]，映射到[-20, +20]
             # 效率高于50%得正分，低于50%得负分
-            efficiency_score = (efficiency - 0.5) * 0.2 * 100
+            efficiency_score = (efficiency - 0.3) * 0.2 * 40
         else:
             # 没有传输：给中性分数（0分）
             # 原因可能是：网络均衡、所有路径效率<10%、节点锁定等
@@ -163,7 +163,7 @@ class BaseScheduler(object):
         else:
             energy_change_ratio = 0.0
         
-        energy_score = energy_change_ratio * 0.1 * 100
+        energy_score = energy_change_ratio * 0.1 * 2000
         feedback_score += energy_score
         details['energy_score'] = energy_score
         details['energy_change'] = energy_change
@@ -534,6 +534,9 @@ class AdaptiveLyapunovScheduler(LyapunovScheduler):
             print(f"[自适应@t={t}] V: {old_V:.3f} → {self.V:.3f} | {adjustment_reason}")
             print(f"           反馈: 总分={feedback_score:.2f}, 均衡={balance_score:.2f}, "
                   f"效率={efficiency_score:.2f}(η={efficiency:.2f}), 存活={survival_score:.2f}")
+        
+        # 根据平均时长与AoI反馈自适应其它参数
+        self._adjust_duration_params(t, details, balance_score, efficiency_score)
     
     def get_adaptation_stats(self):
         """
@@ -548,6 +551,12 @@ class AdaptiveLyapunovScheduler(LyapunovScheduler):
             'V_max': self.V_max,
             'total_adjustments': self.total_adjustments,
             'adjustment_history': self.adjustment_history,
+            'param_adjust_history': self.param_adjust_history,
+            'duration_slack': self.duration_slack,
+            'lock_penalty': self.lock_penalty,
+            'duration_soft_penalty': self.duration_soft_penalty,
+            'w_aoi': self.w_aoi,
+            'w_info': self.w_info,
             'recent_feedbacks': list(self.recent_feedbacks),
             'avg_feedback': float(np.mean(self.recent_feedbacks)) if self.recent_feedbacks else 0.0,
             'best_feedback': self.best_feedback_score,
@@ -567,11 +576,18 @@ class AdaptiveLyapunovScheduler(LyapunovScheduler):
         print(f"平均反馈分数: {stats['avg_feedback']:.2f}")
         print(f"最佳反馈分数: {stats['best_feedback']:.2f}")
         print(f"最差反馈分数: {stats['worst_feedback']:.2f}")
+        print(f"duration_slack={stats['duration_slack']:.2f}, lock_penalty={stats['lock_penalty']:.3f}, "
+              f"soft_penalty={stats['duration_soft_penalty']:.3f}")
+        print(f"w_aoi={stats['w_aoi']:.3f}, w_info={stats['w_info']:.3f}")
         
         if stats['adjustment_history']:
             print(f"\n最近5次调整:")
             for t, old_v, new_v, reason in stats['adjustment_history'][-5:]:
                 print(f"  t={t}: {old_v:.3f}→{new_v:.3f} | {reason}")
+        if stats['param_adjust_history']:
+            print(f"\n参数自适应(最近5条):")
+            for t, name, old_val, new_val, reason in stats['param_adjust_history'][-5:]:
+                print(f"  t={t}: {name} {old_val:.4f}→{new_val:.4f} | {reason}")
         print("="*60 + "\n")
 
 
@@ -910,7 +926,10 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
     """
     def __init__(self, node_info_manager, V=0.5, K=2, max_hops=5,
                  min_duration=1, max_duration=5,
-                 w_aoi=0.1, w_info=0.05, info_collection_rate=10000.0):
+                 w_aoi=0.1, w_info=0.05, info_collection_rate=10000.0,
+                 overshoot_penalty=0.2, lock_penalty=0.05,
+                 duration_slack=1.5, info_gain_cap=60000.0,
+                 duration_soft_penalty=0.05, duration_target=None):
         """
         :param node_info_manager: 节点信息管理器
         :param V: Lyapunov控制参数（能量-损耗权衡）
@@ -921,6 +940,12 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         :param w_aoi: AoI惩罚权重
         :param w_info: 信息量奖励权重
         :param info_collection_rate: 信息采集速率（bits/分钟）
+        :param overshoot_penalty: 超额能量传输惩罚权重
+        :param lock_penalty: 节点锁定（冗长传输）惩罚权重
+        :param duration_soft_penalty: 超过目标时长的软惩罚
+        :param duration_target: 期望平均传输时长，None时取(min+max)/2
+        :param duration_slack: 允许超过需求的传输时长倍数
+        :param info_gain_cap: 信息量奖励上限（bits）
         """
         BaseScheduler.__init__(self, node_info_manager, K, max_hops)
         self.V = float(V)
@@ -929,6 +954,13 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         self.w_aoi = w_aoi
         self.w_info = w_info
         self.info_collection_rate = info_collection_rate
+        self.overshoot_penalty = float(overshoot_penalty)
+        self.lock_penalty = float(lock_penalty)
+        self.duration_slack = float(max(1.0, duration_slack))
+        self.info_gain_cap = float(info_gain_cap)
+        self.duration_soft_penalty = float(max(0.0, duration_soft_penalty))
+        self.duration_target = float(duration_target) if duration_target is not None else \
+            max(float(self.min_duration), (self.min_duration + self.max_duration) / 2.0)
     
     def _path_eta(self, path):
         """计算路径总效率"""
@@ -951,8 +983,13 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         """
         E_char = getattr(donor, "E_char", 300.0)
         
-        # 1. 能量计算
-        energy_sent_total = duration * E_char
+        # 1. 能量计算（限幅 donor 可用能量，避免长时传输只是在耗尽 donor）
+        donor_reserve = getattr(donor, "low_threshold_energy", 0.0)
+        available_energy = max(0.0, donor.current_energy - donor_reserve)
+        if available_energy <= 0:
+            return float("-inf"), 0.0, 0.0, duration, 0.0
+        
+        energy_sent_total = min(duration * E_char, available_energy)
         energy_delivered = energy_sent_total * eta
         energy_loss = energy_sent_total - energy_delivered
         
@@ -962,19 +999,25 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         
         # 3. 信息量收益：传输期间，receiver可能累积更多信息
         # 如果receiver有传感任务，持续采集信息，传输时长越长，累积越多
-        info_gain = duration * self.info_collection_rate  # bits
+        info_gain = min(duration * self.info_collection_rate, self.info_gain_cap)  # bits
         
         # 4. 综合得分计算（基于Lyapunov漂移加惩罚框架）
         Q_normalized = Q_r / E_bar if E_bar > 0 else 0
         
         # 能量收益项（考虑队列backlog）
-        energy_benefit_score = energy_delivered * Q_normalized
+        energy_need = max(Q_r, 0.0)
+        effective_delivered = min(energy_delivered, energy_need) if energy_need > 0 else energy_delivered
+        energy_benefit_score = effective_delivered * Q_normalized
         
         # 能量损耗惩罚项
-        energy_loss_penalty = self.V * energy_loss
+        energy_loss_penalty = 10 * self.V * energy_loss
         
         # AoI惩罚项（传输时间越长，其他节点AoI增长越多）
         aoi_penalty = self.w_aoi * aoi_cost * Q_normalized
+        overshoot_penalty = self.overshoot_penalty * max(0.0, energy_delivered - energy_need) * Q_normalized
+        lock_penalty = self.lock_penalty * max(0, duration - 1)
+        target_overrun = max(0.0, duration - self.duration_target)
+        soft_duration_penalty = self.duration_soft_penalty * target_overrun * Q_normalized
         
         # 信息量奖励项（传输时间越长，可能携带更多信息，减少后续上报）
         # 检查receiver是否有未上报信息（使用信息价值而非信息量）
@@ -996,15 +1039,146 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         # 信息奖励策略：
         # - 如果有未上报信息：全额奖励（鼓励搭便车）
         # - 否则：仍给予部分奖励（鼓励长传输，为未来信息传输铺路）
-        if has_info:
-            info_bonus = self.w_info * info_gain  # 全额奖励
-        else:
-            info_bonus = self.w_info * info_gain * 0.5  # 半额奖励（即使没有当前信息）
+        info_weight = 1.0 if has_info else 0.5
+        if has_info and info_value > 0:
+            info_weight = min(1.0, info_value / max(self.info_gain_cap, 1.0))
+        info_bonus = self.w_info * info_gain * info_weight
         
         # 总得分 = 能量收益 - 能量损耗 - AoI惩罚 + 信息奖励
-        total_score = energy_benefit_score - energy_loss_penalty - aoi_penalty + info_bonus
+        total_score = energy_benefit_score - energy_loss_penalty - aoi_penalty \
+            - overshoot_penalty - lock_penalty - soft_duration_penalty + info_bonus
         
         return total_score, energy_delivered, energy_loss, aoi_cost, info_gain
+
+    def _duration_candidates(self, donor, Q_r, eta):
+        """
+        根据需求与供给计算合理的传输时长范围
+        
+        优化策略：
+        1. 计算理论最优时长（基于能量需求）
+        2. 在最优时长附近进行精细搜索，而不是枚举所有可能值
+        3. 使用自适应步长，在关键区域增加采样密度
+        """
+        E_char = getattr(donor, "E_char", 300.0)
+        donor_reserve = getattr(donor, "low_threshold_energy", 0.0)
+        available_energy = max(0.0, donor.current_energy - donor_reserve)
+
+        delivered_per_min = E_char * eta
+        energy_need = max(Q_r, 0.0)
+
+        # 计算理论最优时长（满足能量需求所需的最小时长）
+        if delivered_per_min > 0 and energy_need > 0:
+            optimal_duration = energy_need / delivered_per_min
+        else:
+            optimal_duration = self.min_duration
+
+        # 计算供给限制
+        if E_char > 0 and available_energy > 0:
+            supply_duration = available_energy / E_char
+        else:
+            supply_duration = self.min_duration
+
+        # 确定搜索范围
+        search_min = float(self.min_duration)
+        search_max = min(supply_duration, optimal_duration * self.duration_slack, float(self.max_duration))
+        search_max = max(search_min, search_max)
+
+        # 优化策略：在最优时长附近进行精细搜索
+        # 1. 如果范围较小（<5分钟），枚举所有整数点
+        if search_max - search_min <= 5:
+            return range(int(search_min), int(search_max) + 1)
+        
+        # 2. 如果范围较大，使用智能采样策略
+        candidates = []
+        
+        # 2.1 添加边界点
+        candidates.append(int(search_min))
+        candidates.append(int(search_max))
+        
+        # 2.2 在理论最优时长附近密集采样（±2分钟范围，步长0.5）
+        optimal_center = max(search_min, min(search_max, optimal_duration))
+        dense_start = max(search_min, optimal_center - 2.0)
+        dense_end = min(search_max, optimal_center + 2.0)
+        
+        for d in np.arange(dense_start, dense_end + 0.5, 0.5):
+            d_int = int(round(d))
+            if search_min <= d_int <= search_max and d_int not in candidates:
+                candidates.append(d_int)
+        
+        # 2.3 在稀疏区域采样（步长1分钟）
+        # 在密集区域之前
+        if dense_start > search_min + 1:
+            for d in range(int(search_min) + 1, int(dense_start)):
+                if d not in candidates:
+                    candidates.append(d)
+        
+        # 在密集区域之后
+        if dense_end < search_max - 1:
+            for d in range(int(dense_end) + 1, int(search_max)):
+                if d not in candidates:
+                    candidates.append(d)
+        
+        # 排序并去重
+        candidates = sorted(set(candidates))
+        return candidates
+    
+    def _find_optimal_duration_optimized(self, donor, receiver, path, eta, E_bar, Q_r):
+        """
+        优化的时长选择方法：使用智能搜索策略找到最优时长
+        
+        策略：
+        1. 使用优化的候选时长生成（在理论最优值附近密集采样）
+        2. 使用提前终止策略（如果得分连续下降）
+        3. 减少不必要的计算
+        
+        :return: (best_duration, best_score, best_metrics)
+        """
+        candidates = self._duration_candidates(donor, Q_r, eta)
+        
+        if not candidates:
+            # 返回默认值
+            default_duration = self.min_duration
+            score, delivered, loss, aoi_cost, info_gain = \
+                self._compute_duration_score(donor, receiver, path, eta, E_bar, Q_r, default_duration)
+            return default_duration, score, (delivered, loss, aoi_cost, info_gain)
+        
+        best_duration = candidates[0]
+        best_score = float('-inf')
+        best_metrics = None
+        
+        # 记录得分趋势，用于提前终止
+        score_history = []
+        consecutive_decreases = 0
+        max_consecutive_decreases = 3  # 连续3次下降则提前终止
+        
+        for duration in candidates:
+            score, delivered, loss, aoi_cost, info_gain = \
+                self._compute_duration_score(donor, receiver, path, eta, E_bar, Q_r, duration)
+            
+            if score > best_score:
+                best_score = score
+                best_duration = duration
+                best_metrics = (delivered, loss, aoi_cost, info_gain)
+                consecutive_decreases = 0  # 重置下降计数
+            else:
+                consecutive_decreases += 1
+            
+            score_history.append(score)
+            
+            # 提前终止：如果得分连续下降且已经找到较好的解
+            if consecutive_decreases >= max_consecutive_decreases and len(score_history) >= 5:
+                # 检查是否已经过了峰值
+                if score_history[-1] < best_score * 0.9:  # 当前得分明显低于最佳得分
+                    break
+        
+        if best_metrics is None:
+            # 如果没找到有效解，使用第一个候选
+            score, delivered, loss, aoi_cost, info_gain = \
+                self._compute_duration_score(donor, receiver, path, eta, E_bar, Q_r, best_duration)
+            best_metrics = (delivered, loss, aoi_cost, info_gain)
+            best_score = score
+        
+        return best_duration, best_score, best_metrics
     
     def plan(self, network, t):
         """
@@ -1012,11 +1186,14 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         
         对每个donor-receiver对，尝试不同的传输时长（1-5分钟），
         选择综合得分最高的时长
+        
+        【重要】计划阶段只读取InfoNode的虚拟能量，不修改InfoNode或真实节点的能量值。
+        这确保了计划阶段不会影响方差计算（方差基于真实节点能量，在energy_simulation.py中计算）。
         """
         # 保存当前时间，用于信息价值计算
         self.current_time = t
         
-        # 从信息表创建InfoNode
+        # 从信息表创建InfoNode（只读操作，不修改InfoNode的能量值）
         info_nodes = self.nim.get_info_nodes()
         id2node = {n.node_id: n for n in network.nodes}
         
@@ -1024,6 +1201,9 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
         nodes = self._filter_regular_nodes(info_nodes)
         # DurationAwareLyapunovScheduler需要过滤锁定节点（传输时长优化特性）
         nodes = self._filter_unlocked_nodes(nodes, t)
+        
+        # 【只读】读取InfoNode的虚拟能量，用于计算能量缺口和选择donor/receiver
+        # 注意：这里只读取，不修改InfoNode.current_energy
         E = np.array([n.current_energy for n in nodes], dtype=float)
         E_bar = float(E.mean())
         Q = dict((n, max(0.0, E_bar - n.current_energy)) for n in nodes)
@@ -1054,21 +1234,15 @@ class DurationAwareLyapunovScheduler(BaseScheduler):
                 if eta < 0.1:
                     continue
                 
-                # 尝试不同的传输时长，选择最优的
-                best_duration = self.min_duration
-                best_score = float('-inf')
-                best_metrics = None
+                # 【优化】使用智能搜索策略找到最优传输时长
+                # 相比枚举所有可能值，这种方法：
+                # 1. 在理论最优值附近密集采样，提高精度
+                # 2. 使用提前终止策略，减少计算量
+                # 3. 自适应调整搜索范围
+                best_duration, best_score, best_metrics = \
+                    self._find_optimal_duration_optimized(d, r, path, eta, E_bar, Q[r])
                 
-                for duration in range(self.min_duration, self.max_duration + 1):
-                    score, delivered, loss, aoi_cost, info_gain = \
-                        self._compute_duration_score(d, r, path, eta, E_bar, Q[r], duration)
-                    
-                    if score > best_score:
-                        best_score = score
-                        best_duration = duration
-                        best_metrics = (delivered, loss, aoi_cost, info_gain)
-                
-                if best_metrics:
+                if best_metrics and best_score > float('-inf'):
                     delivered, loss, aoi_cost, info_gain = best_metrics
                     cand.append((best_score, d, r, path, dist, delivered, loss, 
                                 best_duration, aoi_cost, info_gain))
@@ -1126,6 +1300,9 @@ class AdaptiveDurationAwareLyapunovScheduler(DurationAwareLyapunovScheduler):
     def __init__(self, node_info_manager, V=0.5, K=2, max_hops=5,
                  min_duration=1, max_duration=5,
                  w_aoi=0.1, w_info=0.05, info_collection_rate=10000.0,
+                 overshoot_penalty=0.2, lock_penalty=0.05,
+                 duration_slack=1.5, info_gain_cap=60000.0,
+                 duration_soft_penalty=0.05, duration_target=None,
                  window_size=10, V_min=0.1, V_max=2.0,
                  adjust_rate=0.1, sensitivity=2.0):
         """
@@ -1140,6 +1317,10 @@ class AdaptiveDurationAwareLyapunovScheduler(DurationAwareLyapunovScheduler):
         :param w_aoi: AoI惩罚权重
         :param w_info: 信息量奖励权重
         :param info_collection_rate: 信息采集速率（bits/分钟）
+        :param duration_slack: 需求时长允许的放大倍数
+        :param info_gain_cap: 信息奖励上限（bits）
+        :param duration_soft_penalty: 超过目标时长的软惩罚
+        :param duration_target: 期望平均时长，None时内部推导
         :param window_size: 反馈窗口大小（记忆最近N次）
         :param V_min: V的最小值（不能太小，避免过度传输）
         :param V_max: V的最大值（不能太大，避免过度保守）
@@ -1150,7 +1331,10 @@ class AdaptiveDurationAwareLyapunovScheduler(DurationAwareLyapunovScheduler):
         DurationAwareLyapunovScheduler.__init__(
             self, node_info_manager, V, K, max_hops,
             min_duration, max_duration,
-            w_aoi, w_info, info_collection_rate
+            w_aoi, w_info, info_collection_rate,
+            overshoot_penalty, lock_penalty,
+            duration_slack, info_gain_cap,
+            duration_soft_penalty, duration_target
         )
         
         # 自适应参数（从AdaptiveLyapunovScheduler借鉴）
@@ -1172,6 +1356,83 @@ class AdaptiveDurationAwareLyapunovScheduler(DurationAwareLyapunovScheduler):
         # 性能指标
         self.best_feedback_score = float('-inf')
         self.worst_feedback_score = float('inf')
+        # 额外自适应参数边界
+        self.duration_slack_min = 1.0
+        self.duration_slack_max = 3.0
+        self.lock_penalty_min = 0.01
+        self.lock_penalty_max = 0.5
+        self.w_info_min = 0.01
+        self.w_info_max = 0.3
+        self.w_aoi_min = 0.0
+        self.w_aoi_max = 0.5
+        self.duration_soft_penalty_min = 0.0
+        self.duration_soft_penalty_max = 0.5
+        self.param_adjust_history = []
+    
+    def _record_param_adjustment(self, t, name, old_value, new_value, reason):
+        if abs(new_value - old_value) < 1e-6:
+            return
+        self.param_adjust_history.append((t, name, old_value, new_value, reason))
+        print(f"[自适应@t={t}] {name}: {old_value:.4f} → {new_value:.4f} | {reason}")
+    
+    def _adjust_duration_params(self, t, details, balance_score, efficiency_score):
+        avg_duration = details.get('avg_duration', 0.0)
+        if avg_duration <= 0:
+            return
+        avg_info_gain = details.get('avg_info_gain', 0.0)
+        avg_aoi_cost = details.get('avg_aoi_cost', 0.0)
+        target = getattr(self, 'duration_target', (self.min_duration + self.max_duration) / 2.0)
+        
+        # 长时间偏好 → 收紧参数
+        if avg_duration > target + 0.25:
+            reason = f"avg_duration={avg_duration:.2f} 超目标 {target:.2f}"
+            new_slack = max(self.duration_slack_min, self.duration_slack * (1.0 - self.adjust_rate * 0.3))
+            self._record_param_adjustment(t, "duration_slack", self.duration_slack, new_slack, reason)
+            self.duration_slack = new_slack
+            
+            new_lock_penalty = min(self.lock_penalty_max, self.lock_penalty * (1.0 + self.adjust_rate * 0.5))
+            self._record_param_adjustment(t, "lock_penalty", self.lock_penalty, new_lock_penalty, reason)
+            self.lock_penalty = new_lock_penalty
+            
+            new_soft = min(self.duration_soft_penalty_max, self.duration_soft_penalty + self.adjust_rate * 0.05)
+            self._record_param_adjustment(t, "duration_soft_penalty", self.duration_soft_penalty, new_soft, reason)
+            self.duration_soft_penalty = new_soft
+            
+            if avg_info_gain < self.info_gain_cap * 0.3:
+                info_reason = f"信息收益偏低({avg_info_gain:.1f})且{reason}"
+                new_w_info = max(self.w_info_min, self.w_info * (1.0 - self.adjust_rate * 0.3))
+                self._record_param_adjustment(t, "w_info", self.w_info, new_w_info, info_reason)
+                self.w_info = new_w_info
+        # 时长过短但均衡差 → 放松参数
+        elif avg_duration < max(self.min_duration + 0.2, target - 0.5) and balance_score < 0:
+            reason = f"avg_duration={avg_duration:.2f} 低于需求且均衡差"
+            new_slack = min(self.duration_slack_max, self.duration_slack * (1.0 + self.adjust_rate * 0.2))
+            self._record_param_adjustment(t, "duration_slack", self.duration_slack, new_slack, reason)
+            self.duration_slack = new_slack
+            
+            new_lock = max(self.lock_penalty_min, self.lock_penalty * (1.0 - self.adjust_rate * 0.3))
+            self._record_param_adjustment(t, "lock_penalty", self.lock_penalty, new_lock, reason)
+            self.lock_penalty = new_lock
+            
+            new_soft = max(self.duration_soft_penalty_min, self.duration_soft_penalty - self.adjust_rate * 0.05)
+            self._record_param_adjustment(t, "duration_soft_penalty", self.duration_soft_penalty, new_soft, reason)
+            self.duration_soft_penalty = new_soft
+            
+            new_w_info = min(self.w_info_max, self.w_info * (1.0 + self.adjust_rate * 0.2))
+            self._record_param_adjustment(t, "w_info", self.w_info, new_w_info, reason)
+            self.w_info = new_w_info
+        
+        # AoI成本超标 → 增大w_aoi
+        if avg_aoi_cost > target:
+            reason = f"AoI偏高({avg_aoi_cost:.2f})"
+            new_w_aoi = min(self.w_aoi_max, self.w_aoi * (1.0 + self.adjust_rate * 0.3))
+            self._record_param_adjustment(t, "w_aoi", self.w_aoi, new_w_aoi, reason)
+            self.w_aoi = new_w_aoi
+        elif avg_aoi_cost < max(self.min_duration, target * 0.7) and avg_duration < target:
+            reason = f"AoI偏低({avg_aoi_cost:.2f})"
+            new_w_aoi = max(self.w_aoi_min, self.w_aoi * (1.0 - self.adjust_rate * 0.2))
+            self._record_param_adjustment(t, "w_aoi", self.w_aoi, new_w_aoi, reason)
+            self.w_aoi = new_w_aoi
     
     def post_step(self, network, t, feedback):
         """

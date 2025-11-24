@@ -138,11 +138,13 @@ class EnergySimulation:
                 self.network.periodic_info_collector is not None):
                 self.network.periodic_info_collector.step(self.network.nodes, t)
 
-            # Step 1.6:在检查触发条件前，先同步节点能量到虚拟能量层
+            # Step 1.6:在检查触发条件前，先同步节点能量到虚拟能量层（仅用于触发决策，不影响方差计算）
+            # 注意：触发决策使用真实节点能量（passive_transfer.py第124行），这里同步只是为了InfoNode有最新数据
             if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
                 self.scheduler.nim.estimate_all_nodes(current_time=t)
 
             # Step 2: 智能综合决策能量传输触发（使用被动传能管理器）
+            # 注意：触发决策基于真实节点能量，不受InfoNode影响
             should_trigger, trigger_reason = self.passive_manager.should_trigger_transfer(t, self.network)
             
             if should_trigger:
@@ -155,20 +157,27 @@ class EnergySimulation:
                     print(f"\n[{mode_label}] 时间步 {t}: {trigger_reason}")
                 
                 current_time = start_time + timedelta(minutes=t)
-                pre_energies = np.array([n.current_energy for n in self.network.nodes], dtype=float)
+                
+                # 【关键】在计划阶段之前，记录执行前的真实节点能量状态（用于方差反馈）
+                # 这确保了方差计算只比较操作前后的真实节点能量，不受计划阶段影响
+                # 注意：计算方差时排除物理中心节点（物理中心不参与能量传输，不应计入方差）
+                regular_nodes = [n for n in self.network.nodes if not n.is_physical_center]
+                pre_energies = np.array([n.current_energy for n in regular_nodes], dtype=float)
                 pre_received_total = sum(sum(n.received_history) for n in self.network.nodes)
                 pre_transferred_total = sum(sum(n.transferred_history) for n in self.network.nodes)
             
-                # 记录能量统计
-                node_energies = [node.current_energy for node in self.network.nodes]
+                # 记录能量统计（只记录普通节点，排除物理中心）
+                node_energies = [node.current_energy for node in regular_nodes]
                 self.stats.record_energy_stats(node_energies)
                 
-                # 【反馈机制】收集调度前的网络状态
+                # 【反馈机制】收集调度前的网络状态（基于真实节点能量）
+                # 注意：这里使用真实节点能量计算方差，确保反馈机制不受虚拟能量层影响
+                # 方差计算排除物理中心节点
                 pre_state = {
-                    'energies': pre_energies,
+                    'energies': pre_energies.copy(),  # 使用副本，避免后续修改影响
                     'alive_nodes': sum(1 for e in pre_energies if e > 0),
                     'total_energy': float(np.sum(pre_energies)),
-                    'std': float(np.std(pre_energies))
+                    'std': float(np.std(pre_energies))  # 基于真实节点能量的方差（排除物理中心）
                 }
             
                 # 检查是否启用能量传输
@@ -177,6 +186,7 @@ class EnergySimulation:
                     if self.scheduler is not None:
                         # 【关键】更新NodeInfoManager中的节点能量信息
                         # 在每次调度之前，必须同步真实节点的当前能量到InfoNode
+                        # 注意：计划阶段只读取InfoNode，不修改InfoNode的能量值
                         if hasattr(self.scheduler, 'nim') and self.scheduler.nim is not None:
                             # 设置当前时间
                             self.scheduler.nim.current_time = t
@@ -184,6 +194,7 @@ class EnergySimulation:
                             from scheduling.schedulers import DurationAwareLyapunovScheduler
                             if isinstance(self.scheduler, DurationAwareLyapunovScheduler):
                                 self.scheduler.nim.check_and_update_locks(t)
+                            # 同步真实节点能量到InfoNode（只读操作，不修改真实节点）
                             self.scheduler.nim.estimate_all_nodes(current_time=t)
                         
                         # 同步自适应K给调度器（若其带 K）
@@ -193,6 +204,9 @@ class EnergySimulation:
                             except Exception:
                                 pass
                 
+                        # 【计划阶段】调用调度器生成传输计划
+                        # 注意：plan()方法只读取InfoNode的虚拟能量，不修改InfoNode或真实节点的能量
+                        # 这确保了计划阶段不会影响方差计算（方差基于真实节点能量）
                         result = self.scheduler.plan(self.network, t)
                         if isinstance(result, tuple):
                             plans, cand = result
@@ -246,12 +260,16 @@ class EnergySimulation:
                 stats = self.stats.compute_step_stats(plans, pre_energies, pre_received_total, pre_transferred_total, self.network)
                 
                 # 【反馈机制】收集调度后的网络状态并计算反馈分数
-                post_energies = np.array([n.current_energy for n in self.network.nodes], dtype=float)
+                # 注意：这里使用执行后的真实节点能量计算方差，确保反馈只比较操作前后的真实状态
+                # 计划阶段的InfoNode操作不会影响这里的方差计算
+                # 方差计算排除物理中心节点（物理中心不参与能量传输，不应计入方差）
+                regular_nodes = [n for n in self.network.nodes if not n.is_physical_center]
+                post_energies = np.array([n.current_energy for n in regular_nodes], dtype=float)
                 post_state = {
-                    'energies': post_energies,
+                    'energies': post_energies.copy(),  # 使用副本，避免后续修改影响
                     'alive_nodes': sum(1 for e in post_energies if e > 0),
                     'total_energy': float(np.sum(post_energies)),
-                    'std': float(np.std(post_energies))
+                    'std': float(np.std(post_energies))  # 基于真实节点能量的方差（执行后，排除物理中心）
                 }
                 
                 # 计算反馈分数

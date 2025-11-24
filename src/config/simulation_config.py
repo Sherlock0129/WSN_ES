@@ -87,7 +87,7 @@ class NetworkConfig:
     network_area_width: float = 5.0    # 区域宽度 m
     network_area_height: float = 5.0   # 区域高度 m
     min_distance: float = 0.5          # 节点间最小生成距离 m（避免过近重叠）
-    random_seed: int = 129            # 随机种子（影响位置与属性抽样）
+    random_seed: int = 128            # 随机种子（影响位置与属性抽样）
     solar_node_ratio: float = 0.6      # 具备太阳能节点比例（0~1）
     mobile_node_ratio: float = 0.0     # 可移动节点比例（0~1，若启用移动模型）
     
@@ -99,7 +99,7 @@ class NetworkConfig:
 
     # 物理中心节点配置
     enable_physical_center: bool = True  # 是否启用物理中心节点（ID=0）
-    center_initial_energy_multiplier: float = 10.0  # 物理中心初始能量倍数（相对普通节点）
+    center_initial_energy_multiplier: float = 100.0  # 物理中心初始能量倍数（相对普通节点）
     
     # 能量分配模式配置
     energy_distribution_mode: str = "center_decreasing"  # 能量分配模式："uniform"（固定）、"center_decreasing"（中心递减）
@@ -129,18 +129,18 @@ class SimulationConfig:
     # 智能被动传能/定时主动传能参数
     passive_mode: bool = True        # 是否启用智能被动传能模式（False为定时主动传能）
     check_interval: int = 1          # 被动模式：检查频率（分钟）；主动模式不使用
-    active_transfer_interval: int = 20  # 主动模式：定时触发间隔（分钟），仅当 passive_mode=False 时生效
+    active_transfer_interval: int = 60  # 主动模式：定时触发间隔（分钟），仅当 passive_mode=False 时生效
     critical_ratio: float = 0             # 低能量节点临界比例（0-1）
     energy_variance_threshold: float = 0.05  # 能量方差阈值，超过则触发传能
-    cooldown_period: int = 0               # 传能冷却期（分钟），避免频繁触发
+    cooldown_period: int = 3               # 传能冷却期（分钟），避免频繁触发
     predictive_window: int = 60             # 预测窗口（分钟），用于预测性触发
     
     # 动态方差上限自适应参数
     enable_adaptive_variance_threshold: bool = False  # 是否启用动态方差上限自适应
-    adaptive_threshold_steps: int = 10              # 连续触发步数阈值（达到此次数后调整阈值）
-    threshold_increment: float = 0.05                # 阈值上调增量（每次调整增加的幅度）
-    threshold_decrement: float = 0.02                # 阈值下调增量（当系统稳定时降低阈值，恢复灵敏度）
-    threshold_stability_steps: int = 20              # 稳定步数阈值（连续不触发此次数后下调阈值）
+    adaptive_threshold_steps: int = 100              # 连续触发步数阈值（达到此次数后调整阈值）
+    threshold_increment: float = 0.001                # 阈值上调增量（每次调整增加的幅度）
+    threshold_decrement: float = 0.001                # 阈值下调增量（当系统稳定时降低阈值，恢复灵敏度）
+    threshold_stability_steps: int = 1000            # 稳定步数阈值（连续不触发此次数后下调阈值）
     threshold_max: float = 0.5                       # 方差阈值上限（防止阈值过高导致传能失效）
     threshold_min: float = 0.01                      # 方差阈值下限（保持最小灵敏度）
     
@@ -181,8 +181,8 @@ class SchedulerConfig:
 
     # scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
     # scheduler_type: str = "AdaptiveLyapunovScheduler"  # 默认调度器类型
-    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
-    # scheduler_type: str = "AdaptiveDurationAwareLyapunovScheduler"  # 默认调度器类型
+    # scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
+    scheduler_type: str = "AdaptiveDurationAwareLyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
@@ -229,7 +229,7 @@ class SchedulerConfig:
     # - 注意：只有DurationAwareLyapunovScheduler使用此机制，其他调度器不受影响（duration=1时不会锁定）
     #
     duration_min: int = 1                    # 最小传输时长（分钟），推荐 >= 1
-    duration_max: int = 5                    # 最大传输时长（分钟），传输时长越长，节点锁定时间越长
+    duration_max: int = 3                   # 最大传输时长（分钟），传输时长越长，节点锁定时间越长
     duration_w_aoi: float = 0.02             # AoI惩罚权重（从0.1降至0.02，减小AoI对长传输的惩罚）
     duration_w_info: float = 0.1             # 信息量奖励权重（从0.05提升至0.1，增强信息奖励）
     duration_info_rate: float = 10000.0      # 信息采集速率（bits/分钟），用于计算传输期间累积的信息量
@@ -384,7 +384,7 @@ class EETORConfig:
     sparse_network_range: float = 10.0      # 稀疏网络使用较大的通信范围
     
     # 信息感知路由参数
-    enable_info_aware_routing: bool = True  # 是否启用信息感知路由
+    enable_info_aware_routing: bool = True # 是否启用信息感知路由
     info_reward_factor: float = 0.2          # 信息奖励系数（0~1），信息量大的节点优先选择
     # 注意：max_info_wait_time 和 min_info_volume_threshold 在 PathCollectorConfig 中配置
 
@@ -427,9 +427,9 @@ class PathCollectorConfig:
     # 机会主义信息传递参数
     enable_opportunistic_info_forwarding: bool = True  # 是否启用机会主义信息传递
     enable_delayed_reporting: bool = True               # 是否启用延迟上报（False为立即上报）
-    max_wait_time: int = 500                              # 最大等待时间（分钟），超时强制上报（固定模式或自适应模式的基础值）
+    max_wait_time: int = 720                              # 最大等待时间（分钟），超时强制上报（固定模式或自适应模式的基础值）
     min_info_volume_threshold: int = 1                   # 最小信息量阈值（节点数），低于此值不等待
-    max_info_volume: int = 1000000                         # 信息量最大值（bits），超过此值强制上报，None表示无限制
+    max_info_volume: int = 10000000                         # 信息量最大值（bits），超过此值强制上报，None表示无限制
     
     # 自适应等待时间参数
     enable_adaptive_wait_time: bool = True  # 是否启用自适应等待时间上限（True：信息量越大，等待时间上限越低；False：使用固定的max_wait_time）
@@ -475,7 +475,7 @@ class InfoConfig:
     """信息层配置参数"""
 
     enable_energy_estimation: bool = True  # 虚拟中心是否对未上报节点进行能量估算
-    force_report_on_stale: bool = False    # AoI 超限时是否强制上报（即使无信息量）
+    force_report_on_stale: bool = True    # AoI 超限时是否强制上报（即使无信息量）
 
 
 @dataclass
