@@ -28,7 +28,15 @@ class PassiveTransferManager:
                  cooldown_period: int = 30,
                  predictive_window: int = 60,
                  node_info_manager=None,
-                 active_transfer_interval: int = 60):
+                 active_transfer_interval: int = 60,
+                 # 动态方差上限自适应参数
+                 enable_adaptive_variance_threshold: bool = True,
+                 adaptive_threshold_steps: int = 10,
+                 threshold_increment: float = 0.05,
+                 threshold_decrement: float = 0.02,
+                 threshold_stability_steps: int = 20,
+                 threshold_max: float = 0.5,
+                 threshold_min: float = 0.01):
         """
         初始化被动传能管理器
         
@@ -39,6 +47,14 @@ class PassiveTransferManager:
         :param cooldown_period: 冷却期（分钟）
         :param predictive_window: 预测窗口（分钟）
         :param node_info_manager: NodeInfoManager实例（可选，用于虚拟能量层）
+        :param active_transfer_interval: 主动模式触发间隔（分钟）
+        :param enable_adaptive_variance_threshold: 是否启用动态方差上限自适应
+        :param adaptive_threshold_steps: 连续触发步数阈值（达到此次数后上调阈值）
+        :param threshold_increment: 阈值上调增量
+        :param threshold_decrement: 阈值下调增量（当系统稳定时降低阈值）
+        :param threshold_stability_steps: 稳定步数阈值（连续不触发此次数后下调阈值）
+        :param threshold_max: 方差阈值上限
+        :param threshold_min: 方差阈值下限
         """
         self.passive_mode = passive_mode
         self.check_interval = check_interval
@@ -58,11 +74,17 @@ class PassiveTransferManager:
         self.trigger_reasons_stats = {}  # 触发原因统计
         
         # 自适应阈值调整机制
+        self.enable_adaptive_variance_threshold = enable_adaptive_variance_threshold
         self.original_variance_threshold = energy_variance_threshold  # 保存原始阈值
         self.consecutive_trigger_count = 0  # 连续触发计数器
+        self.consecutive_stable_count = 0  # 连续稳定计数器（不触发）
         self.threshold_adjustment_count = 0  # 阈值调整次数
-        self.adaptive_threshold_steps = 10  # 连续触发步数阈值
-        self.threshold_increment = 0.05  # 每次调整的增量
+        self.adaptive_threshold_steps = adaptive_threshold_steps  # 连续触发步数阈值
+        self.threshold_increment = threshold_increment  # 阈值上调增量
+        self.threshold_decrement = threshold_decrement  # 阈值下调增量
+        self.threshold_stability_steps = threshold_stability_steps  # 稳定步数阈值
+        self.threshold_max = threshold_max  # 阈值上限
+        self.threshold_min = threshold_min  # 阈值下限
     
     def should_trigger_transfer(self, t: int, network) -> Tuple[bool, Optional[str]]:
         """
@@ -127,22 +149,51 @@ class PassiveTransferManager:
         )
         
         # 自适应阈值调整机制（在冷却期检查之前进行，基于是否满足触发条件）
-        if should_trigger:
-            # 满足触发条件，增加连续触发计数
-            self.consecutive_trigger_count += 1
-            
-            # 如果连续触发达到阈值，提高方差阈值
-            if self.consecutive_trigger_count >= self.adaptive_threshold_steps:
-                self.energy_variance_threshold += self.threshold_increment
-                self.threshold_adjustment_count += 1
-                # 重置计数器，重新开始计数
-                self.consecutive_trigger_count = 0
+        if self.enable_adaptive_variance_threshold:
+            if should_trigger:
+                # 满足触发条件，增加连续触发计数，重置稳定计数
+                self.consecutive_trigger_count += 1
+                self.consecutive_stable_count = 0
                 
-                # 记录阈值调整信息
-                reasons.append(f"[阈值自适应调整: {self.energy_variance_threshold:.3f}]")
+                # 如果连续触发达到阈值，提高方差阈值（上调）
+                if self.consecutive_trigger_count >= self.adaptive_threshold_steps:
+                    old_threshold = self.energy_variance_threshold
+                    self.energy_variance_threshold = min(
+                        self.threshold_max,
+                        self.energy_variance_threshold + self.threshold_increment
+                    )
+                    self.threshold_adjustment_count += 1
+                    # 重置计数器，重新开始计数
+                    self.consecutive_trigger_count = 0
+                    
+                    # 记录阈值调整信息
+                    if old_threshold != self.energy_variance_threshold:
+                        reasons.append(f"[阈值上调: {old_threshold:.3f}→{self.energy_variance_threshold:.3f}]")
+            else:
+                # 不满足触发条件，重置连续触发计数，增加稳定计数
+                self.consecutive_trigger_count = 0
+                self.consecutive_stable_count += 1
+                
+                # 如果连续稳定达到阈值，降低方差阈值（下调，恢复灵敏度）
+                if self.consecutive_stable_count >= self.threshold_stability_steps:
+                    old_threshold = self.energy_variance_threshold
+                    self.energy_variance_threshold = max(
+                        self.threshold_min,
+                        self.energy_variance_threshold - self.threshold_decrement
+                    )
+                    # 重置计数器，重新开始计数
+                    self.consecutive_stable_count = 0
+                    
+                    # 记录阈值调整信息（仅在阈值实际变化时记录）
+                    if old_threshold != self.energy_variance_threshold:
+                        self.threshold_adjustment_count += 1
+                        # 注意：这里不添加到reasons，因为此时不触发传能
         else:
-            # 不满足触发条件，重置连续触发计数
-            self.consecutive_trigger_count = 0
+            # 禁用自适应时，重置所有计数器
+            if should_trigger:
+                self.consecutive_trigger_count = 0
+            else:
+                self.consecutive_stable_count = 0
         
         # 冷却期检查：避免过于频繁的传能（在决策之后检查，但不影响计数）
         if t - self.last_transfer_time < self.cooldown_period:
@@ -284,7 +335,9 @@ class PassiveTransferManager:
             'current_variance_threshold': self.energy_variance_threshold,
             'original_variance_threshold': self.original_variance_threshold,
             'threshold_adjustment_count': self.threshold_adjustment_count,
-            'consecutive_trigger_count': self.consecutive_trigger_count
+            'consecutive_trigger_count': self.consecutive_trigger_count,
+            'consecutive_stable_count': self.consecutive_stable_count,
+            'enable_adaptive_variance_threshold': self.enable_adaptive_variance_threshold
         }
     
     def reset(self):
@@ -296,6 +349,7 @@ class PassiveTransferManager:
         # 重置自适应阈值相关状态
         self.energy_variance_threshold = self.original_variance_threshold
         self.consecutive_trigger_count = 0
+        self.consecutive_stable_count = 0
         self.threshold_adjustment_count = 0
     
     def get_config(self) -> Dict[str, Any]:
@@ -312,8 +366,13 @@ class PassiveTransferManager:
             'original_variance_threshold': self.original_variance_threshold,
             'cooldown_period': self.cooldown_period,
             'predictive_window': self.predictive_window,
+            'enable_adaptive_variance_threshold': self.enable_adaptive_variance_threshold,
             'adaptive_threshold_steps': self.adaptive_threshold_steps,
             'threshold_increment': self.threshold_increment,
+            'threshold_decrement': self.threshold_decrement,
+            'threshold_stability_steps': self.threshold_stability_steps,
+            'threshold_max': self.threshold_max,
+            'threshold_min': self.threshold_min,
             'threshold_adjustment_count': self.threshold_adjustment_count
         }
 

@@ -235,6 +235,12 @@ def run_simulation(config_file: str = None):
         config_manager = ConfigManager()
         logger.info("使用默认配置")
     
+    # 1.1 显示当前使用的调度器类型（用于调试）
+    scheduler_type = config_manager.scheduler_config.scheduler_type
+    logger.info(f"当前调度器类型: {scheduler_type}")
+    logger.info("提示: 如果调度器类型不正确，请在代码中显式设置:")
+    logger.info(f"  config_manager.scheduler_config.scheduler_type = \"你的调度器类型\"")
+    
     # 1.1 检查是否是DQN/DDPG训练模式
     sched_config = config_manager.scheduler_config
     is_dqn_training = sched_config.enable_dqn and sched_config.dqn_training_mode

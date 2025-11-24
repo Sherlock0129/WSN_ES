@@ -36,7 +36,15 @@ class EnergySimulation:
                  energy_variance_threshold=0.3,  # 能量方差阈值
                  cooldown_period=30,  # 冷却期（分钟）
                  predictive_window=60,  # 预测窗口（分钟）
-                 active_transfer_interval=60):  # 主动模式：定时触发间隔（分钟）
+                 active_transfer_interval=60,  # 主动模式：定时触发间隔（分钟）
+                 # 动态方差上限自适应参数
+                 enable_adaptive_variance_threshold=True,
+                 adaptive_threshold_steps=10,
+                 threshold_increment=0.05,
+                 threshold_decrement=0.02,
+                 threshold_stability_steps=20,
+                 threshold_max=0.5,
+                 threshold_min=0.01):
         """
         Initialize the energy simulation for the network.
 
@@ -71,7 +79,15 @@ class EnergySimulation:
             energy_variance_threshold=energy_variance_threshold,
             cooldown_period=cooldown_period,
             predictive_window=predictive_window,
-            active_transfer_interval=active_transfer_interval
+            active_transfer_interval=active_transfer_interval,
+            # 动态方差上限自适应参数
+            enable_adaptive_variance_threshold=enable_adaptive_variance_threshold,
+            adaptive_threshold_steps=adaptive_threshold_steps,
+            threshold_increment=threshold_increment,
+            threshold_decrement=threshold_decrement,
+            threshold_stability_steps=threshold_stability_steps,
+            threshold_max=threshold_max,
+            threshold_min=threshold_min
         )
 
         # 创建按日期命名的输出目录

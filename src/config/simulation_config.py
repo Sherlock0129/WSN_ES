@@ -87,7 +87,7 @@ class NetworkConfig:
     network_area_width: float = 5.0    # 区域宽度 m
     network_area_height: float = 5.0   # 区域高度 m
     min_distance: float = 0.5          # 节点间最小生成距离 m（避免过近重叠）
-    random_seed: int = 128            # 随机种子（影响位置与属性抽样）
+    random_seed: int = 129            # 随机种子（影响位置与属性抽样）
     solar_node_ratio: float = 0.6      # 具备太阳能节点比例（0~1）
     mobile_node_ratio: float = 0.0     # 可移动节点比例（0~1，若启用移动模型）
     
@@ -135,6 +135,15 @@ class SimulationConfig:
     cooldown_period: int = 0               # 传能冷却期（分钟），避免频繁触发
     predictive_window: int = 60             # 预测窗口（分钟），用于预测性触发
     
+    # 动态方差上限自适应参数
+    enable_adaptive_variance_threshold: bool = False  # 是否启用动态方差上限自适应
+    adaptive_threshold_steps: int = 10              # 连续触发步数阈值（达到此次数后调整阈值）
+    threshold_increment: float = 0.05                # 阈值上调增量（每次调整增加的幅度）
+    threshold_decrement: float = 0.02                # 阈值下调增量（当系统稳定时降低阈值，恢复灵敏度）
+    threshold_stability_steps: int = 20              # 稳定步数阈值（连续不触发此次数后下调阈值）
+    threshold_max: float = 0.5                       # 方差阈值上限（防止阈值过高导致传能失效）
+    threshold_min: float = 0.01                      # 方差阈值下限（保持最小灵敏度）
+    
     # K 值自适应（影响每个接收端可匹配的捐能者数量上限）
     enable_k_adaptation: bool = False     # 是否启用K值自适应，False时使用固定K值
     fixed_k: int = 1                     # 固定K值（当不使用自适应时）
@@ -172,8 +181,8 @@ class SchedulerConfig:
 
     # scheduler_type: str = "DurationAwareLyapunovScheduler"  # 默认调度器类型
     # scheduler_type: str = "AdaptiveLyapunovScheduler"  # 默认调度器类型
-    # scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
-    scheduler_type: str = "AdaptiveDurationAwareLyapunovScheduler"  # 默认调度器类型
+    scheduler_type: str = "LyapunovScheduler"  # 默认调度器类型
+    # scheduler_type: str = "AdaptiveDurationAwareLyapunovScheduler"  # 默认调度器类型
 
     # LyapunovScheduler 超参数
     lyapunov_v: float = 0.5                  # Lyapunov 控制强度（越大越保守/稳定）
@@ -840,7 +849,15 @@ class ConfigManager:
             energy_variance_threshold=self.simulation_config.energy_variance_threshold,
             cooldown_period=self.simulation_config.cooldown_period,
             predictive_window=self.simulation_config.predictive_window,
-            active_transfer_interval=self.simulation_config.active_transfer_interval
+            active_transfer_interval=self.simulation_config.active_transfer_interval,
+            # 动态方差上限自适应参数
+            enable_adaptive_variance_threshold=self.simulation_config.enable_adaptive_variance_threshold,
+            adaptive_threshold_steps=self.simulation_config.adaptive_threshold_steps,
+            threshold_increment=self.simulation_config.threshold_increment,
+            threshold_decrement=self.simulation_config.threshold_decrement,
+            threshold_stability_steps=self.simulation_config.threshold_stability_steps,
+            threshold_max=self.simulation_config.threshold_max,
+            threshold_min=self.simulation_config.threshold_min
         )
     
     def create_adcr_link_layer(self, network):
